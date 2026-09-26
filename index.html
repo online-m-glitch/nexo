@@ -247,7 +247,9 @@ tr:hover td{background:#fafbfc;}
 #sec-mercado td a,#sec-mercado .card a{color:#1d4ed8;}
 html[data-theme="dark"] #sec-mercado td a,html[data-theme="dark"] #sec-mercado .card a{color:#93c5fd;}
 #modalImportarML a{color:#1d4ed8;}
-html[data-theme="dark"] #modalImportarML a{color:#93c5fd;} .modal-sm h3{margin-bottom:16px;}
+html[data-theme="dark"] #modalImportarML a{color:#93c5fd;}
+.analisis-mla{color:#1d4ed8;font-weight:600;}
+html[data-theme="dark"] .analisis-mla{color:#93c5fd;} .modal-sm h3{margin-bottom:16px;}
 .modal-sm h3{margin-bottom:16px;}
 .modal-maximizado{max-width:96vw !important;width:96vw !important;max-height:94vh !important;height:94vh !important;}
 
@@ -2034,6 +2036,10 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
           <div class="card-header" style="flex-direction:column;align-items:stretch;gap:10px;">
             <h3 style="flex:none;">Rentabilidad por producto</h3>
             <div class="toolbar">
+              <select id="analisisVista" onchange="cambiarVistaAnalisis()" title="Ver una fila por producto (SKU) o una por cada publicación de ML" style="padding:7px 10px;border:1.5px solid var(--brand-primario);border-radius:7px;font-size:12px;font-weight:700;">
+                <option value="producto">📦 Por producto</option>
+                <option value="publicacion">📄 Por publicación</option>
+              </select>
               <input class="search-input" type="text" id="analisisBuscar" placeholder="Buscar SKU, MLA o producto…" oninput="renderAnalisis()" style="width:200px;">
               <select id="analisisFiltroProveedor" onchange="renderAnalisis()" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;">
                 <option value="">Todos los proveedores</option>
@@ -2062,14 +2068,16 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
               </label>
               <button class="btn btn-ghost btn-sm" onclick="aplicarRetencionesRealesAnalisis()" title="Calcula el % promedio real de IIBB y de IVA+Ganancias a partir de tus ventas ML con facturación sincronizada, y lo carga en los campos de al lado">📊 Retenciones reales</button>
               <button class="btn btn-ghost btn-sm" onclick="sincronizarFeesML()" title="Sincronizar comisiones ML">🔄 Comisiones ML</button>
+              <button class="btn btn-ghost btn-sm admin-only" id="btnFeesPub" onclick="sincronizarFeesPublicaciones()" title="Comisión y envío reales de MercadoLibre para cada publicación (vista Por publicación)">🔄 Comisiones por publicación</button>
               <span id="ultimaSyncFees" style="font-size:10px;color:var(--text-soft);"></span>
               <button class="btn btn-ghost btn-sm" onclick="revisarPreciosDinamicos()" title="Revisa qué publicaciones tienen 'Automatización de precios' activa, cuáles son de Catálogo de ML, y el estado real (activa/pausada/inactiva) de cada una">🎯 Precio dinámico / catálogo / estado</button>
               <span id="ultimaSyncDinamico" style="font-size:10px;color:var(--text-soft);"></span>
             </div>
           </div>
+          <div id="analisisInfoPub" style="display:none;font-size:12px;color:var(--text-soft);padding:8px 16px;"></div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>SKU</th><th>Producto</th><th>Costo ($)</th><th>Precio ML ($)</th><th>Comisión ML</th><th>Envío</th><th>Impuesto (est.)</th><th>Percepción (est.)</th><th>Recibís ($)</th><th>Margen ($)</th><th>Margen %</th><th>Recomendación</th></tr></thead>
+              <thead id="analisisThead"><tr><th>SKU</th><th>Producto</th><th>Costo ($)</th><th>Precio ML ($)</th><th>Comisión ML</th><th>Envío</th><th>Impuesto (est.)</th><th>Percepción (est.)</th><th>Recibís ($)</th><th>Margen ($)</th><th>Margen %</th><th>Recomendación</th></tr></thead>
               <tbody id="analisisBody"></tbody>
             </table>
           </div>
@@ -3400,6 +3408,18 @@ async function cargarCliente(){
 
 
 // ================================================================
+// Normaliza IDs de publicación: "MLA-123", "mla 123", links de ML → "MLA123"
+// ================================================================
+function normalizarMLA(v){
+  const s = String(v||"").trim().toUpperCase();
+  if(!s) return "";
+  const m = s.match(/\b(MLA|MLB|MLM|MLC|MCO|MLU|MPE)[\s\-_]*(\d{6,})/);
+  if(m) return m[1] + m[2];
+  if(/^\d{6,}$/.test(s)) return "MLA" + s;
+  return s.replace(/[\s\-]/g, "");
+}
+
+// ================================================================
 // CAMBIAR MI CLAVE (obligatorio si el usuario tiene clave temporal)
 // ================================================================
 let _claveObligatoria = false;
@@ -4269,6 +4289,175 @@ async function confirmarImportarML(){
   }
 }
 function cerrarImportarML(){ document.getElementById("modalImportarML").classList.remove("show"); }
+
+// ================================================================
+// ANÁLISIS ML POR PUBLICACIÓN (una fila por publicación; SKU repetidos)
+// Datos: nexo_ml_publicaciones (se llenan con "Traer de MercadoLibre").
+// ================================================================
+let mlPubs = [];
+let _mlPubsCargadas = false;
+const ANALISIS_THEAD_PRODUCTO = `<tr><th>SKU</th><th>Producto</th><th>Costo ($)</th><th>Precio ML ($)</th><th>Comisión ML</th><th>Envío</th><th>Impuesto (est.)</th><th>Percepción (est.)</th><th>Recibís ($)</th><th>Margen ($)</th><th>Margen %</th><th>Recomendación</th></tr>`;
+const ANALISIS_THEAD_PUB = `<tr><th>SKU</th><th>Publicación</th><th>Título en ML</th><th>Costo ($)</th><th>Precio ML ($)</th><th>Comisión ML</th><th>Envío</th><th>Impuesto (est.)</th><th>Percepción (est.)</th><th>Recibís ($)</th><th>Margen ($)</th><th>Margen %</th><th>Recomendación</th></tr>`;
+
+function vistaAnalisis(){ const s = document.getElementById("analisisVista"); return s ? s.value : "producto"; }
+async function cargarMlPubs(){
+  try{
+    const r = await fetch(SB_URL+"/rest/v1/nexo_ml_publicaciones?select=*&order=sku.asc.nullslast,es_principal.desc", {headers:{"apikey":SB_KEY}});
+    if(!r.ok) throw new Error(await r.text());
+    mlPubs = await r.json();
+    _mlPubsCargadas = true;
+  }catch(e){
+    mlPubs = []; _mlPubsCargadas = true;
+    toast("No se pudieron leer las publicaciones: "+e.message, "err", 5000);
+  }
+}
+async function cambiarVistaAnalisis(){
+  try{ localStorage.setItem("nexo_analisis_vista", vistaAnalisis()); }catch(e){}
+  if(vistaAnalisis()==="publicacion" && !_mlPubsCargadas) await cargarMlPubs();
+  renderAnalisis();
+}
+function calcAnaliPub(pub){
+  const prod = pub.sku ? productos.find(p=>String(p.sku||"").toUpperCase()===String(pub.sku).toUpperCase()) : null;
+  const precio = Number(pub.precio)||0;
+  const costo = prod ? (Number(prod.costo)||0) : null;
+  const comisionReal = pub.fee_amount != null;
+  const comision = comisionReal ? Number(pub.fee_amount) : precio*0.10;
+  const comisionFixed = comisionReal ? (Number(pub.fee_fixed)||0) : 0;
+  const envio = comisionReal ? (Number(pub.shipping_cost)||0) : 0;
+  const impuestoPct = (appConfig.impuesto_pct!=null) ? Number(appConfig.impuesto_pct) : 0;
+  const percepcionPct = (appConfig.percepcion_pct!=null) ? Number(appConfig.percepcion_pct) : 0;
+  const impuesto = precio*impuestoPct/100, percepcion = precio*percepcionPct/100;
+  const recibis = precio - comision - envio - impuesto - percepcion;
+  let margen = null, margenPct = null, rec, cls;
+  if(costo == null){ rec = "Sin SKU"; cls = "badge-gray"; }
+  else if(!(costo > 0)){ rec = "Sin costo"; cls = "badge-gray"; }
+  else {
+    margen = recibis - costo;
+    margenPct = precio > 0 ? margen/precio*100 : 0;
+    if(margenPct>=20){ rec="Rentable"; cls="badge-green"; }
+    else if(margenPct>=15){ rec="Aceptable"; cls="badge-blue"; }
+    else if(margenPct>=10){ rec="Revisar"; cls="badge-orange"; }
+    else { rec="Pérdida"; cls="badge-red"; }
+  }
+  return {prod, precio, costo, comisionReal, comision, comisionFixed, envio, impuesto, percepcion, recibis, margen, margenPct, rec, cls};
+}
+function renderAnalisisPublicaciones(){
+  const thead = document.getElementById("analisisThead");
+  if(thead && thead.dataset.vista!=="publicacion"){ thead.innerHTML = ANALISIS_THEAD_PUB; thead.dataset.vista="publicacion"; }
+  const filtro = document.getElementById("analisisFiltro").value;
+  const q = (document.getElementById("analisisBuscar")?.value||"").trim().toLowerCase();
+  const provFiltro = document.getElementById("analisisFiltroProveedor")?.value||"";
+  const filtroEstadoML = document.getElementById("analisisFiltroEstadoML")?.value||"";
+  const lista = mlPubs.filter(pub=>{
+    const a = calcAnaliPub(pub);
+    if(filtro && a.rec!==filtro) return false;
+    if(provFiltro && (!a.prod || a.prod.proveedor!==provFiltro)) return false;
+    if(filtroEstadoML){
+      if(filtroEstadoML==="sin_sincronizar"){ if(pub.fee_amount!=null) return false; }
+      else if(filtroEstadoML==="inactiva"){ if(pub.estado==="active" || pub.estado==="paused") return false; }
+      else if(pub.estado!==filtroEstadoML) return false;
+    }
+    if(q && !((pub.sku||"")+" "+pub.ml_item_id+" "+(pub.titulo||"")).toLowerCase().includes(q)) return false;
+    return true;
+  });
+  const skus = new Set(lista.map(p=>p.sku).filter(Boolean));
+  const info = document.getElementById("analisisInfoPub");
+  if(info){
+    const sinFees = mlPubs.filter(p=>p.fee_amount==null).length;
+    info.innerHTML = mlPubs.length
+      ? `${lista.length} publicaciones · ${skus.size} SKU` + (sinFees ? ` · <span style="color:var(--orange);">${sinFees} sin comisión real (tocá "🔄 Comisiones por publicación")</span>` : "")
+      : `Todavía no hay publicaciones guardadas. Traelas desde <strong>Catálogo → ⬇️ Traer de MercadoLibre</strong>.`;
+  }
+  // Para marcar visualmente los SKU que tienen varias publicaciones
+  const cuenta = {}; mlPubs.forEach(p=>{ if(p.sku) cuenta[p.sku] = (cuenta[p.sku]||0)+1; });
+  document.getElementById("analisisBody").innerHTML = lista.map(pub=>{
+    const a = calcAnaliPub(pub);
+    const eml = estadoMLInfo(pub.estado);
+    const varios = pub.sku && cuenta[pub.sku] > 1;
+    return `<tr>
+      <td>${pub.sku ? `<span class="sku-tag">${esc(pub.sku)}</span>${varios?`<div style="font-size:9px;color:var(--text-soft);margin-top:2px;">${cuenta[pub.sku]} publicaciones</div>`:""}` : `<span class="badge badge-gray">sin SKU</span>`}</td>
+      <td style="white-space:nowrap;">
+        <a href="${esc(pub.permalink||"#")}" target="_blank" rel="noopener" class="analisis-mla">${esc(pub.ml_item_id)}</a>
+        ${pub.es_principal?`<span title="Publicación principal: la que está vinculada al producto en el Catálogo">⭐</span>`:""}
+        <div style="margin-top:3px;display:flex;gap:3px;flex-wrap:wrap;">
+          ${pub.es_catalogo?`<span class="badge badge-blue" style="font-size:9px;padding:2px 5px;">📘 Catálogo</span>`:`<span class="badge badge-gray" style="font-size:9px;padding:2px 5px;">Tradicional</span>`}
+          ${eml?`<span style="font-size:9px;padding:2px 6px;border-radius:10px;font-weight:700;color:${eml.color};background:${eml.bg};">${eml.label}</span>`:""}
+          ${pub.logistic_type==="fulfillment"?`<span class="badge badge-green" style="font-size:9px;padding:2px 5px;" title="Stock en Full">⚡ Full</span>`:""}
+        </div>
+      </td>
+      <td style="max-width:220px;">${esc(pub.titulo)}<div style="font-size:10px;color:var(--text-soft);">${pub.vendidos||0} vendidos · stock ${pub.stock_disponible||0}</div></td>
+      <td class="num">${a.costo!=null?"$"+fmt(a.costo):"—"}</td>
+      <td class="num">$${fmt(a.precio)}</td>
+      <td class="num" style="color:var(--orange);" title="${a.comisionReal?("Comisión real para esta publicación"+(a.comisionFixed>0?" (incluye $"+fmt(a.comisionFixed)+" de costo fijo)":"")):"Estimada 10% — tocá 🔄 Comisiones por publicación"}">$${fmt(a.comision)}${a.comisionReal?" ✓":" *"}</td>
+      <td class="num" style="color:var(--orange);">$${fmt(a.envio)}${a.comisionReal?(a.envio>0?" ✓":""):" *"}</td>
+      <td class="num" style="color:var(--orange);">$${fmt(a.impuesto)} *</td>
+      <td class="num" style="color:var(--orange);">$${fmt(a.percepcion)} *</td>
+      <td class="num" style="font-weight:700;">$${fmt(a.recibis)}</td>
+      <td class="num ${a.margen==null?"":(a.margen>=0?"num-pos":"num-neg")}">${a.margen!=null?"$"+fmt(a.margen):"—"}</td>
+      <td class="num ${a.margenPct==null?"":(a.margenPct>=25?"num-pos":a.margenPct>=10?"":"num-neg")}">${a.margenPct!=null?a.margenPct.toFixed(1)+"%":"—"}</td>
+      <td><span class="badge ${a.cls}">${a.rec}</span></td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="13" style="text-align:center;padding:24px;color:var(--text-soft);">Sin publicaciones.</td></tr>`;
+}
+
+// Comisión y envío reales de ML para CADA publicación (no por SKU)
+async function sincronizarFeesPublicaciones(){
+  if(checkViewer("Sincronizar comisiones")) return;
+  if(!_mlPubsCargadas) await cargarMlPubs();
+  const lista = mlPubs.filter(p=>p.estado==="active" || p.estado==="paused");
+  if(!lista.length){ toast("No hay publicaciones para sincronizar. Traelas desde Catálogo → Traer de MercadoLibre.","err",5000); return; }
+  const btn = document.getElementById("btnFeesPub"); if(btn) btn.disabled = true;
+  const info = document.getElementById("analisisInfoPub");
+  let ok = 0, fail = 0, hechos = 0;
+  const errores = [];
+  // Detalle actual de cada publicación (precio, tipo, envío) de a 20
+  const ids = [...new Set(lista.map(p=>p.ml_item_id))];
+  const items = {};
+  for(let i=0;i<ids.length;i+=20){
+    const r = await mlGet("/items?ids="+ids.slice(i,i+20).join(",")+"&attributes=id,price,listing_type_id,category_id,status,shipping,variations");
+    if(r.ok && Array.isArray(r.data)) r.data.forEach(x=>{ if(x && x.code===200 && x.body) items[x.body.id] = x.body; });
+    else { toast("❌ "+_mlError(r), "err", 6000); if(btn) btn.disabled = false; return; }
+  }
+  await _pool(lista, 4, async pub=>{
+    try{
+      const it = items[pub.ml_item_id];
+      if(!it){ fail++; errores.push(pub.ml_item_id+": no se encontró en ML"); return; }
+      let precio = Number(it.price)||Number(pub.precio)||0;
+      if(pub.variacion_id && Array.isArray(it.variations)){
+        const v = it.variations.find(x=>String(x.id)===String(pub.variacion_id));
+        if(v && v.price) precio = Number(v.price);
+      }
+      const logistic = (it.shipping && it.shipping.logistic_type) || "";
+      const mode = (it.shipping && it.shipping.mode) || "";
+      let envio = 0, peso = null;
+      if(it.shipping && it.shipping.free_shipping && pub.ml_user_id){
+        const qsF = new URLSearchParams({item_id:pub.ml_item_id, mode:mode||"me2", logistic_type:logistic, listing_type_id:it.listing_type_id||"", condition:"new", item_price:precio});
+        const fr = await mlGet("/users/"+pub.ml_user_id+"/shipping_options/free?"+qsF.toString());
+        const cov = fr.ok && fr.data && fr.data.coverage && fr.data.coverage.all_country;
+        if(cov){ envio = Number(cov.list_cost)||0; peso = cov.billable_weight!=null ? cov.billable_weight : null; }
+      }
+      const qs = new URLSearchParams({price:precio, listing_type_id:it.listing_type_id||"", category_id:it.category_id||pub.category_id||""});
+      if(logistic) qs.append("logistic_type", logistic);
+      if(mode) qs.append("shipping_mode", mode);
+      if(peso!=null) qs.append("billable_weight", peso);
+      const fe = await mlGet("/sites/MLA/listing_prices?"+qs.toString());
+      let opt = fe.ok ? fe.data : null;
+      if(Array.isArray(opt)) opt = opt.find(o=>o.listing_type_id===it.listing_type_id) || opt[0];
+      if(!opt || opt.sale_fee_amount==null){ fail++; errores.push(pub.ml_item_id+": "+_mlError(fe)); return; }
+      const campos = {precio, estado:it.status||pub.estado, listing_type_id:it.listing_type_id||pub.listing_type_id, logistic_type:logistic||null,
+        fee_amount:Number(opt.sale_fee_amount)||0, fee_fixed:Number(opt.sale_fee_details && opt.sale_fee_details.fixed_fee)||0,
+        shipping_cost:envio, fees_at:new Date().toISOString()};
+      await sbUpdate("nexo_ml_publicaciones", "ml_item_id=eq."+encodeURIComponent(pub.ml_item_id)+"&variacion_id=eq."+encodeURIComponent(pub.variacion_id||""), campos);
+      Object.assign(pub, campos);
+      ok++;
+    }catch(e){ fail++; errores.push(pub.ml_item_id+": "+e.message); }
+    finally{ hechos++; if(info) info.innerHTML = `⏳ Comisiones por publicación… ${hechos} de ${lista.length}`; }
+  });
+  if(btn) btn.disabled = false;
+  renderAnalisis();
+  if(errores.length) console.warn("Comisiones por publicación — errores:", errores);
+  toast(fail ? `Comisiones: ${ok} bien, ${fail} con error (${errores.slice(0,2).join(" · ")})` : `✅ Comisiones actualizadas en ${ok} publicaciones`, fail?"err":"ok", 6000);
+}
 
 // ================================================================
 // SUPERADMIN NEXO
@@ -5147,7 +5336,8 @@ function cerrarPublicadorMasivo(){
 }
 
 async function cargarPlantillaPublicador(){
-  const mla = document.getElementById("pmPlantillaMLA").value.trim().toUpperCase();
+  const mla = normalizarMLA(document.getElementById("pmPlantillaMLA").value);
+  document.getElementById("pmPlantillaMLA").value = mla;
   if(!mla){ toast("Pegá el MLA de una publicación tuya.","err"); return; }
   if(!mlToken){ await verificarTokenML(); }
   if(!mlToken){ toast("Conectá con MercadoLibre primero.","err"); return; }
@@ -5161,7 +5351,9 @@ async function cargarPlantillaPublicador(){
     });
     const data = await r.json();
     if(!r.ok || data.error){
-      document.getElementById("pmPlantillaInfo").innerHTML = `❌ No se pudo cargar: ${esc(data.message||data.error||"no encontrada")}`;
+      document.getElementById("pmPlantillaInfo").innerHTML = (r.status===404 || /desarrolladores|not_found/i.test(String(data.message||data.error||"")))
+        ? `❌ MercadoLibre no encontró la publicación <strong>${esc(mla)}</strong>. Revisá el número (copialo de la URL de la publicación, ej: MLA1836803939).`
+        : `❌ No se pudo cargar: ${esc(data.message||data.error||"no encontrada")}`;
       return;
     }
     _pmPlantilla = {
@@ -5350,7 +5542,7 @@ async function pushPrecioML(mlItemId, nuevoPrecio){
 }
 async function verificarMlItem(){
   const el=document.getElementById("pMlItemCheck");
-  const id=document.getElementById("pMlItemId").value.trim().toUpperCase();
+  const id=normalizarMLA(document.getElementById("pMlItemId").value);
   if(!id){ el.textContent="Ingresá un ID primero (ej: MLA123456789)."; el.style.color="#dc2626"; return; }
   if(!mlToken){ await verificarTokenML(); }
   if(!mlToken){ el.textContent="⚠️ Conectá con MercadoLibre primero (pestaña MercadoLibre API)."; el.style.color="#dc2626"; return; }
@@ -5379,7 +5571,7 @@ function toggleBtnActualizarML(){
 async function actualizarPrecioModal(){
   if(checkViewer("Actualizar precio en ML")) return;
   const sku=document.getElementById("pSku").value.trim().toUpperCase();
-  const mlItemId=document.getElementById("pMlItemId").value.trim().toUpperCase();
+  const mlItemId=normalizarMLA(document.getElementById("pMlItemId").value);
   const nuevoPrecio=parseFloat(document.getElementById("pPrecio").value)||0;
   const info=document.getElementById("pPrecioMLInfo");
   if(!mlItemId){ toast("Ingresá una Publicación ML (MLA) primero.","err"); return; }
@@ -5491,7 +5683,7 @@ async function guardarProducto(){
     precioTienda:parseFloat(document.getElementById("pPrecioTienda").value)||0,
     stockMin:parseInt(document.getElementById("pStockMin").value)||15,
     stockOn:parseInt(document.getElementById("pStockOn").value),
-    ml_item_id:document.getElementById("pMlItemId").value.trim().toUpperCase()||null,
+    ml_item_id:normalizarMLA(document.getElementById("pMlItemId").value)||null,
     img:productoImagenesEditor[0]||"",
     imagenes:productoImagenesEditor.slice(),
     descripcion:document.getElementById("pDescripcion").value.trim(),
@@ -6059,6 +6251,10 @@ function renderAnalisis(){
   }
   const provFiltro=selProv?.value||"";
 
+  const _info=document.getElementById("analisisInfoPub");
+  if(_info) _info.style.display = vistaAnalisis()==="publicacion" ? "" : "none";
+  if(vistaAnalisis()==="publicacion"){ renderAnalisisPublicaciones(); return; }
+  const _th=document.getElementById("analisisThead"); if(_th && _th.dataset.vista!=="producto"){ _th.innerHTML=ANALISIS_THEAD_PRODUCTO; _th.dataset.vista="producto"; }
   const filtroEstadoML=document.getElementById("analisisFiltroEstadoML")?.value||"";
   const lista=productos.filter(p=>{
     if(!p.ml_item_id) return false; // sin publicación de ML vinculada no tiene sentido "analizarlo" acá
@@ -6910,6 +7106,10 @@ async function mostrarSeccion(id){
   if(id==="pedidosprov"){ renderPedidosProv(); }
   if(id==="proveedores"){ renderProveedores(); }
   if(id==="ml"){ verificarTokenML(); }
+  if(id==="analisis"){
+    try{ const v=localStorage.getItem("nexo_analisis_vista"); if(v) document.getElementById("analisisVista").value=v; }catch(e){}
+    _mlPubsCargadas=false; if(vistaAnalisis()==="publicacion") await cargarMlPubs();
+  }
   if(id==="mercado"){ renderMercado(); }
   if(id==="analisis"){ renderAnalisis(); mostrarUltimaSync("fees","ultimaSyncFees"); mostrarUltimaSync("dinamico","ultimaSyncDinamico"); }
 }
