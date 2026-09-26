@@ -245,7 +245,9 @@ tr:hover td{background:#fafbfc;}
 .merc-chip:hover{border-color:var(--brand-primario);}
 .merc-chip-fav{border-color:var(--brand-acento);}
 #sec-mercado td a,#sec-mercado .card a{color:#1d4ed8;}
-html[data-theme="dark"] #sec-mercado td a,html[data-theme="dark"] #sec-mercado .card a{color:#93c5fd;} .modal-sm h3{margin-bottom:16px;}
+html[data-theme="dark"] #sec-mercado td a,html[data-theme="dark"] #sec-mercado .card a{color:#93c5fd;}
+#modalImportarML a{color:#1d4ed8;}
+html[data-theme="dark"] #modalImportarML a{color:#93c5fd;} .modal-sm h3{margin-bottom:16px;}
 .modal-sm h3{margin-bottom:16px;}
 .modal-maximizado{max-width:96vw !important;width:96vw !important;max-height:94vh !important;height:94vh !important;}
 
@@ -697,6 +699,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
                 <option value="">Todos los proveedores</option>
               </select>
               <button class="btn btn-primary admin-only" onclick="abrirModalProducto()">+ Agregar producto</button>
+              <button class="btn btn-ghost admin-only" onclick="abrirImportarML()" title="Trae las publicaciones de tu cuenta de MercadoLibre: un producto por SKU en el catálogo y todas las publicaciones vinculadas">⬇️ Traer de MercadoLibre</button>
               <button class="btn btn-ghost admin-only" onclick="abrirPublicadorMasivo()" title="Publicar en Mercado Libre varios productos del Catálogo que todavía no tienen publicación, clonando la configuración de una que ya funciona">📤 Publicador masivo</button>
               <button class="btn btn-ghost admin-only" onclick="abrirSugerenciaStockMinimo()" title="Sugiere un Stock Mínimo para cada producto igual al 70% de lo vendido en los últimos 30 días">🎯 Sugerir mínimos</button>
               <button class="btn btn-danger admin-only" id="btnElimSel" onclick="eliminarSeleccionados()" style="display:none;">🗑️ Eliminar seleccionados (<span id="selCount">0</span>)</button>
@@ -3083,6 +3086,29 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
   </div>
 </div>
 
+<!-- Modal importar publicaciones de ML -->
+<div class="overlay" id="modalImportarML">
+  <div class="modal" style="max-width:1100px;width:96vw;max-height:92vh;overflow:auto;">
+    <h3>⬇️ Traer publicaciones de MercadoLibre</h3>
+    <div style="font-size:12px;color:var(--text-soft);margin-bottom:10px;">
+      En el catálogo queda <strong>un producto por SKU</strong>, vinculado a la publicación principal (activa antes que pausada, tradicional antes que de catálogo, la más vendida). Todas las publicaciones del SKU quedan guardadas para el análisis. Si el SKU ya existe, se actualizan nombre, foto y precio; el costo, proveedor y stock no se tocan.
+    </div>
+    <div id="impMLEstado" style="font-size:13px;margin-bottom:12px;"></div>
+    <div class="stats-grid" id="impMLResumen"></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>SKU</th><th>Producto</th><th>Publicación principal</th><th>Otras publicaciones</th><th>Qué pasa</th></tr></thead>
+        <tbody id="impMLBody"></tbody>
+      </table>
+    </div>
+    <div id="impMLSinSku"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="cerrarImportarML()">Cerrar</button>
+      <button class="btn btn-success" id="btnImpMLConfirmar" style="display:none;" onclick="confirmarImportarML()">✅ Importar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -4012,6 +4038,237 @@ function mercExportarBusqueda(){
   XLSX.utils.book_append_sheet(wb, ws, "Búsqueda");
   XLSX.writeFile(wb, "NEXO_busqueda_"+mercBusq.q.replace(/[^\w]+/g,"_").slice(0,30)+".xlsx");
 }
+
+// ================================================================
+// IMPORTAR PUBLICACIONES DE ML AL CATÁLOGO
+// - Catálogo: 1 producto por SKU, vinculado a la publicación principal.
+// - nexo_ml_publicaciones: TODAS las publicaciones (varias por SKU).
+// - Principal: activa antes que pausada; tradicional antes que de catálogo; más vendida.
+// ================================================================
+let impML = null; // {uid, pubs, grupos, sinSku, inicio}
+const IMPML_ATRIBUTOS = "id,title,price,status,listing_type_id,catalog_listing,catalog_product_id,category_id,permalink,thumbnail,available_quantity,sold_quantity,seller_custom_field,attributes,variations,shipping";
+
+function _skuDe(attrs, scf){
+  const a = (attrs||[]).find(x=>x && x.id==="SELLER_SKU");
+  const v = (a && (a.value_name || (a.values && a.values[0] && a.values[0].name))) || scf || "";
+  return String(v||"").trim();
+}
+function _imgGrande(u){ return _https(u||"").replace(/-I\.(jpg|webp)$/i, "-O.$1"); }
+function _puntajePub(p){
+  const est = p.estado==="active" ? 0 : p.estado==="paused" ? 1 : 2;
+  return [est, p.es_catalogo ? 1 : 0, -(p.vendidos||0), -(p.stock_disponible||0)];
+}
+function _compPub(a, b){
+  const x=_puntajePub(a), y=_puntajePub(b);
+  for(let i=0;i<x.length;i++){ if(x[i]!==y[i]) return x[i]-y[i]; }
+  return 0;
+}
+function _setImpEstado(html){ const el=document.getElementById("impMLEstado"); if(el) el.innerHTML = html; }
+
+async function abrirImportarML(){
+  if(checkViewer("Importar publicaciones de ML")) return;
+  document.getElementById("impMLResumen").innerHTML = "";
+  document.getElementById("impMLBody").innerHTML = "";
+  document.getElementById("impMLSinSku").innerHTML = "";
+  document.getElementById("btnImpMLConfirmar").style.display = "none";
+  document.getElementById("modalImportarML").classList.add("show");
+  impML = null;
+  _setImpEstado("⏳ Verificando la conexión con MercadoLibre…");
+  let st;
+  try{ st = await mlApi({grant_type:"status"}); }catch(e){ st = {ok:false, data:{}}; }
+  if(!st.ok || !st.data || !st.data.connected || !st.data.user_id){
+    _setImpEstado(`<span style="color:var(--red);">❌ Este cliente no tiene una cuenta de MercadoLibre conectada (o venció). Conectala en la sección MercadoLibre.</span>`);
+    return;
+  }
+  const uid = String(st.data.user_id);
+  const inicio = new Date().toISOString();
+  try{
+    // 1) Todos los IDs (activas y pausadas) con scroll
+    const ids = [];
+    let scroll = "";
+    for(let vuelta=0; vuelta<100; vuelta++){
+      const res = await mlGet("/users/"+uid+"/items/search?search_type=scan&limit=100"+(scroll?"&scroll_id="+encodeURIComponent(scroll):""));
+      if(!res.ok){ throw new Error("No se pudo leer la lista de publicaciones: "+_mlError(res)); }
+      const lote = (res.data && res.data.results) || [];
+      lote.forEach(id=>{ if(!ids.includes(id)) ids.push(id); });
+      scroll = res.data && res.data.scroll_id;
+      _setImpEstado(`⏳ Leyendo publicaciones… ${ids.length}${res.data && res.data.paging ? " de "+res.data.paging.total : ""}`);
+      if(!lote.length || !scroll) break;
+    }
+    if(!ids.length){ _setImpEstado("Esta cuenta de MercadoLibre no tiene publicaciones activas ni pausadas."); return; }
+
+    // 2) Detalle de a 20
+    const lotes = [];
+    for(let i=0;i<ids.length;i+=20) lotes.push(ids.slice(i,i+20));
+    let hechos = 0;
+    const detalles = [];
+    await _pool(lotes, 3, async lote=>{
+      const res = await mlGet("/items?ids="+lote.join(",")+"&attributes="+IMPML_ATRIBUTOS);
+      if(!res.ok || !Array.isArray(res.data)) throw new Error("No se pudo leer el detalle: "+_mlError(res));
+      res.data.forEach(x=>{ if(x && x.code===200 && x.body) detalles.push(x.body); });
+      hechos += lote.length;
+      _setImpEstado(`⏳ Trayendo el detalle… ${Math.min(hechos, ids.length)} de ${ids.length}`);
+    });
+
+    // 3) Variaciones: el SKU de cada una viene con include_attributes=all
+    const conVar = detalles.filter(it=>Array.isArray(it.variations) && it.variations.length);
+    const varInfo = {};
+    await _pool(conVar, 3, async it=>{
+      const res = await mlGet("/items/"+it.id+"?include_attributes=all");
+      if(res.ok && res.data && Array.isArray(res.data.variations)) varInfo[it.id] = res.data.variations;
+    });
+
+    // 4) Armar publicaciones (una fila por publicación o por variación)
+    const pubs = [];
+    detalles.forEach(it=>{
+      const base = {
+        ml_item_id: it.id, ml_user_id: uid, titulo: it.title || "", precio: Number(it.price)||0, estado: it.status || "",
+        listing_type_id: it.listing_type_id || "", es_catalogo: it.catalog_listing === true,
+        catalog_product_id: it.catalog_product_id || null, category_id: it.category_id || null,
+        permalink: it.permalink || "", thumbnail: _https(it.thumbnail), stock_disponible: Number(it.available_quantity)||0,
+        vendidos: Number(it.sold_quantity)||0, logistic_type: (it.shipping && it.shipping.logistic_type) || null
+      };
+      const skuItem = _skuDe(it.attributes, it.seller_custom_field);
+      const vars = varInfo[it.id] || it.variations || [];
+      if(vars.length){
+        vars.forEach(v=>{
+          const skuVar = _skuDe(v.attributes, v.seller_custom_field) || skuItem;
+          const nombreVar = (v.attribute_combinations||[]).map(c=>c.value_name).filter(Boolean).join(" / ");
+          pubs.push(Object.assign({}, base, {variacion_id:String(v.id), sku:skuVar,
+            titulo: base.titulo + (nombreVar ? " — "+nombreVar : ""), precio: Number(v.price)||base.precio,
+            stock_disponible: Number(v.available_quantity)||0, vendidos: Number(v.sold_quantity)||0}));
+        });
+      } else {
+        pubs.push(Object.assign({}, base, {variacion_id:"", sku:skuItem}));
+      }
+    });
+
+    // 5) Agrupar por SKU (sin distinguir mayúsculas ni espacios)
+    const catalogo = {};
+    productos.forEach(p=>{ catalogo[String(p.sku||"").trim().toUpperCase()] = p; });
+    const grupos = {};
+    const sinSku = [];
+    pubs.forEach(p=>{
+      if(!p.sku){ sinSku.push(p); return; }
+      const k = p.sku.toUpperCase();
+      (grupos[k] = grupos[k] || []).push(p);
+    });
+    const filas = Object.keys(grupos).sort().map(k=>{
+      const lista = grupos[k].slice().sort(_compPub);
+      const principal = lista[0];
+      const existente = catalogo[k] || null;
+      return {clave:k, sku: existente ? existente.sku : principal.sku, principal, otras: lista.slice(1), existente};
+    });
+    impML = {uid, pubs, filas, sinSku, inicio};
+    renderImportarML();
+  }catch(e){
+    _setImpEstado(`<span style="color:var(--red);">❌ ${esc(e.message)}</span>`);
+  }
+}
+
+function renderImportarML(){
+  if(!impML) return;
+  const {pubs, filas, sinSku} = impML;
+  const nuevos = filas.filter(f=>!f.existente).length;
+  const act = filas.length - nuevos;
+  const multi = filas.filter(f=>f.otras.length).length;
+  _setImpEstado(`✅ Se leyeron ${pubs.length} publicaciones. Revisá y tocá "Importar".`);
+  document.getElementById("impMLResumen").innerHTML = `
+    <div class="stat-card"><div class="label">Publicaciones</div><div class="value">${pubs.length}</div></div>
+    <div class="stat-card"><div class="label">SKU distintos</div><div class="value">${filas.length}</div></div>
+    <div class="stat-card"><div class="label">Productos nuevos</div><div class="value green">${nuevos}</div></div>
+    <div class="stat-card"><div class="label">Ya en catálogo (se actualizan)</div><div class="value blue">${act}</div></div>
+    <div class="stat-card"><div class="label">SKU con varias publicaciones</div><div class="value orange">${multi}</div></div>
+    <div class="stat-card"><div class="label">Sin SKU (no se importan)</div><div class="value red">${sinSku.length}</div></div>`;
+  const tipo = p => p.es_catalogo ? `<span class="badge badge-blue">📘 Catálogo</span>` : `<span class="badge badge-gray">Tradicional</span>`;
+  const est = p => { const i = estadoMLInfo(p.estado); return i ? `<span class="badge" style="background:${i.bg};color:${i.color};">${i.label}</span>` : ""; };
+  const link = p => `<a href="${esc(p.permalink)}" target="_blank" rel="noopener">${esc(p.ml_item_id)}</a>`;
+  document.getElementById("impMLBody").innerHTML = filas.map(f=>{
+    const p = f.principal, e = f.existente;
+    let accion;
+    if(!e) accion = `<span class="badge badge-green">Nuevo</span>`;
+    else {
+      const cambios = [];
+      if((e.nombre||"") !== p.titulo) cambios.push("nombre");
+      if(Math.round(e.precio||0) !== Math.round(p.precio||0)) cambios.push("precio $"+fmt(e.precio||0)+" → $"+fmt(p.precio));
+      if((e.ml_item_id||"") !== p.ml_item_id) cambios.push("publicación "+(e.ml_item_id||"—")+" → "+p.ml_item_id);
+      accion = `<span class="badge badge-blue">Actualiza</span>` + (cambios.length ? `<div style="font-size:10px;color:var(--text-soft);margin-top:3px;">${esc(cambios.join(" · "))}</div>` : `<div style="font-size:10px;color:var(--text-soft);">sin cambios</div>`);
+    }
+    return `<tr>
+      <td><strong>${esc(f.sku)}</strong></td>
+      <td style="min-width:220px;">${p.thumbnail?`<img src="${esc(p.thumbnail)}" alt="" style="width:30px;height:30px;object-fit:contain;background:#fff;border-radius:5px;vertical-align:middle;margin-right:6px;">`:""}${esc(p.titulo)}</td>
+      <td>${link(p)} ${tipo(p)} ${est(p)}<div style="font-size:10px;color:var(--text-soft);">$${fmt(p.precio)} · ${p.vendidos} vendidos · stock ${p.stock_disponible}</div></td>
+      <td style="font-size:11px;">${f.otras.length ? f.otras.map(o=>`${link(o)} ${o.es_catalogo?"📘":""} ${esc(estadoMLInfo(o.estado)?.label||o.estado)}`).join("<br>") : "—"}</td>
+      <td>${accion}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="5" style="text-align:center;color:var(--text-soft);padding:16px;">Ninguna publicación tiene SKU cargado</td></tr>`;
+  document.getElementById("impMLSinSku").innerHTML = sinSku.length ? `
+    <div style="font-weight:700;margin:16px 0 6px;">⚠️ Publicaciones sin SKU (${sinSku.length}) — no entran al catálogo</div>
+    <div style="font-size:12px;color:var(--text-soft);margin-bottom:6px;">Cargales el SKU en MercadoLibre (campo "SKU" de la publicación) y volvé a importar, o vinculalas a mano desde el producto.</div>
+    <div class="table-wrap"><table><thead><tr><th>Publicación</th><th>Título</th><th>Estado</th><th>Precio</th></tr></thead><tbody>
+    ${sinSku.map(p=>`<tr><td>${link(p)}${p.variacion_id?` <span style="font-size:10px;color:var(--text-soft);">var. ${esc(p.variacion_id)}</span>`:""}</td><td>${esc(p.titulo)}</td><td>${est(p)}</td><td class="num">$${fmt(p.precio)}</td></tr>`).join("")}
+    </tbody></table></div>` : "";
+  document.getElementById("btnImpMLConfirmar").style.display = filas.length ? "" : "none";
+}
+
+async function confirmarImportarML(){
+  if(!impML || checkViewer("Importar publicaciones de ML")) return;
+  const btn = document.getElementById("btnImpMLConfirmar");
+  btn.disabled = true;
+  const {filas, pubs, uid, inicio} = impML;
+  let nuevos = 0, actualizados = 0;
+  try{
+    // 1) Productos nuevos (en bloque)
+    const altas = filas.filter(f=>!f.existente).map(f=>{
+      const p = f.principal;
+      return {sku:f.sku, nombre:p.titulo, precio:p.precio, img:_imgGrande(p.thumbnail), ml_item_id:p.ml_item_id,
+        es_catalogo:p.es_catalogo, catalog_product_id:p.catalog_product_id, estado_ml:p.estado, costo:0, proveedor:""};
+    });
+    if(altas.length){ _setImpEstado(`⏳ Creando ${altas.length} productos…`); await sbInsertBulk("productos", altas, 200); nuevos = altas.length; }
+    // 2) Productos existentes: vincular y actualizar nombre, foto y precio
+    const cambios = filas.filter(f=>f.existente);
+    let n = 0;
+    await _pool(cambios, 4, async f=>{
+      const p = f.principal;
+      await sbUpdate("productos", "sku=eq."+encodeURIComponent(f.existente.sku), {
+        nombre:p.titulo, precio:p.precio, img:_imgGrande(p.thumbnail) || f.existente.img || "", ml_item_id:p.ml_item_id,
+        es_catalogo:p.es_catalogo, catalog_product_id:p.catalog_product_id, estado_ml:p.estado, updated_at:new Date().toISOString()});
+      n++; if(n % 10 === 0) _setImpEstado(`⏳ Actualizando productos… ${n} de ${cambios.length}`);
+    });
+    actualizados = cambios.length;
+    // 3) Todas las publicaciones (para Análisis por publicación)
+    _setImpEstado("⏳ Guardando las publicaciones…");
+    const principales = new Set(filas.map(f=>f.principal.ml_item_id+"|"+f.principal.variacion_id));
+    const skuFinal = {}; filas.forEach(f=>{ skuFinal[f.clave] = f.sku; });
+    const filasPub = pubs.map(p=>Object.assign({}, p, {
+      sku: p.sku ? (skuFinal[p.sku.toUpperCase()] || p.sku) : null,
+      es_principal: principales.has(p.ml_item_id+"|"+p.variacion_id),
+      sincronizado_at: new Date().toISOString()
+    }));
+    for(let i=0;i<filasPub.length;i+=300){
+      const r = await fetch(SB_URL+"/rest/v1/nexo_ml_publicaciones?on_conflict=cliente_id,ml_item_id,variacion_id", {
+        method:"POST",
+        headers:{"apikey":SB_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"},
+        body: JSON.stringify(filasPub.slice(i,i+300))
+      });
+      if(!r.ok) throw new Error("No se pudieron guardar las publicaciones: "+(await r.text()));
+    }
+    // Las que ya no aparecen en ML (cerradas o borradas) se sacan de la lista
+    const rd = await fetch(SB_URL+"/rest/v1/nexo_ml_publicaciones?ml_user_id=eq."+encodeURIComponent(uid)+"&sincronizado_at=lt."+encodeURIComponent(inicio), {method:"DELETE", headers:{"apikey":SB_KEY}});
+    if(!rd.ok) console.warn("No se pudieron limpiar publicaciones viejas:", await rd.text());
+    try{ await sbUpsert("app_config", {key:"last_sync_importar_ml", value:new Date().toISOString(), updated_at:new Date().toISOString()}); }catch(e){}
+
+    document.getElementById("modalImportarML").classList.remove("show");
+    await cargarDatos();
+    renderProductos();
+    toast(`✅ Importación lista: ${nuevos} productos nuevos, ${actualizados} actualizados, ${pubs.length} publicaciones vinculadas.`, "ok", 6000);
+  }catch(e){
+    _setImpEstado(`<span style="color:var(--red);">❌ ${esc(e.message)}</span><div style="font-size:12px;">Lo que ya se guardó queda guardado; podés volver a importar sin duplicar.</div>`);
+  }finally{
+    btn.disabled = false;
+  }
+}
+function cerrarImportarML(){ document.getElementById("modalImportarML").classList.remove("show"); }
 
 // ================================================================
 // SUPERADMIN NEXO
