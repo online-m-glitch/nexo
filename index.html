@@ -527,6 +527,16 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
       <div class="name">NEXO</div>
       <div class="sub" id="sidebarCliente">MercadoLibre</div>
     </div>
+    <div id="saNav" style="display:none;">
+      <div class="nav-section">NEXO · Superadmin</div>
+      <div style="padding:4px 14px 10px;">
+        <select id="saSelectorCliente" onchange="saCambiarCliente(this.value)" title="Cliente activo"
+          style="width:100%;padding:7px 8px;border-radius:7px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:inherit;font-size:12px;"></select>
+      </div>
+      <div class="nav-item" onclick="mostrarSeccion('clientes')">
+        <span class="icon">🏢</span> Clientes
+      </div>
+    </div>
     <div class="nav-section">Principal</div>
     <div class="nav-item active" onclick="mostrarSeccion('panel')">
       <span class="icon">📊</span> Panel
@@ -583,7 +593,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
     <div class="nav-item" onclick="mostrarSeccion('pedidos')">
       <span class="icon">🛍️</span> Pedidos
     </div>
-    <div class="nav-item" onclick="window.open('index.html','_blank')">
+    <div class="nav-item" onclick="verTiendaCliente()">
       <span class="icon">🛒</span> Ver tienda
     </div>
     <div class="theme-switch" id="themeSwitch">
@@ -2033,6 +2043,52 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
 
 
     <!-- ========== PEDIDOS ========== -->
+    <div id="sec-clientes" class="section">
+      <div class="page-header">
+        <div><h2>Clientes</h2><div class="sub">Superadministrador NEXO · todos los clientes y sus cuentas</div></div>
+        <button class="btn btn-ghost btn-sm" onclick="renderClientes()">🔄 Actualizar</button>
+      </div>
+      <div style="padding:24px;">
+        <div class="stats-grid" id="saStats" style="margin-bottom:20px;"></div>
+        <div class="card">
+          <div class="card-header"><h3>Clientes</h3></div>
+          <div style="overflow-x:auto;">
+            <table>
+              <thead><tr><th>Cliente</th><th>Estado</th><th>Usuarios</th><th>Cuentas ML</th><th>Productos</th><th>Ventas</th><th>Última venta</th><th></th></tr></thead>
+              <tbody id="saTabla"><tr><td colspan="8" style="padding:16px;">Cargando…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="saUsuariosWrap" class="card" style="display:none;">
+          <div class="card-header"><h3 id="saUsuariosTitulo">Usuarios</h3></div>
+          <div style="overflow-x:auto;"><table>
+            <thead><tr><th>Email</th><th>Rol</th><th>Último ingreso</th></tr></thead>
+            <tbody id="saUsuariosTabla"></tbody>
+          </table></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;">
+          <div class="card">
+            <div class="card-header"><h3>➕ Nuevo cliente</h3></div>
+            <div style="padding:20px;" class="form-grid">
+              <div class="form-group span2"><label>Nombre</label><input id="saNuevoNombre" placeholder="Ej: Distrielectro"></div>
+              <div class="form-group span2"><label>Tienda online (opcional)</label><input id="saNuevoTienda" placeholder="https://…"></div>
+              <div class="span2"><button class="btn btn-primary" onclick="saCrearCliente()">Crear cliente</button></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>👤 Nuevo usuario</h3></div>
+            <div style="padding:20px;" class="form-grid">
+              <div class="form-group span2"><label>Cliente</label><select id="saUsrCliente"></select></div>
+              <div class="form-group"><label>Email</label><input id="saUsrEmail" type="email" placeholder="usuario@mail.com"></div>
+              <div class="form-group"><label>Rol</label><select id="saUsrRol"><option value="admin">Administrador</option><option value="viewer">Solo lectura</option></select></div>
+              <div class="span2"><button class="btn btn-primary" onclick="saCrearUsuario()">Crear usuario</button></div>
+              <div class="span2" id="saUsrResultado" style="font-size:13px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="sec-pedidos" class="section">
       <div class="page-header">
         <div><h2>Pedidos</h2><div class="sub">Pedidos recibidos desde la tienda online</div></div>
@@ -3024,15 +3080,141 @@ function entrarAlPanel(){
   procesarCallbackMLPendiente();
 }
 
+let esSuperadmin = false, clienteId = null, clienteTiendaUrl = "";
 async function cargarCliente(){
   try{
-    const r = await fetch(SB_URL+"/rest/v1/nexo_clientes?select=nombre", {headers:{"apikey":SB_KEY}});
+    let filtro = "";
+    const rs = await fetch(SB_URL+"/rest/v1/nexo_superadmins?select=cliente_activo", {headers:{"apikey":SB_KEY}});
+    const sa = rs.ok ? await rs.json() : [];
+    esSuperadmin = Array.isArray(sa) && sa.length > 0;
+    if(esSuperadmin){
+      filtro = "&id=eq." + sa[0].cliente_activo;
+      document.getElementById("saNav").style.display = "";
+      saCargarSelector(sa[0].cliente_activo);
+    }
+    const r = await fetch(SB_URL+"/rest/v1/nexo_clientes?select=id,nombre,tienda_url"+filtro, {headers:{"apikey":SB_KEY}});
     const d = await r.json();
+    clienteId = (d && d[0] && d[0].id) || null;
+    clienteTiendaUrl = (d && d[0] && d[0].tienda_url) || "";
     clienteNombre = (d && d[0] && d[0].nombre) || "";
     const el = document.getElementById("sidebarCliente");
     if(el && clienteNombre) el.textContent = clienteNombre + " · MercadoLibre";
     document.title = "NEXO — " + (clienteNombre || "Panel de Administración");
   }catch(e){}
+}
+
+// ================================================================
+// SUPERADMIN NEXO
+// ================================================================
+function verTiendaCliente(){
+  if(clienteTiendaUrl) window.open(clienteTiendaUrl, "_blank");
+  else toast("Este cliente no tiene tienda online configurada.","err");
+}
+async function saRpc(fn, args){
+  const r = await fetch(SB_URL+"/rest/v1/rpc/"+fn, {
+    method:"POST", headers:{"apikey":SB_KEY,"Content-Type":"application/json"}, body:JSON.stringify(args||{})
+  });
+  const d = await r.json().catch(()=>null);
+  if(!r.ok) throw new Error((d && (d.message||d.hint)) || ("Error "+r.status));
+  return d;
+}
+async function saAdmin(body){
+  const r = await fetch(SB_URL+"/functions/v1/nexo-admin", {
+    method:"POST", headers:{"apikey":SB_KEY,"Content-Type":"application/json"}, body:JSON.stringify(body)
+  });
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.message || d.error || ("Error "+r.status));
+  return d;
+}
+async function saCargarSelector(activo){
+  try{
+    const r = await fetch(SB_URL+"/rest/v1/nexo_clientes?select=id,nombre,activo&order=created_at", {headers:{"apikey":SB_KEY}});
+    const cs = await r.json();
+    const opts = (cs||[]).map(c => `<option value="${c.id}" ${c.id===activo?"selected":""}>${esc(c.nombre)}${c.activo?"":" (inactivo)"}</option>`).join("");
+    document.getElementById("saSelectorCliente").innerHTML = opts;
+    const su = document.getElementById("saUsrCliente");
+    if(su) su.innerHTML = (cs||[]).map(c => `<option value="${c.id}" ${c.id===activo?"selected":""}>${esc(c.nombre)}</option>`).join("");
+  }catch(e){}
+}
+async function saCambiarCliente(id){
+  if(!id || id===clienteId) return;
+  try{
+    mostrarCargando(true);
+    await saRpc("nexo_sa_cambiar_cliente", {p_cliente:id});
+    window.location.reload();
+  }catch(e){ mostrarCargando(false); toast("No se pudo cambiar de cliente: "+e.message,"err"); }
+}
+async function renderClientes(){
+  if(!esSuperadmin) return;
+  const tb = document.getElementById("saTabla");
+  try{
+    const filas = await saRpc("nexo_sa_resumen");
+    const tot = (k)=>filas.reduce((a,f)=>a+Number(f[k]||0),0);
+    document.getElementById("saStats").innerHTML =
+      `<div class="stat-card"><div class="label">Clientes</div><div class="value">${filas.length}</div></div>`+
+      `<div class="stat-card"><div class="label">Usuarios</div><div class="value">${tot("usuarios")}</div></div>`+
+      `<div class="stat-card"><div class="label">Productos</div><div class="value">${tot("productos").toLocaleString("es-AR")}</div></div>`+
+      `<div class="stat-card"><div class="label">Ventas</div><div class="value">${tot("ventas").toLocaleString("es-AR")}</div></div>`;
+    tb.innerHTML = filas.map(f => `<tr>
+        <td><strong>${esc(f.nombre)}</strong>${f.id===clienteId?' <span style="font-size:11px;color:var(--green);">● activo ahora</span>':''}</td>
+        <td>${f.activo?"🟢 Activo":"⚪ Inactivo"}</td>
+        <td>${f.usuarios}</td>
+        <td>${esc(f.cuentas_ml||"—")}</td>
+        <td>${Number(f.productos).toLocaleString("es-AR")}</td>
+        <td>${Number(f.ventas).toLocaleString("es-AR")}</td>
+        <td>${esc(f.ultima_venta||"—")}</td>
+        <td style="white-space:nowrap;">
+          ${f.id===clienteId?"":`<button class="btn btn-primary btn-sm" onclick="saCambiarCliente('${f.id}')">Entrar</button>`}
+          <button class="btn btn-ghost btn-sm" onclick="saVerUsuarios('${f.id}','${esc(f.nombre).replace(/'/g,"")}')">Usuarios</button>
+          <button class="btn btn-ghost btn-sm" onclick="saEstadoCliente('${f.id}',${!f.activo})">${f.activo?"Desactivar":"Activar"}</button>
+        </td></tr>`).join("") || `<tr><td colspan="8" style="padding:16px;">Sin clientes</td></tr>`;
+  }catch(e){
+    tb.innerHTML = `<tr><td colspan="8" style="padding:16px;color:var(--red);">Error: ${esc(e.message)}</td></tr>`;
+  }
+}
+async function saVerUsuarios(id, nombre){
+  const wrap = document.getElementById("saUsuariosWrap");
+  wrap.style.display = "";
+  document.getElementById("saUsuariosTitulo").textContent = "Usuarios de " + nombre;
+  const tb = document.getElementById("saUsuariosTabla");
+  tb.innerHTML = `<tr><td colspan="3" style="padding:12px;">Cargando…</td></tr>`;
+  try{
+    const d = await saAdmin({action:"listar_usuarios", cliente_id:id});
+    tb.innerHTML = d.usuarios.map(u => `<tr><td>${esc(u.email)}</td><td>${u.rol==="admin"?"Administrador":"Solo lectura"}</td><td>${u.ultimo_ingreso?new Date(u.ultimo_ingreso).toLocaleString("es-AR"):"Nunca"}</td></tr>`).join("")
+      || `<tr><td colspan="3" style="padding:12px;">Sin usuarios</td></tr>`;
+  }catch(e){ tb.innerHTML = `<tr><td colspan="3" style="padding:12px;color:var(--red);">Error: ${esc(e.message)}</td></tr>`; }
+}
+async function saEstadoCliente(id, activo){
+  if(!activo && id===clienteId){ toast("No podés desactivar el cliente en el que estás. Entrá a otro primero.","err"); return; }
+  try{ await saAdmin({action:"estado_cliente", cliente_id:id, activo}); toast(activo?"Cliente activado":"Cliente desactivado","ok"); renderClientes(); saCargarSelector(clienteId); }
+  catch(e){ toast("Error: "+e.message,"err"); }
+}
+async function saCrearCliente(){
+  const nombre = document.getElementById("saNuevoNombre").value.trim();
+  const tienda_url = document.getElementById("saNuevoTienda").value.trim();
+  if(!nombre){ toast("Poné el nombre del cliente.","err"); return; }
+  try{
+    const d = await saAdmin({action:"crear_cliente", nombre, tienda_url});
+    toast("✅ Cliente "+d.cliente.nombre+" creado","ok");
+    document.getElementById("saNuevoNombre").value = ""; document.getElementById("saNuevoTienda").value = "";
+    await saCargarSelector(clienteId);
+    document.getElementById("saUsrCliente").value = d.cliente.id;
+    renderClientes();
+  }catch(e){ toast("Error: "+e.message,"err"); }
+}
+async function saCrearUsuario(){
+  const cliente_id = document.getElementById("saUsrCliente").value;
+  const email = document.getElementById("saUsrEmail").value.trim();
+  const rol = document.getElementById("saUsrRol").value;
+  const out = document.getElementById("saUsrResultado");
+  if(!cliente_id || !email){ toast("Elegí cliente y poné el email.","err"); return; }
+  out.textContent = "Creando…";
+  try{
+    const d = await saAdmin({action:"crear_usuario", cliente_id, email, rol});
+    out.innerHTML = `✅ Usuario <strong>${esc(d.email)}</strong> creado.<br>Clave temporal: <code style="font-size:14px;user-select:all;">${esc(d.clave_temporal)}</code><br><span style="color:var(--text-soft);">Copiala ahora: no se vuelve a mostrar.</span>`;
+    document.getElementById("saUsrEmail").value = "";
+    renderClientes();
+  }catch(e){ out.innerHTML = `<span style="color:var(--red);">Error: ${esc(e.message)}</span>`; }
 }
 
 function checkViewer(accion){
@@ -3070,7 +3252,8 @@ async function logout(){
   document.getElementById("loginScreen").style.display = "flex";
   document.getElementById("adminPanel").style.display = "none";
   document.getElementById("adminPanel").classList.remove("visible");
-  document.getElementById("passInput").value = "";
+  document.getElementById("passInput").value = "";  esSuperadmin = false;
+  const sn = document.getElementById("saNav"); if(sn) sn.style.display = "none";
 }
 
 // ================================================================
@@ -5352,6 +5535,7 @@ async function mostrarSeccion(id){
 
   // Renderizar la sección activa
   if(id==="panel") renderPanel();
+  if(id==="clientes") renderClientes();
   if(id==="stock"){ renderStock(); mostrarUltimaSync("stock","ultimaSyncStock"); }
   if(id==="alertas") renderAlertas();
   if(id==="movimientos") renderMovimientos();
