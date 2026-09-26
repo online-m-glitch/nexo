@@ -22,6 +22,7 @@
   --brand-acento:#22d3ee;
   --brand-primario-txt:#ffffff;
   --brand-acento-txt:#0b1020;
+  --brand-oscuro-txt:#ffffff;
   --navy:var(--brand-primario);
   --navy-mid:var(--brand-primario);
   --navy-light:var(--brand-primario);
@@ -109,35 +110,35 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   display:flex;flex-direction:column;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto;
 }
 .sidebar-brand{
-  padding:20px 20px 16px;border-bottom:1px solid rgba(255,255,255,.08);
+  padding:20px 20px 16px;border-bottom:1px solid color-mix(in srgb, var(--brand-oscuro-txt) 8%, transparent);
 }
-.sidebar-brand .name{font-size:16px;font-weight:800;color:#fff;letter-spacing:-.3px;}
-.sidebar-brand .name{color:#ffffff;} .sidebar-brand .name span{color:var(--ml-yellow);}
-.sidebar-brand .sub{font-size:11px;color:rgba(255,255,255,.45);margin-top:2px;}
+.sidebar-brand .name{font-size:16px;font-weight:800;color:var(--brand-oscuro-txt);letter-spacing:-.3px;}
+.sidebar-brand .name{color:var(--brand-oscuro-txt);} .sidebar-brand .name span{color:var(--ml-yellow);}
+.sidebar-brand .sub{font-size:11px;color:color-mix(in srgb, var(--brand-oscuro-txt) 70%, transparent);margin-top:2px;}
 .nav-section{
-  font-size:10px;font-weight:700;color:rgba(255,255,255,.35);
+  font-size:10px;font-weight:700;color:color-mix(in srgb, var(--brand-oscuro-txt) 62%, transparent);
   text-transform:uppercase;letter-spacing:1.2px;padding:16px 20px 6px;
 }
 .nav-item{
   display:flex;align-items:center;gap:10px;
-  padding:10px 20px;color:rgba(255,255,255,.65);
+  padding:10px 20px;color:color-mix(in srgb, var(--brand-oscuro-txt) 85%, transparent);
   cursor:pointer;font-size:13px;border-left:3px solid transparent;
   transition:.15s;user-select:none;
 }
-.nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
+.nav-item:hover{background:color-mix(in srgb, var(--brand-oscuro-txt) 6%, transparent);color:var(--brand-oscuro-txt);}
 .nav-item.active{
-  background:color-mix(in srgb, var(--brand-acento) 15%, transparent);color:#fff;
+  background:color-mix(in srgb, var(--brand-acento) 15%, transparent);color:var(--brand-oscuro-txt);
   border-left-color:var(--ml-yellow);
 }
 .nav-item .icon{font-size:16px;width:20px;text-align:center;}
 .sidebar-footer{
-  margin-top:auto;padding:16px 20px;border-top:1px solid rgba(255,255,255,.08);
+  margin-top:auto;padding:16px 20px;border-top:1px solid color-mix(in srgb, var(--brand-oscuro-txt) 8%, transparent);
 }
 .sidebar-footer button{
-  background:none;border:1.5px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);
+  background:none;border:1.5px solid color-mix(in srgb, var(--brand-oscuro-txt) 20%, transparent);color:color-mix(in srgb, var(--brand-oscuro-txt) 80%, transparent);
   padding:7px 14px;border-radius:7px;cursor:pointer;font-size:12px;width:100%;
 }
-.sidebar-footer button:hover{border-color:rgba(255,255,255,.5);color:#fff;}
+.sidebar-footer button:hover{border-color:color-mix(in srgb, var(--brand-oscuro-txt) 50%, transparent);color:var(--brand-oscuro-txt);}
 
 /* Main content */
 .main-content{flex:1;overflow-y:auto;min-width:0;}
@@ -180,7 +181,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .scroll-mirror-top div{height:1px;}
 table{width:100%;border-collapse:collapse;font-size:13px;}
 th{
-  background:var(--brand-oscuro);color:#fff;
+  background:var(--brand-oscuro);color:var(--brand-oscuro-txt);
   padding:10px 14px;text-align:left;font-weight:600;white-space:nowrap;font-size:12px;
 }
 td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
@@ -293,7 +294,7 @@ tr:hover td{background:#fafbfc;}
   align-items:center;gap:12px;
   border-bottom:3px solid var(--ml-yellow);
 }
-.mobile-bar .m-brand{font-size:15px;font-weight:800;color:#fff;flex:1;}
+.mobile-bar .m-brand{font-size:15px;font-weight:800;color:var(--brand-oscuro-txt);flex:1;}
 .mobile-bar button{background:none;border:none;color:#fff;font-size:26px;cursor:pointer;line-height:1;}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:150;}
 .sidebar-overlay.show{display:block;}
@@ -494,13 +495,23 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
 /* ========================================================
    SELECTOR DE TEMA (Claro / Oscuro / Automático)
    ======================================================== */
-.theme-switch{display:flex;gap:4px;background:rgba(255,255,255,.06);border-radius:8px;padding:3px;margin:0 20px 14px;}
+.theme-switch{display:flex;gap:4px;background:color-mix(in srgb, var(--brand-oscuro-txt) 8%, transparent);border-radius:8px;padding:3px;margin:0 20px 14px;}
 .theme-switch button{
-  flex:1;background:none;border:none;color:rgba(255,255,255,.55);
+  flex:1;background:none;border:none;color:color-mix(in srgb, var(--brand-oscuro-txt) 55%, transparent);
   padding:7px 0;border-radius:6px;cursor:pointer;font-size:14px;transition:.15s;
 }
-.theme-switch button:hover{color:#fff;}
-.theme-switch button.active{background:var(--ml-yellow);color:var(--brand-oscuro);}
+.theme-switch button:hover{color:var(--brand-oscuro-txt);}
+.theme-switch button.active{background:var(--ml-yellow);color:var(--brand-acento-txt);}
+
+/* Selector de cliente del superadmin: legible sobre cualquier color de menú */
+#saSelectorCliente{background:color-mix(in srgb, var(--brand-oscuro-txt) 12%, transparent) !important;color:var(--brand-oscuro-txt) !important;border-color:color-mix(in srgb, var(--brand-oscuro-txt) 35%, transparent) !important;font-weight:600;}
+#saSelectorCliente option{color:#0b1020;background:#ffffff;}
+#sec-marca .form-group > div{min-width:0;}
+#sec-marca .form-group input:not([type=color]){min-width:0;flex:1;width:100%;}
+#sec-marca .form-grid{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));}
+/* Modo oscuro: textos que usan el color oscuro de la marca pasan al color de texto */
+html[data-theme="dark"] .stat-card .value,
+html[data-theme="dark"] .login-logo .brand{color:var(--text);}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -2121,9 +2132,17 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
               <div class="form-group"><label>Oscuro (menú lateral y títulos)</label><div style="display:flex;gap:8px;"><input type="color" id="marcaOscuro" oninput="marcaSync('Oscuro',this.value)" style="width:48px;height:38px;padding:2px;"><input id="marcaOscuroHex" maxlength="7" oninput="marcaSyncHex('Oscuro',this.value)"></div></div>
               <div class="form-group"><label>Acento (botón principal y destacados)</label><div style="display:flex;gap:8px;"><input type="color" id="marcaAcento" oninput="marcaSync('Acento',this.value)" style="width:48px;height:38px;padding:2px;"><input id="marcaAcentoHex" maxlength="7" oninput="marcaSyncHex('Acento',this.value)"></div></div>
             </div>
+            <div style="font-size:12px;font-weight:600;margin:16px 0 8px;">Armar paleta desde el color de tu marca</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <input type="color" id="marcaBase" value="#1a56db" style="width:48px;height:34px;padding:2px;" title="Color principal de tu marca">
+              <button class="btn btn-ghost btn-sm" onclick="marcaGenerar('complementario')">Con acento contrastante</button>
+              <button class="btn btn-ghost btn-sm" onclick="marcaGenerar('analogo')">Con acento parecido</button>
+              <button class="btn btn-ghost btn-sm" onclick="marcaGenerar('calido')">Con acento dorado</button>
+            </div>
             <div style="font-size:12px;font-weight:600;margin:16px 0 8px;">Paletas sugeridas</div>
             <div id="marcaPresets" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
             <div id="marcaAviso" style="font-size:12px;margin-top:12px;"></div>
+            <button class="btn btn-ghost btn-sm" id="marcaBtnAjustar" onclick="marcaAjustar()" style="display:none;margin-top:8px;">✨ Ajustar para que se lea bien</button>
             <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;">
               <button class="btn btn-primary" onclick="marcaGuardar()">💾 Guardar marca</button>
               <button class="btn btn-ghost" onclick="marcaRestablecer()">Volver a colores NEXO</button>
@@ -3188,13 +3207,16 @@ async function cargarCliente(){
 // MARCA DEL CLIENTE (logo + paleta)
 // ================================================================
 const MARCA_NEXO = {primario:"#6d28d9", oscuro:"#1e1b4b", acento:"#22d3ee"};
+// Paletas armadas: el oscuro es el mismo tono que el principal (bien oscuro) y el acento contrasta
 const MARCA_PRESETS = [
   {n:"NEXO", primario:"#6d28d9", oscuro:"#1e1b4b", acento:"#22d3ee"},
   {n:"Azul y amarillo", primario:"#1a56db", oscuro:"#0d2259", acento:"#f5c400"},
-  {n:"Verde", primario:"#059669", oscuro:"#064e3b", acento:"#a3e635"},
-  {n:"Rojo", primario:"#dc2626", oscuro:"#3f0d12", acento:"#fbbf24"},
-  {n:"Naranja", primario:"#ea580c", oscuro:"#27180f", acento:"#38bdf8"},
-  {n:"Grafito", primario:"#334155", oscuro:"#0f172a", acento:"#f97316"}
+  {n:"Verde y lima", primario:"#047857", oscuro:"#052e22", acento:"#bef264"},
+  {n:"Rojo y dorado", primario:"#b91c1c", oscuro:"#2a0a0a", acento:"#fbbf24"},
+  {n:"Naranja y celeste", primario:"#c2410c", oscuro:"#2b1206", acento:"#7dd3fc"},
+  {n:"Grafito y naranja", primario:"#334155", oscuro:"#0f172a", acento:"#fb923c"},
+  {n:"Petróleo y coral", primario:"#0f766e", oscuro:"#042f2e", acento:"#fda4af"},
+  {n:"Bordó y crema", primario:"#9f1239", oscuro:"#2a0712", acento:"#fde68a"}
 ];
 let clienteMarca = {logo:"", primario:"", oscuro:"", acento:""};
 let marcaEdit = null;
@@ -3207,16 +3229,58 @@ function _lum(h){
 function _contraste(a,b){ const x=_lum(a),y=_lum(b); return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05); }
 function _textoSobre(h){ return _contraste(h,"#ffffff") >= _contraste(h,"#0b1020") ? "#ffffff" : "#0b1020"; }
 
+// ── Colores en HSL para armar y corregir paletas ──
+function _hexAHsl(h){
+  let r=parseInt(h.substr(1,2),16)/255, g=parseInt(h.substr(3,2),16)/255, b=parseInt(h.substr(5,2),16)/255;
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b); let hh=0, s=0; const l=(mx+mn)/2;
+  if(mx!==mn){ const d=mx-mn; s=l>0.5?d/(2-mx-mn):d/(mx+mn);
+    hh = mx===r ? (g-b)/d+(g<b?6:0) : mx===g ? (b-r)/d+2 : (r-g)/d+4; hh*=60; }
+  return {h:hh, s:s*100, l:l*100};
+}
+function _hslAHex(h,s,l){
+  h=((h%360)+360)%360; s=Math.max(0,Math.min(100,s))/100; l=Math.max(0,Math.min(100,l))/100;
+  const k=n=>(n+h/30)%12, a=s*Math.min(l,1-l), f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+  return "#"+[f(0),f(8),f(4)].map(x=>Math.round(x*255).toString(16).padStart(2,"0")).join("");
+}
+// Oscurece (o aclara) manteniendo el tono hasta lograr el contraste pedido contra "fondo"
+function _ajustarContraste(hex, fondo, minimo, haciaOscuro){
+  let {h,s,l} = _hexAHsl(hex), out = hex, pasos = 0;
+  while(_contraste(out, fondo) < minimo && pasos < 60){ l += haciaOscuro ? -1.5 : 1.5; out = _hslAHex(h,s,l); pasos++; }
+  return out;
+}
+// Deja la paleta legible: menú oscuro con texto blanco, principal usable como texto/botón sobre blanco
+function paletaLegible(m){
+  const cambios = [];
+  let p = _hexOk(m.primario)?m.primario:MARCA_NEXO.primario;
+  let o = _hexOk(m.oscuro)?m.oscuro:MARCA_NEXO.oscuro;
+  let a = _hexOk(m.acento)?m.acento:MARCA_NEXO.acento;
+  const o2 = _ajustarContraste(o, "#ffffff", 9, true);  if(o2!==o){ cambios.push("oscureció el color del menú"); o=o2; }
+  const p2 = _ajustarContraste(p, "#ffffff", 4.5, true); if(p2!==p){ cambios.push("oscureció el principal para que botones y enlaces se lean"); p=p2; }
+  // El acento tiene que distinguirse del fondo del menú
+  if(_contraste(a, o) < 3){ const a2 = _ajustarContraste(a, o, 3, false); if(a2!==a){ cambios.push("aclaró el acento para que se vea sobre el menú"); a=a2; } }
+  return {primario:p, oscuro:o, acento:a, cambios};
+}
+// Arma una paleta completa desde un solo color de marca
+function paletaDesdeColor(base, estilo){
+  const {h,s} = _hexAHsl(base);
+  const sat = Math.max(45, Math.min(85, s));
+  const primario = _ajustarContraste(_hslAHex(h, sat, 42), "#ffffff", 4.5, true);
+  const oscuro = _hslAHex(h, Math.min(sat, 65), 13);
+  const hAcento = estilo==="analogo" ? h+40 : estilo==="calido" ? 45 : h+180;
+  const acento = _hslAHex(hAcento, estilo==="calido" ? 95 : Math.max(70, sat), estilo==="calido" ? 52 : 62);
+  return paletaLegible({primario, oscuro, acento});
+}
+
 function aplicarMarca(m){
-  const p = _hexOk(m.primario)?m.primario:MARCA_NEXO.primario;
-  const o = _hexOk(m.oscuro)?m.oscuro:MARCA_NEXO.oscuro;
-  const a = _hexOk(m.acento)?m.acento:MARCA_NEXO.acento;
+  const leg = paletaLegible(m || {});
+  const p = leg.primario, o = leg.oscuro, a = leg.acento;
   const st = document.documentElement.style;
   st.setProperty("--brand-primario", p);
   st.setProperty("--brand-oscuro", o);
   st.setProperty("--brand-acento", a);
   st.setProperty("--brand-primario-txt", _textoSobre(p));
   st.setProperty("--brand-acento-txt", _textoSobre(a));
+  st.setProperty("--brand-oscuro-txt", _textoSobre(o));
 }
 function mostrarLogoCliente(logo){
   ["sidebarLogo","mobileLogo"].forEach(id=>{
@@ -3256,8 +3320,17 @@ function marcaPintar(){
   const b2=document.getElementById("mpBtn2"); b2.style.background=m.primario; b2.style.color=_textoSobre(m.primario);
   document.getElementById("mpLink").style.color = m.primario;
   const aviso = document.getElementById("marcaAviso");
-  const cBg = _contraste(m.oscuro, "#ffffff");
-  aviso.innerHTML = cBg < 3 ? `<span style="color:var(--orange);">⚠️ El color oscuro es muy claro: el menú lateral puede leerse mal.</span>` : "";
+  const leg = paletaLegible(m);
+  aviso.innerHTML = leg.cambios.length
+    ? `<span style="color:var(--orange);">⚠️ Algunos textos pueden leerse mal. Al guardar se ajusta solo: ${leg.cambios.join(", ")}.</span>`
+    : `<span style="color:var(--green);">✅ Buena legibilidad en menú, botones y enlaces.</span>`;
+  document.getElementById("marcaBtnAjustar").style.display = leg.cambios.length ? "" : "none";
+}
+function marcaAjustar(){ const l = paletaLegible(marcaEdit); Object.assign(marcaEdit,{primario:l.primario,oscuro:l.oscuro,acento:l.acento}); marcaPintar(); }
+function marcaGenerar(estilo){
+  const base = document.getElementById("marcaBase").value;
+  const p = paletaDesdeColor(base, estilo);
+  Object.assign(marcaEdit, {primario:p.primario, oscuro:p.oscuro, acento:p.acento}); marcaPintar();
 }
 function marcaSync(k, v){ if(!marcaEdit) return; marcaEdit[k.toLowerCase()] = v; marcaPintar(); }
 function marcaSyncHex(k, v){ v=(v||"").trim(); if(v && v[0]!=="#") v="#"+v; if(_hexOk(v)) marcaSync(k, v.toLowerCase()); }
@@ -3294,8 +3367,10 @@ function marcaElegirLogo(input){
 
 async function marcaGuardar(){
   if(!esAdmin()){ toast("Solo el administrador puede cambiar la marca.","err"); return; }
+  if(![marcaEdit.primario,marcaEdit.oscuro,marcaEdit.acento].every(_hexOk)){ toast("Revisá los colores (formato #RRGGBB).","err"); return; }
+  const leg = paletaLegible(marcaEdit);
+  if(leg.cambios.length){ Object.assign(marcaEdit,{primario:leg.primario,oscuro:leg.oscuro,acento:leg.acento}); marcaPintar(); toast("Ajustamos los colores para que se lean bien.","ok",3500); }
   const m = marcaEdit;
-  if(![m.primario,m.oscuro,m.acento].every(_hexOk)){ toast("Revisá los colores (formato #RRGGBB).","err"); return; }
   try{
     const r = await fetch(SB_URL+"/rest/v1/rpc/nexo_guardar_marca", {
       method:"POST", headers:{"apikey":SB_KEY,"Content-Type":"application/json"},
