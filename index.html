@@ -16,13 +16,19 @@
 <style>
 /* ========== TOKENS ========== */
 :root{
-  --navy:#1a56db;
-  --navy-mid:#1e40af;
-  --navy-light:#2563eb;
-  --ml-blue:#1a56db;
-  --ml-yellow:#f5c400;
-  --accent:#1a56db;
-  --accent2:#f5c400;
+  /* Marca: NEXO por defecto; cada cliente la puede personalizar (ver aplicarMarca) */
+  --brand-primario:#6d28d9;
+  --brand-oscuro:#1e1b4b;
+  --brand-acento:#22d3ee;
+  --brand-primario-txt:#ffffff;
+  --brand-acento-txt:#0b1020;
+  --navy:var(--brand-primario);
+  --navy-mid:var(--brand-primario);
+  --navy-light:var(--brand-primario);
+  --ml-blue:var(--brand-primario);
+  --ml-yellow:var(--brand-acento);
+  --accent:var(--brand-primario);
+  --accent2:var(--brand-acento);
   --bg:#f0f4ff;
   --surface:#ffffff;
   --border:#dce4f5;
@@ -35,8 +41,8 @@
   --green:#16a34a;
   --green-bg:#f0fdf4;
   --radius:10px;
-  --shadow:0 2px 8px rgba(26,86,219,.08);
-  --shadow-lg:0 8px 30px rgba(26,86,219,.18);
+  --shadow:0 2px 8px color-mix(in srgb, var(--brand-primario) 8%, transparent);
+  --shadow-lg:0 8px 30px color-mix(in srgb, var(--brand-primario) 18%, transparent);
 }
 html[data-theme="dark"]{
   --bg:#0e1420;
@@ -59,10 +65,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   min-height:100vh;padding:24px;
   background-color:#eef2fb;
   background-image:
-    radial-gradient(circle at 20% 20%, rgba(26,86,219,.10), transparent 45%),
-    radial-gradient(circle at 82% 78%, rgba(245,196,0,.14), transparent 42%),
-    linear-gradient(rgba(26,86,219,.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(26,86,219,.055) 1px, transparent 1px);
+    radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--brand-primario) 10%, transparent), transparent 45%),
+    radial-gradient(circle at 82% 78%, color-mix(in srgb, var(--brand-acento) 14%, transparent), transparent 42%),
+    linear-gradient(color-mix(in srgb, var(--brand-primario) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--brand-primario) 6%, transparent) 1px, transparent 1px);
   background-size:auto, auto, 34px 34px, 34px 34px;
   background-position:center, center, center, center;
   position:relative;overflow:hidden;
@@ -74,11 +80,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .login-box{
   position:relative;z-index:1;
   background:var(--surface);padding:44px 40px;border-radius:16px;
-  width:100%;max-width:380px;box-shadow:0 20px 50px rgba(13,34,89,.14), 0 2px 8px rgba(13,34,89,.06);
+  width:100%;max-width:380px;box-shadow:0 20px 50px color-mix(in srgb, var(--brand-oscuro) 14%, transparent), 0 2px 8px color-mix(in srgb, var(--brand-oscuro) 6%, transparent);
   border:1px solid rgba(220,228,245,.9);
 }
 .login-logo{text-align:center;margin-bottom:28px;}
-.login-logo .brand{font-size:22px;font-weight:800;color:#0d2259;letter-spacing:-0.5px;}
+.login-logo .brand{font-size:22px;font-weight:800;color:var(--brand-oscuro);letter-spacing:-0.5px;}
 .login-logo .brand span{color:var(--ml-blue);}
 .login-logo .sub{font-size:12px;color:var(--text-soft);margin-top:4px;}
 .login-box input{
@@ -88,9 +94,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .login-box input:focus{border-color:var(--accent);}
 .login-box button{
   width:100%;padding:13px;background:var(--ml-blue);border:none;border-radius:8px;
-  font-size:15px;font-weight:700;cursor:pointer;color:#fff;letter-spacing:.3px;
+  font-size:15px;font-weight:700;cursor:pointer;color:var(--brand-primario-txt);letter-spacing:.3px;
 }
-.login-box button:hover{background:#2d73e8;}
+.login-box button:hover{filter:brightness(1.1);}
 .login-error{color:var(--red);font-size:13px;text-align:center;margin-top:10px;display:none;}
 
 /* ========== LAYOUT ========== */
@@ -98,8 +104,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 #adminPanel.visible{display:flex;}
 
 /* Sidebar */
-.sidebar{border-right:3px solid #f5c400;
-  width:220px;min-height:100vh;background:#0d2259;
+.sidebar{border-right:3px solid var(--brand-acento);
+  width:220px;min-height:100vh;background:var(--brand-oscuro);
   display:flex;flex-direction:column;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto;
 }
 .sidebar-brand{
@@ -120,7 +126,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 }
 .nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
 .nav-item.active{
-  background:rgba(245,196,0,.15);color:#fff;
+  background:color-mix(in srgb, var(--brand-acento) 15%, transparent);color:#fff;
   border-left-color:var(--ml-yellow);
 }
 .nav-item .icon{font-size:16px;width:20px;text-align:center;}
@@ -155,7 +161,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   min-width:0; overflow:hidden;
 }
 .stat-card .label{font-size:11px;color:var(--text-soft);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;overflow-wrap:break-word;}
-.stat-card .value{font-size:clamp(15px,1.7vw,26px);font-weight:800;color:#0d2259;line-height:1.15;overflow-wrap:break-word;word-break:break-word;}
+.stat-card .value{font-size:clamp(15px,1.7vw,26px);font-weight:800;color:var(--brand-oscuro);line-height:1.15;overflow-wrap:break-word;word-break:break-word;}
 .stat-card .value.red{color:var(--red);}
 .stat-card .value.green{color:var(--green);}
 .stat-card .value.orange{color:var(--orange);}
@@ -174,7 +180,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .scroll-mirror-top div{height:1px;}
 table{width:100%;border-collapse:collapse;font-size:13px;}
 th{
-  background:#0d2259;color:#fff;
+  background:var(--brand-oscuro);color:#fff;
   padding:10px 14px;text-align:left;font-weight:600;white-space:nowrap;font-size:12px;
 }
 td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
@@ -193,8 +199,8 @@ tr:hover td{background:#fafbfc;}
 
 /* ========== BUTTONS ========== */
 .btn{padding:8px 16px;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;transition:.15s;}
-.btn-primary{background:var(--ml-yellow);color:#0d2259;}
-.btn-primary:hover{background:#e6b800;}
+.btn-primary{background:var(--ml-yellow);color:var(--brand-acento-txt);}
+.btn-primary:hover{background:var(--ml-yellow);filter:brightness(.93);}
 .btn-success{background:var(--green);color:#fff;}
 .btn-success:hover{opacity:.88;}
 .btn-danger{background:var(--red);color:#fff;}
@@ -283,7 +289,7 @@ tr:hover td{background:#fafbfc;}
 /* ========== MOBILE BAR & SIDEBAR ========== */
 .mobile-bar{
   display:none;position:sticky;top:0;z-index:100;
-  background:#0d2259;padding:11px 16px;
+  background:var(--brand-oscuro);padding:11px 16px;
   align-items:center;gap:12px;
   border-bottom:3px solid var(--ml-yellow);
 }
@@ -375,10 +381,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 .stat-card:hover{box-shadow:var(--shadow-lg);transform:translateY(-1px);}
 
 /* Botones: transición más completa (color+sombra), leve feedback al presionar */
-.btn{transition:.15s ease;box-shadow:0 1px 2px rgba(13,34,89,.06);}
+.btn{transition:.15s ease;box-shadow:0 1px 2px color-mix(in srgb, var(--brand-oscuro) 6%, transparent);}
 .btn:active{transform:scale(.97);}
-.btn-primary{box-shadow:0 2px 6px rgba(245,196,0,.35);}
-.btn-primary:hover{box-shadow:0 3px 10px rgba(245,196,0,.45);}
+.btn-primary{box-shadow:0 2px 6px color-mix(in srgb, var(--brand-acento) 35%, transparent);}
+.btn-primary:hover{box-shadow:0 3px 10px color-mix(in srgb, var(--brand-acento) 45%, transparent);}
 .btn-success:hover{box-shadow:0 3px 10px rgba(22,163,74,.35);}
 .btn-danger:hover{box-shadow:0 3px 10px rgba(220,38,38,.3);}
 .btn:disabled{opacity:.55;cursor:not-allowed;transform:none !important;box-shadow:none !important;}
@@ -393,7 +399,7 @@ th:last-child{border-top-right-radius:8px;}
 
 /* Inputs: sombra sutil de foco, más "vivo" */
 .form-group input:focus,.form-group select:focus,.form-group textarea:focus,.search-input:focus{
-  border-color:var(--accent);box-shadow:0 0 0 3px rgba(26,86,219,.12);
+  border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb, var(--brand-primario) 12%, transparent);
 }
 
 /* Spinner de carga animado */
@@ -409,7 +415,7 @@ th:last-child{border-top-right-radius:8px;}
 .badge-green{border-color:rgba(22,163,74,.18);}
 .badge-red{border-color:rgba(220,38,38,.18);}
 .badge-orange{border-color:rgba(234,112,0,.18);}
-.badge-blue{border-color:rgba(26,86,219,.18);}
+.badge-blue{border-color:color-mix(in srgb, var(--brand-primario) 18%, transparent);}
 
 /* Toast con leve animación de entrada */
 #toast.show{animation:origoToastIn .2s ease-out;}
@@ -423,7 +429,7 @@ th:last-child{border-top-right-radius:8px;}
   .table-wrap{position:relative;}
   .table-wrap::after{
     content:"";position:absolute;top:0;right:0;bottom:0;width:18px;pointer-events:none;
-    background:linear-gradient(to right, transparent, rgba(13,34,89,.06));
+    background:linear-gradient(to right, transparent, color-mix(in srgb, var(--brand-oscuro) 6%, transparent));
   }
 }
 
@@ -469,7 +475,7 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb{background:#3a4870;}
 html[data-theme="dark"] *{scrollbar-color:#3a4870 transparent;}
 
 /* Colores de texto/fondo escritos "a mano" en el HTML generado por JS — se sobreescriben por atributo */
-html[data-theme="dark"] [style*="color:#0d2259"]{color:var(--text) !important;}
+html[data-theme="dark"] [style*="color:var(--brand-oscuro)"]{color:var(--text) !important;}
 html[data-theme="dark"] [style*="color:#444"]{color:var(--text-soft) !important;}
 html[data-theme="dark"] [style*="background:#f8f9fa"]{background:#202a42 !important;}
 html[data-theme="dark"] [style*="background:#f0f4ff"]{background:#1a2233 !important;}
@@ -494,7 +500,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
   padding:7px 0;border-radius:6px;cursor:pointer;font-size:14px;transition:.15s;
 }
 .theme-switch button:hover{color:#fff;}
-.theme-switch button.active{background:var(--ml-yellow);color:#0d2259;}
+.theme-switch button.active{background:var(--ml-yellow);color:var(--brand-oscuro);}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -524,6 +530,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
   <!-- Sidebar -->
   <nav class="sidebar">
     <div class="sidebar-brand">
+      <img id="sidebarLogo" alt="" style="display:none;max-width:100%;max-height:64px;object-fit:contain;background:#fff;border-radius:8px;padding:6px;margin-bottom:10px;">
       <div class="name">NEXO</div>
       <div class="sub" id="sidebarCliente">MercadoLibre</div>
     </div>
@@ -587,6 +594,9 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
       <span class="icon">💰</span> Análisis ML
     </div>
     <div class="nav-section">Tienda</div>
+    <div class="nav-item admin-only" onclick="mostrarSeccion('marca')">
+      <span class="icon">🎨</span> Mi marca
+    </div>
     <div class="nav-item" onclick="mostrarSeccion('ml')">
       <span class="icon">🔗</span> MercadoLibre
     </div>
@@ -613,7 +623,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
     <!-- Mobile top bar -->
     <div class="mobile-bar">
       <button onclick="openSidebar()">☰</button>
-      <div class="m-brand">NEXO</div>
+      <div class="m-brand"><img id="mobileLogo" alt="" style="display:none;height:26px;vertical-align:middle;background:#fff;border-radius:5px;padding:2px;margin-right:6px;">NEXO</div>
     </div>
 
     <!-- ========== PANEL ========== -->
@@ -907,7 +917,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
             </div>
 
             <!-- Métodos de pago (1 o 2) -->
-            <div style="font-size:12px;font-weight:700;color:#0d2259;margin-bottom:8px;">Forma de pago <span style="font-weight:400;color:var(--text-soft);">(podés combinar dos métodos)</span></div>
+            <div style="font-size:12px;font-weight:700;color:var(--brand-oscuro);margin-bottom:8px;">Forma de pago <span style="font-weight:400;color:var(--text-soft);">(podés combinar dos métodos)</span></div>
             <div class="form-grid" style="margin-bottom:8px;">
               <div class="form-group">
                 <label>Método 1</label>
@@ -1064,7 +1074,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
             </div>
 
             <!-- Líneas del remito -->
-            <div style="margin-bottom:12px;font-size:13px;font-weight:700;color:#0d2259;">Productos del remito</div>
+            <div style="margin-bottom:12px;font-size:13px;font-weight:700;color:var(--brand-oscuro);">Productos del remito</div>
             <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:10px;">
               <div class="form-group" style="margin:0;">
                 <label>SKU</label>
@@ -1103,7 +1113,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
 
             <!-- Total y botón guardar -->
             <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#f0f4ff;border-radius:8px;border:1.5px solid #c7d9f8;">
-              <div style="font-size:15px;font-weight:700;color:#0d2259;">
+              <div style="font-size:15px;font-weight:700;color:var(--brand-oscuro);">
                 Total remito: <span id="cTotal" style="color:var(--ml-blue);">$0</span>
                 &nbsp;&nbsp;<span style="font-size:12px;font-weight:400;color:var(--text-soft);" id="cLinCount">0 productos</span>
               </div>
@@ -1205,7 +1215,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
           <div class="card" style="margin-bottom:20px;">
             <div class="card-header"><h3>📥 Importar reporte de MercadoLibre</h3></div>
             <div style="padding:16px;">
-              <div style="background:#f0f4ff;border:1.5px solid #c7d9f8;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#0d2259;">
+              <div style="background:#f0f4ff;border:1.5px solid #c7d9f8;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--brand-oscuro);">
                 <strong>¿Cómo exportar?</strong> En ML → Mis ventas → <em>Descargar reporte</em> → formato <strong>.xlsx</strong>.<br>
                 El importador detecta automáticamente SKU, cantidad, precio unitario, total neto y fecha.
               </div>
@@ -1221,7 +1231,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
               <!-- Preview de líneas detectadas -->
               <div id="mlPreviewWrap" style="display:none;">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
-                  <div style="font-size:13px;font-weight:700;color:#0d2259;" id="mlPreviewResumen"></div>
+                  <div style="font-size:13px;font-weight:700;color:var(--brand-oscuro);" id="mlPreviewResumen"></div>
                   <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
                     <label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;color:var(--orange);">
                       <input type="checkbox" id="mlFiltroSinCatalogo" onchange="renderMLPreview()"> Ver solo sin catálogo
@@ -1242,7 +1252,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
                 </div>
                 <div style="display:flex;align-items:center;gap:16px;margin-top:12px;padding:12px 14px;background:#f0f4ff;border-radius:8px;border:1.5px solid #c7d9f8;">
                   <div>
-                    <div style="font-size:13px;font-weight:700;color:#0d2259;" id="mlResumenFinal"></div>
+                    <div style="font-size:13px;font-weight:700;color:var(--brand-oscuro);" id="mlResumenFinal"></div>
                     <div style="font-size:11px;color:var(--text-soft);margin-top:2px;">Las filas de "Paquete de X productos" se ignoran automáticamente (se procesan las líneas hijas).</div>
                   </div>
                   <button class="btn btn-success" onclick="confirmarImportML()" style="margin-left:auto;padding:10px 24px;">✔ Confirmar importación</button>
@@ -1766,7 +1776,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
         </div>
 
         <div id="pmPaso1">
-          <div style="font-size:13px;font-weight:700;color:#0d2259;margin-bottom:8px;">Paso 1 — Elegí una publicación existente como plantilla</div>
+          <div style="font-size:13px;font-weight:700;color:var(--brand-oscuro);margin-bottom:8px;">Paso 1 — Elegí una publicación existente como plantilla</div>
           <div style="display:flex;gap:8px;margin-bottom:10px;">
             <input type="text" id="pmPlantillaMLA" placeholder="Pegá el MLA de una publicación tuya ya activa (ej: MLA2901797178)" style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;">
             <button class="btn btn-primary" onclick="cargarPlantillaPublicador()">🔍 Cargar plantilla</button>
@@ -1775,7 +1785,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
         </div>
 
         <div id="pmPaso2" style="display:none;margin-top:20px;">
-          <div style="font-size:13px;font-weight:700;color:#0d2259;margin-bottom:8px;">Paso 2 — Elegí qué productos publicar (solo se muestran los que todavía no tienen Publicación ML)</div>
+          <div style="font-size:13px;font-weight:700;color:var(--brand-oscuro);margin-bottom:8px;">Paso 2 — Elegí qué productos publicar (solo se muestran los que todavía no tienen Publicación ML)</div>
           <div class="table-wrap" style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:14px;">
             <table>
               <thead><tr><th style="width:28px;"><input type="checkbox" id="pmCheckAll" onchange="toggleCheckAllPM(this.checked)"></th><th>SKU</th><th>Título a publicar</th><th>Precio ($)</th><th>Stock inicial</th></tr></thead>
@@ -1930,7 +1940,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
           <div class="card" style="margin-bottom:20px;">
             <div class="card-header"><h3>👁️ Vista previa</h3></div>
             <div style="padding:12px 16px;">
-              <div id="lpPreviewResumen" style="font-size:13px;font-weight:700;color:#0d2259;margin-bottom:10px;"></div>
+              <div id="lpPreviewResumen" style="font-size:13px;font-weight:700;color:var(--brand-oscuro);margin-bottom:10px;"></div>
               <div class="table-wrap" style="max-height:400px;">
                 <table>
                   <thead><tr><th>SKU</th><th>Título proveedor</th><th>Precio lista</th><th>Descuentos</th><th>Precio neto</th><th>¿En catálogo?</th></tr></thead>
@@ -2083,6 +2093,65 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
               <div class="form-group"><label>Rol</label><select id="saUsrRol"><option value="admin">Administrador</option><option value="viewer">Solo lectura</option></select></div>
               <div class="span2"><button class="btn btn-primary" onclick="saCrearUsuario()">Crear usuario</button></div>
               <div class="span2" id="saUsrResultado" style="font-size:13px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="sec-marca" class="section">
+      <div class="page-header">
+        <div><h2>Mi marca</h2><div class="sub">Logo y colores con los que se ve tu panel</div></div>
+      </div>
+      <div style="padding:24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;align-items:start;">
+        <div class="card">
+          <div class="card-header"><h3>Logo</h3></div>
+          <div style="padding:20px;">
+            <div id="marcaLogoPrev" style="height:120px;border:1.5px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;background:#fff;margin-bottom:14px;color:#8a94a6;font-size:13px;">Sin logo</div>
+            <input type="file" id="marcaLogoFile" accept="image/png,image/jpeg,image/webp,image/svg+xml" onchange="marcaElegirLogo(this)" style="margin-bottom:10px;">
+            <div style="font-size:12px;color:var(--text-soft);margin-bottom:10px;">PNG, JPG, WEBP o SVG. Se ajusta solo a un tamaño liviano.</div>
+            <button class="btn btn-ghost btn-sm" onclick="marcaQuitarLogo()">Quitar logo</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Colores</h3></div>
+          <div style="padding:20px;">
+            <div class="form-grid">
+              <div class="form-group"><label>Principal (botones y enlaces)</label><div style="display:flex;gap:8px;"><input type="color" id="marcaPrimario" oninput="marcaSync('Primario',this.value)" style="width:48px;height:38px;padding:2px;"><input id="marcaPrimarioHex" maxlength="7" oninput="marcaSyncHex('Primario',this.value)"></div></div>
+              <div class="form-group"><label>Oscuro (menú lateral y títulos)</label><div style="display:flex;gap:8px;"><input type="color" id="marcaOscuro" oninput="marcaSync('Oscuro',this.value)" style="width:48px;height:38px;padding:2px;"><input id="marcaOscuroHex" maxlength="7" oninput="marcaSyncHex('Oscuro',this.value)"></div></div>
+              <div class="form-group"><label>Acento (botón principal y destacados)</label><div style="display:flex;gap:8px;"><input type="color" id="marcaAcento" oninput="marcaSync('Acento',this.value)" style="width:48px;height:38px;padding:2px;"><input id="marcaAcentoHex" maxlength="7" oninput="marcaSyncHex('Acento',this.value)"></div></div>
+            </div>
+            <div style="font-size:12px;font-weight:600;margin:16px 0 8px;">Paletas sugeridas</div>
+            <div id="marcaPresets" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+            <div id="marcaAviso" style="font-size:12px;margin-top:12px;"></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;">
+              <button class="btn btn-primary" onclick="marcaGuardar()">💾 Guardar marca</button>
+              <button class="btn btn-ghost" onclick="marcaRestablecer()">Volver a colores NEXO</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Vista previa</h3></div>
+          <div style="padding:20px;">
+            <div id="marcaPreview" style="display:flex;border-radius:10px;overflow:hidden;border:1px solid var(--border);min-height:170px;">
+              <div id="mpSide" style="width:38%;padding:14px;color:#fff;">
+                <img id="mpLogo" alt="" style="display:none;max-width:100%;max-height:42px;background:#fff;border-radius:6px;padding:3px;margin-bottom:8px;">
+                <div style="font-weight:800;">NEXO</div>
+                <div id="mpNav" style="margin-top:10px;font-size:12px;padding:6px 8px;border-radius:6px;border-left:3px solid;">📊 Panel</div>
+                <div style="font-size:12px;padding:6px 8px;opacity:.7;">📦 Productos</div>
+              </div>
+              <div style="flex:1;padding:14px;background:var(--bg);">
+                <div id="mpTitulo" style="font-weight:800;font-size:15px;margin-bottom:10px;">Ventas del mes</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <span id="mpBtn1" style="padding:7px 12px;border-radius:7px;font-weight:700;font-size:12px;">Guardar</span>
+                  <span id="mpBtn2" style="padding:7px 12px;border-radius:7px;font-weight:700;font-size:12px;">Conectar</span>
+                </div>
+                <div id="mpLink" style="margin-top:12px;font-size:12px;font-weight:600;">Ver detalle →</div>
+              </div>
+            </div>
+            <div id="marcaNotaSA" style="display:none;font-size:12px;color:var(--text-soft);margin-top:12px;">
+              Como superadministrador, vos ves el panel con los colores de NEXO. Los usuarios de este cliente lo ven con esta marca.
+              <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="marcaProbar()">👁️ Probar en todo el panel (hasta recargar)</button>
             </div>
           </div>
         </div>
@@ -2341,11 +2410,11 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
       </div>
       <div class="form-group">
         <label>Margen % (ML)</label>
-        <input type="text" id="pMargen" readonly style="background:#f8f9fa;font-weight:700;color:#0d2259;">
+        <input type="text" id="pMargen" readonly style="background:#f8f9fa;font-weight:700;color:var(--brand-oscuro);">
       </div>
       <div class="form-group">
         <label>Margen % (Tienda)</label>
-        <input type="text" id="pMargenTienda" readonly style="background:#f8f9fa;font-weight:700;color:#0d2259;">
+        <input type="text" id="pMargenTienda" readonly style="background:#f8f9fa;font-weight:700;color:var(--brand-oscuro);">
       </div>
       <div class="form-group">
         <label>Stock mínimo</label>
@@ -2370,7 +2439,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
 
     <!-- Stock inicial (solo en nuevo producto) -->
     <div id="stockInicialWrap" style="background:#f0f4ff;border:1.5px solid #c7d9f8;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
-      <div style="font-size:12px;font-weight:700;color:#0d2259;margin-bottom:8px;">📦 Stock inicial (opcional)</div>
+      <div style="font-size:12px;font-weight:700;color:var(--brand-oscuro);margin-bottom:8px;">📦 Stock inicial (opcional)</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div class="form-group" style="margin:0;">
           <label>Cantidad inicial</label>
@@ -2452,7 +2521,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
       </div>
 
       <!-- Líneas del pedido -->
-      <div style="font-size:13px;font-weight:700;color:#0d2259;margin-bottom:8px;">Productos del pedido</div>
+      <div style="font-size:13px;font-weight:700;color:var(--brand-oscuro);margin-bottom:8px;">Productos del pedido</div>
       <div class="card" style="margin-bottom:12px;border:1.5px solid var(--border);">
         <div class="table-wrap">
           <table>
@@ -2480,7 +2549,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
     </div>
 
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f0f4ff;border-radius:8px;margin-bottom:16px;">
-      <span style="font-weight:700;color:#0d2259;">Total: <span id="epTotal">$0</span></span>
+      <span style="font-weight:700;color:var(--brand-oscuro);">Total: <span id="epTotal">$0</span></span>
     </div>
 
     <div class="modal-actions">
@@ -2518,7 +2587,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
          ondragleave="this.style.borderColor='var(--border)'"
          ondrop="onDropFullML(event)">
       <div style="font-size:28px;margin-bottom:8px;">📄</div>
-      <div style="font-size:14px;font-weight:700;color:#0d2259;margin-bottom:4px;">Arrastrá el PDF acá</div>
+      <div style="font-size:14px;font-weight:700;color:var(--brand-oscuro);margin-bottom:4px;">Arrastrá el PDF acá</div>
       <div style="font-size:12px;color:var(--text-soft);margin-bottom:12px;">o hacé clic para seleccionar</div>
       <label class="btn btn-primary" style="cursor:pointer;">
         📂 Seleccionar PDF
@@ -2545,7 +2614,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
 
     <!-- Preview -->
     <div id="fullMLPreviewWrap" style="display:none;">
-      <div style="font-size:13px;font-weight:700;color:#0d2259;margin-bottom:10px;" id="fullMLResumen"></div>
+      <div style="font-size:13px;font-weight:700;color:var(--brand-oscuro);margin-bottom:10px;" id="fullMLResumen"></div>
       <div class="table-wrap" style="max-height:300px;overflow-y:auto;margin-bottom:14px;">
         <table>
           <thead><tr><th>SKU</th><th>Producto</th><th>Unidades</th><th>En catálogo</th><th>✓</th></tr></thead>
@@ -2581,7 +2650,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
          ondragleave="this.style.borderColor='var(--border)'"
          ondrop="onDropPedidoFullML(event)">
       <div style="font-size:28px;margin-bottom:8px;">📄</div>
-      <div style="font-size:14px;font-weight:700;color:#0d2259;margin-bottom:4px;">Arrastrá el PDF acá</div>
+      <div style="font-size:14px;font-weight:700;color:var(--brand-oscuro);margin-bottom:4px;">Arrastrá el PDF acá</div>
       <div style="font-size:12px;color:var(--text-soft);margin-bottom:12px;">o hacé clic para seleccionar</div>
       <label class="btn btn-primary" style="cursor:pointer;">
         📂 Seleccionar PDF
@@ -2603,7 +2672,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
 
     <!-- Preview -->
     <div id="ppfPreviewWrap" style="display:none;">
-      <div style="font-size:13px;font-weight:700;color:#0d2259;margin-bottom:10px;" id="ppfResumen"></div>
+      <div style="font-size:13px;font-weight:700;color:var(--brand-oscuro);margin-bottom:10px;" id="ppfResumen"></div>
       <div class="table-wrap" style="max-height:340px;overflow-y:auto;margin-bottom:14px;">
         <table>
           <thead><tr><th style="width:28px;"></th><th>SKU</th><th>Producto</th><th>Pide ML</th><th>Stock Dep.</th><th>Ya pedido</th><th>Falta comprar</th><th>Proveedor</th></tr></thead>
@@ -2628,7 +2697,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
     <h3>🎯 Automatización de precios</h3>
     <div id="autoPrecioContenido" style="font-size:13px;line-height:1.6;margin-bottom:16px;">Consultando...</div>
     <div id="autoPrecioRangoWrap" style="display:none;margin-bottom:16px;">
-      <div style="font-size:12px;font-weight:700;color:#0d2259;margin-bottom:8px;">Ajustar rango (la automatización sigue activa, solo cambia el mínimo/máximo)</div>
+      <div style="font-size:12px;font-weight:700;color:var(--brand-oscuro);margin-bottom:8px;">Ajustar rango (la automatización sigue activa, solo cambia el mínimo/máximo)</div>
       <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px;">
         <div class="form-group" style="margin:0;">
           <label style="font-size:11px;">Precio mínimo ($)</label>
@@ -2661,7 +2730,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
 
     <div style="background:#f0f4ff;border-radius:8px;padding:12px 14px;margin-bottom:18px;font-size:13px;" id="simResultado"></div>
 
-    <div style="font-size:12px;font-weight:700;color:#0d2259;margin-bottom:8px;">📋 Precios de referencia según margen</div>
+    <div style="font-size:12px;font-weight:700;color:var(--brand-oscuro);margin-bottom:8px;">📋 Precios de referencia según margen</div>
     <div class="table-wrap" style="margin-bottom:18px;">
       <table>
         <thead><tr><th>Margen</th><th>Precio necesario</th><th></th></tr></thead>
@@ -2700,7 +2769,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
       </div>
     </div>
 
-    <div style="font-size:13px;font-weight:700;color:#0d2259;margin-bottom:8px;">Líneas del pedido</div>
+    <div style="font-size:13px;font-weight:700;color:var(--brand-oscuro);margin-bottom:8px;">Líneas del pedido</div>
     <div class="table-wrap" style="margin-bottom:12px;border:1.5px solid var(--border);border-radius:8px;">
       <table>
         <thead><tr><th>SKU</th><th>Producto</th><th>Stock actual</th><th>Mín.</th><th>Cantidad a pedir</th><th>Costo unit. ($)</th><th>Subtotal</th><th></th></tr></thead>
@@ -2724,7 +2793,7 @@ html[data-theme="dark"] [style*="background:#fff"]{background:var(--surface) !im
     <div id="ppLinSkuNombre" style="font-size:11px;color:var(--text-soft);margin-bottom:12px;min-height:14px;"></div>
 
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#f0f4ff;border-radius:8px;margin-bottom:16px;">
-      <span style="font-weight:700;color:#0d2259;">Total estimado: <span id="ppTotalDisplay" style="color:var(--ml-blue);font-size:16px;">$0</span></span>
+      <span style="font-weight:700;color:var(--brand-oscuro);">Total estimado: <span id="ppTotalDisplay" style="color:var(--ml-blue);font-size:16px;">$0</span></span>
     </div>
 
     <div class="modal-actions">
@@ -3092,11 +3161,20 @@ async function cargarCliente(){
       document.getElementById("saNav").style.display = "";
       saCargarSelector(sa[0].cliente_activo);
     }
-    const r = await fetch(SB_URL+"/rest/v1/nexo_clientes?select=id,nombre,tienda_url"+filtro, {headers:{"apikey":SB_KEY}});
+    const r = await fetch(SB_URL+"/rest/v1/nexo_clientes?select=id,nombre,tienda_url,logo,color_primario,color_oscuro,color_acento"+filtro, {headers:{"apikey":SB_KEY}});
     const d = await r.json();
     clienteId = (d && d[0] && d[0].id) || null;
     clienteTiendaUrl = (d && d[0] && d[0].tienda_url) || "";
     clienteNombre = (d && d[0] && d[0].nombre) || "";
+    clienteMarca = {
+      logo: (d && d[0] && d[0].logo) || "",
+      primario: (d && d[0] && d[0].color_primario) || "",
+      oscuro: (d && d[0] && d[0].color_oscuro) || "",
+      acento: (d && d[0] && d[0].color_acento) || ""
+    };
+    // El superadmin ve siempre los colores NEXO; cada cliente, los suyos
+    aplicarMarca(esSuperadmin ? {} : clienteMarca);
+    mostrarLogoCliente(clienteMarca.logo);
     const el = document.getElementById("sidebarCliente");
     if(el && clienteNombre) el.textContent = clienteNombre + " · MercadoLibre";
     document.title = "NEXO — " + (clienteNombre || "Panel de Administración");
@@ -3106,6 +3184,133 @@ async function cargarCliente(){
 // ================================================================
 // SUPERADMIN NEXO
 // ================================================================
+// ================================================================
+// MARCA DEL CLIENTE (logo + paleta)
+// ================================================================
+const MARCA_NEXO = {primario:"#6d28d9", oscuro:"#1e1b4b", acento:"#22d3ee"};
+const MARCA_PRESETS = [
+  {n:"NEXO", primario:"#6d28d9", oscuro:"#1e1b4b", acento:"#22d3ee"},
+  {n:"Azul y amarillo", primario:"#1a56db", oscuro:"#0d2259", acento:"#f5c400"},
+  {n:"Verde", primario:"#059669", oscuro:"#064e3b", acento:"#a3e635"},
+  {n:"Rojo", primario:"#dc2626", oscuro:"#3f0d12", acento:"#fbbf24"},
+  {n:"Naranja", primario:"#ea580c", oscuro:"#27180f", acento:"#38bdf8"},
+  {n:"Grafito", primario:"#334155", oscuro:"#0f172a", acento:"#f97316"}
+];
+let clienteMarca = {logo:"", primario:"", oscuro:"", acento:""};
+let marcaEdit = null;
+
+function _hexOk(h){ return /^#[0-9a-fA-F]{6}$/.test(h||""); }
+function _lum(h){
+  const c=[1,3,5].map(i=>parseInt(h.substr(i,2),16)/255).map(v=>v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4));
+  return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2];
+}
+function _contraste(a,b){ const x=_lum(a),y=_lum(b); return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05); }
+function _textoSobre(h){ return _contraste(h,"#ffffff") >= _contraste(h,"#0b1020") ? "#ffffff" : "#0b1020"; }
+
+function aplicarMarca(m){
+  const p = _hexOk(m.primario)?m.primario:MARCA_NEXO.primario;
+  const o = _hexOk(m.oscuro)?m.oscuro:MARCA_NEXO.oscuro;
+  const a = _hexOk(m.acento)?m.acento:MARCA_NEXO.acento;
+  const st = document.documentElement.style;
+  st.setProperty("--brand-primario", p);
+  st.setProperty("--brand-oscuro", o);
+  st.setProperty("--brand-acento", a);
+  st.setProperty("--brand-primario-txt", _textoSobre(p));
+  st.setProperty("--brand-acento-txt", _textoSobre(a));
+}
+function mostrarLogoCliente(logo){
+  ["sidebarLogo","mobileLogo"].forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    if(logo){ el.src=logo; el.style.display=""; } else { el.removeAttribute("src"); el.style.display="none"; }
+  });
+}
+
+function renderMarca(){
+  marcaEdit = {
+    logo: clienteMarca.logo || "",
+    primario: _hexOk(clienteMarca.primario)?clienteMarca.primario:MARCA_NEXO.primario,
+    oscuro: _hexOk(clienteMarca.oscuro)?clienteMarca.oscuro:MARCA_NEXO.oscuro,
+    acento: _hexOk(clienteMarca.acento)?clienteMarca.acento:MARCA_NEXO.acento,
+    borrarLogo: false, logoNuevo: false
+  };
+  document.getElementById("marcaPresets").innerHTML = MARCA_PRESETS.map((p,i)=>
+    `<button class="btn btn-ghost btn-sm" onclick="marcaPreset(${i})" title="${p.n}" style="display:flex;align-items:center;gap:6px;">
+      <span style="display:inline-flex;border-radius:4px;overflow:hidden;"><i style="width:14px;height:14px;background:${p.oscuro}"></i><i style="width:14px;height:14px;background:${p.primario}"></i><i style="width:14px;height:14px;background:${p.acento}"></i></span>${p.n}</button>`).join("");
+  document.getElementById("marcaNotaSA").style.display = esSuperadmin ? "" : "none";
+  marcaPintar();
+}
+function marcaPintar(){
+  const m = marcaEdit; if(!m) return;
+  ["Primario","Oscuro","Acento"].forEach(k=>{
+    const v = m[k.toLowerCase()];
+    document.getElementById("marca"+k).value = v;
+    const hx = document.getElementById("marca"+k+"Hex"); if(document.activeElement!==hx) hx.value = v;
+  });
+  const prev = document.getElementById("marcaLogoPrev");
+  prev.innerHTML = m.logo ? `<img src="${m.logo}" alt="Logo" style="max-height:104px;max-width:90%;object-fit:contain;">` : "Sin logo";
+  const side = document.getElementById("mpSide"); side.style.background = m.oscuro; side.style.color = _textoSobre(m.oscuro);
+  const nav = document.getElementById("mpNav"); nav.style.borderLeftColor = m.acento; nav.style.background = m.acento+"26";
+  const lg = document.getElementById("mpLogo"); if(m.logo){ lg.src=m.logo; lg.style.display=""; } else lg.style.display="none";
+  document.getElementById("mpTitulo").style.color = m.oscuro;
+  const b1=document.getElementById("mpBtn1"); b1.style.background=m.acento; b1.style.color=_textoSobre(m.acento);
+  const b2=document.getElementById("mpBtn2"); b2.style.background=m.primario; b2.style.color=_textoSobre(m.primario);
+  document.getElementById("mpLink").style.color = m.primario;
+  const aviso = document.getElementById("marcaAviso");
+  const cBg = _contraste(m.oscuro, "#ffffff");
+  aviso.innerHTML = cBg < 3 ? `<span style="color:var(--orange);">⚠️ El color oscuro es muy claro: el menú lateral puede leerse mal.</span>` : "";
+}
+function marcaSync(k, v){ if(!marcaEdit) return; marcaEdit[k.toLowerCase()] = v; marcaPintar(); }
+function marcaSyncHex(k, v){ v=(v||"").trim(); if(v && v[0]!=="#") v="#"+v; if(_hexOk(v)) marcaSync(k, v.toLowerCase()); }
+function marcaPreset(i){ const p=MARCA_PRESETS[i]; Object.assign(marcaEdit,{primario:p.primario,oscuro:p.oscuro,acento:p.acento}); marcaPintar(); }
+function marcaRestablecer(){ Object.assign(marcaEdit, MARCA_NEXO); marcaPintar(); }
+function marcaQuitarLogo(){ marcaEdit.logo=""; marcaEdit.borrarLogo=true; marcaEdit.logoNuevo=false; document.getElementById("marcaLogoFile").value=""; marcaPintar(); }
+
+function marcaElegirLogo(input){
+  const f = input.files && input.files[0]; if(!f) return;
+  if(f.size > 5*1024*1024){ toast("El archivo es muy grande (máx. 5 MB).","err"); input.value=""; return; }
+  const lector = new FileReader();
+  lector.onload = ()=>{
+    const src = lector.result;
+    if(f.type==="image/svg+xml"){
+      if(src.length > 380000){ toast("El SVG es muy pesado. Probá con PNG.","err"); return; }
+      marcaEdit.logo = src; marcaEdit.logoNuevo = true; marcaEdit.borrarLogo = false; marcaPintar(); return;
+    }
+    const img = new Image();
+    img.onload = ()=>{
+      const max = 400, factor = Math.min(1, max/Math.max(img.width, img.height));
+      const cv = document.createElement("canvas");
+      cv.width = Math.max(1, Math.round(img.width*factor)); cv.height = Math.max(1, Math.round(img.height*factor));
+      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+      let out = cv.toDataURL("image/webp", 0.85);
+      if(!out.startsWith("data:image/webp")) out = cv.toDataURL("image/png");
+      if(out.length > 380000){ toast("El logo quedó muy pesado. Probá con una imagen más simple.","err"); return; }
+      marcaEdit.logo = out; marcaEdit.logoNuevo = true; marcaEdit.borrarLogo = false; marcaPintar();
+    };
+    img.onerror = ()=> toast("No se pudo leer la imagen.","err");
+    img.src = src;
+  };
+  lector.readAsDataURL(f);
+}
+
+async function marcaGuardar(){
+  if(!esAdmin()){ toast("Solo el administrador puede cambiar la marca.","err"); return; }
+  const m = marcaEdit;
+  if(![m.primario,m.oscuro,m.acento].every(_hexOk)){ toast("Revisá los colores (formato #RRGGBB).","err"); return; }
+  try{
+    const r = await fetch(SB_URL+"/rest/v1/rpc/nexo_guardar_marca", {
+      method:"POST", headers:{"apikey":SB_KEY,"Content-Type":"application/json"},
+      body: JSON.stringify({p_logo: m.logoNuevo ? m.logo : "", p_primario:m.primario, p_oscuro:m.oscuro, p_acento:m.acento, p_borrar_logo: !!m.borrarLogo})
+    });
+    if(!r.ok){ const e = await r.json().catch(()=>({})); throw new Error(e.message || ("Error "+r.status)); }
+    clienteMarca = {logo: m.borrarLogo ? "" : m.logo, primario:m.primario, oscuro:m.oscuro, acento:m.acento};
+    marcaEdit.logoNuevo = false; marcaEdit.borrarLogo = false;
+    if(!esSuperadmin) aplicarMarca(clienteMarca);
+    mostrarLogoCliente(clienteMarca.logo);
+    toast("✅ Marca guardada","ok");
+  }catch(e){ toast("No se pudo guardar: "+e.message,"err"); }
+}
+function marcaProbar(){ aplicarMarca(marcaEdit); toast("Mostrando la marca del cliente. Recargá para volver a NEXO.","ok",4000); }
+
 function verTiendaCliente(){
   if(clienteTiendaUrl) window.open(clienteTiendaUrl, "_blank");
   else toast("Este cliente no tiene tienda online configurada.","err");
@@ -3234,7 +3439,7 @@ function aplicarRol(){
   const rolBadge = document.getElementById("rolBadge");
   if(rolBadge){
     rolBadge.textContent = esAdmin ? "👑 Admin" : "👁️ Solo lectura";
-    rolBadge.style.color = esAdmin ? "#f5c400" : "rgba(255,255,255,.5)";
+    rolBadge.style.color = esAdmin ? "var(--brand-acento)" : "rgba(255,255,255,.5)";
   }
   // Ocultar/mostrar botones de acción según rol
   const adminOnly = document.querySelectorAll(".admin-only");
@@ -3254,6 +3459,7 @@ async function logout(){
   document.getElementById("adminPanel").classList.remove("visible");
   document.getElementById("passInput").value = "";  esSuperadmin = false;
   const sn = document.getElementById("saNav"); if(sn) sn.style.display = "none";
+  aplicarMarca({}); mostrarLogoCliente("");
 }
 
 // ================================================================
@@ -4109,7 +4315,7 @@ function calcMargenModal(){
     const m=((precio-costo)/precio*100).toFixed(1);
     el.value=m+"%";
     el.style.color=m>=25?"#16a34a":m>=10?"#ea7000":"#dc2626";
-  } else { el.value=""; el.style.color="#0d2259"; }
+  } else { el.value=""; el.style.color="var(--brand-oscuro)"; }
 
   const precioTienda=parseFloat(document.getElementById("pPrecioTienda").value)||0;
   const elT=document.getElementById("pMargenTienda");
@@ -4117,7 +4323,7 @@ function calcMargenModal(){
     const mt=((precioTienda-costo)/precioTienda*100).toFixed(1);
     elT.value=mt+"%";
     elT.style.color=mt>=25?"#16a34a":mt>=10?"#ea7000":"#dc2626";
-  } else { elT.value=""; elT.style.color="#0d2259"; }
+  } else { elT.value=""; elT.style.color="var(--brand-oscuro)"; }
 }
 
 async function guardarProducto(){
@@ -5470,23 +5676,23 @@ function verDetalleCompra(idx){
     </tr>`).join("");
   document.getElementById("confirmMsg").innerHTML = `
     <div style="text-align:left;">
-      <div style="font-size:15px;font-weight:700;color:#0d2259;margin-bottom:12px;">
+      <div style="font-size:15px;font-weight:700;color:var(--brand-oscuro);margin-bottom:12px;">
         🧾 ${esc(c.factura||"Sin número")} · ${esc(c.proveedor)}
       </div>
       <div style="font-size:12px;color:var(--text-soft);margin-bottom:10px;">${c.fecha} · ${esc(c.formaPago)}</div>
       <div style="overflow-x:auto;margin-bottom:12px;">
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
           <thead><tr>
-            <th style="background:#0d2259;color:#fff;padding:7px 10px;">SKU</th>
-            <th style="background:#0d2259;color:#fff;padding:7px 10px;">Producto</th>
-            <th style="background:#0d2259;color:#fff;padding:7px 10px;">Cant.</th>
-            <th style="background:#0d2259;color:#fff;padding:7px 10px;">Costo</th>
-            <th style="background:#0d2259;color:#fff;padding:7px 10px;">Subtotal</th>
+            <th style="background:var(--brand-oscuro);color:#fff;padding:7px 10px;">SKU</th>
+            <th style="background:var(--brand-oscuro);color:#fff;padding:7px 10px;">Producto</th>
+            <th style="background:var(--brand-oscuro);color:#fff;padding:7px 10px;">Cant.</th>
+            <th style="background:var(--brand-oscuro);color:#fff;padding:7px 10px;">Costo</th>
+            <th style="background:var(--brand-oscuro);color:#fff;padding:7px 10px;">Subtotal</th>
           </tr></thead>
           <tbody>${lineas}</tbody>
         </table>
       </div>
-      <div style="text-align:right;font-size:16px;font-weight:800;color:#0d2259;">Total: $${fmt(c.total)}</div>
+      <div style="text-align:right;font-size:16px;font-weight:800;color:var(--brand-oscuro);">Total: $${fmt(c.total)}</div>
     </div>`;
   // Override confirm button to just close
   document.getElementById("confirmBtn").textContent="Cerrar";
@@ -5536,6 +5742,7 @@ async function mostrarSeccion(id){
   // Renderizar la sección activa
   if(id==="panel") renderPanel();
   if(id==="clientes") renderClientes();
+  if(id==="marca") renderMarca();
   if(id==="stock"){ renderStock(); mostrarUltimaSync("stock","ultimaSyncStock"); }
   if(id==="alertas") renderAlertas();
   if(id==="movimientos") renderMovimientos();
@@ -8150,21 +8357,21 @@ function verDetallePedido(id){
 
   document.getElementById("confirmMsg").innerHTML =
     `<div style="text-align:left;">
-      <div style="font-size:15px;font-weight:700;color:#0d2259;margin-bottom:8px;">🛍️ Pedido de ${esc(p.nombre||"")}</div>
+      <div style="font-size:15px;font-weight:700;color:var(--brand-oscuro);margin-bottom:8px;">🛍️ Pedido de ${esc(p.nombre||"")}</div>
       <div style="font-size:12px;color:var(--text-soft);margin-bottom:12px;">${p.fecha||""} · ${esc(p.observaciones||"")}</div>
       <div style="overflow-x:auto;">
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
           <thead><tr>
-            <th style="background:#0d2259;color:#fff;padding:7px 10px;">SKU</th>
-            <th style="background:#0d2259;color:#fff;padding:7px 10px;">Producto</th>
-            <th style="background:#0d2259;color:#fff;padding:7px 10px;">Cant.</th>
-            <th style="background:#0d2259;color:#fff;padding:7px 10px;">Precio</th>
-            <th style="background:#0d2259;color:#fff;padding:7px 10px;">Subtotal</th>
+            <th style="background:var(--brand-oscuro);color:#fff;padding:7px 10px;">SKU</th>
+            <th style="background:var(--brand-oscuro);color:#fff;padding:7px 10px;">Producto</th>
+            <th style="background:var(--brand-oscuro);color:#fff;padding:7px 10px;">Cant.</th>
+            <th style="background:var(--brand-oscuro);color:#fff;padding:7px 10px;">Precio</th>
+            <th style="background:var(--brand-oscuro);color:#fff;padding:7px 10px;">Subtotal</th>
           </tr></thead>
           <tbody>${filas}</tbody>
         </table>
       </div>
-      <div style="text-align:right;font-size:16px;font-weight:800;color:#0d2259;margin-top:12px;">Total: $${fmt(p.total)}</div>
+      <div style="text-align:right;font-size:16px;font-weight:800;color:var(--brand-oscuro);margin-top:12px;">Total: $${fmt(p.total)}</div>
     </div>`;
   document.getElementById("confirmBtn").textContent="Cerrar";
   document.getElementById("confirmBtn").style.background="";
@@ -9412,7 +9619,7 @@ function logML(msg){
   const el = document.getElementById("mlLog");
   if(!el) return;
   const time = new Date().toLocaleTimeString("es-AR");
-  el.innerHTML = `<div style="color:#0d2259;">[${time}] ${msg}</div>` + el.innerHTML;
+  el.innerHTML = `<div style="color:var(--brand-oscuro);">[${time}] ${msg}</div>` + el.innerHTML;
 }
 
 // ── Verificar callback al cargar ──
