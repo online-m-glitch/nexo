@@ -250,6 +250,28 @@ html[data-theme="dark"] #sec-mercado td a,html[data-theme="dark"] #sec-mercado .
 #modalImportarML .modal-actions{position:sticky;bottom:-24px;background:var(--surface);padding:12px 0 4px;margin-top:12px;border-top:1px solid var(--border);z-index:3;}
 html[data-theme="dark"] #modalImportarML a{color:#93c5fd;}
 .analisis-mla{color:#1d4ed8;font-weight:600;}
+.mt-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);gap:20px;align-items:start;}
+@media (max-width:1100px){.mt-grid{grid-template-columns:1fr;}}
+.mt-card{padding:16px 18px;margin-bottom:16px;}
+.mt-card h3{font-size:14px;font-weight:700;margin-bottom:12px;}
+.mt-card .form-grid{margin-bottom:10px;}
+.mt-card .form-group{margin-bottom:10px;}
+.mt-chk{display:inline-flex;align-items:center;gap:6px;font-size:13px;margin:4px 14px 4px 0;cursor:pointer;}
+.mt-color{display:flex;align-items:center;gap:8px;}
+.mt-color input[type=color]{width:46px;height:34px;padding:2px;border:1.5px solid var(--border);border-radius:7px;background:transparent;cursor:pointer;}
+.mt-link{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:13px;word-break:break-all;}
+.mt-link a{color:#1d4ed8;font-weight:600;}
+html[data-theme="dark"] .mt-link a{color:#93c5fd;}
+.mt-estado{font-size:12px;padding:8px 10px;border-radius:8px;background:rgba(127,127,127,.12);margin-bottom:8px;}
+.mt-estado.on{background:var(--green-bg);color:var(--green);font-weight:700;}
+.mt-aviso{font-size:12px;color:var(--orange);background:var(--orange-bg);border-radius:8px;padding:8px 10px;margin-bottom:8px;}
+.mt-card textarea{font-family:monospace;font-size:12px;}
+.mt-acciones{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;position:sticky;bottom:0;background:var(--bg);padding:10px 0;z-index:2;}
+.mt-preview{position:sticky;top:12px;}
+.mt-preview-bar{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;color:var(--text-soft);margin-bottom:6px;}
+.mt-marco{width:100%;max-width:400px;height:760px;margin:0 auto;border:10px solid #111827;border-radius:28px;overflow:hidden;background:#fff;box-shadow:var(--shadow-lg);}
+.mt-marco.pc{max-width:none;border-width:6px;border-radius:12px;}
+.mt-marco iframe{width:100%;height:100%;border:0;display:block;}
 .overlay .modal{position:relative;}
 .modal-x{position:absolute;top:10px;right:12px;background:transparent;border:none;font-size:18px;line-height:1;padding:6px 9px;border-radius:7px;cursor:pointer;color:var(--text-soft);z-index:2;}
 .modal-x:hover{background:rgba(127,127,127,.15);color:var(--text);}
@@ -626,6 +648,9 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
     <div class="nav-section">Tienda</div>
     <div class="nav-item admin-only" onclick="mostrarSeccion('marca')">
       <span class="icon">🎨</span> Mi marca
+    </div>
+    <div class="nav-item admin-only" onclick="mostrarSeccion('mitienda')">
+      <span class="icon">🛍️</span> Mi tienda
     </div>
     <div class="nav-item" onclick="mostrarSeccion('ml')">
       <span class="icon">🔗</span> MercadoLibre
@@ -2230,6 +2255,14 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
       </div>
     </div>
 
+
+    <!-- ========== MI TIENDA ========== -->
+    <div id="sec-mitienda" class="section">
+      <div class="page-header">
+        <div><h2>Mi tienda</h2><div class="sub">Tu tienda online: textos, colores, letra, secciones y cómo recibís los pedidos. La vista previa se actualiza mientras escribís; nada se publica hasta que guardes.</div></div>
+      </div>
+      <div style="padding:24px;" id="mtContenido"></div>
+    </div>
 
     <!-- ========== PEDIDOS ========== -->
     <div id="sec-clientes" class="section">
@@ -4589,6 +4622,234 @@ abrirPublicadorMasivo = function(){
   const r = _abrirPublicadorMasivoOrig.apply(this, arguments);
   if(document.getElementById("modalPublicadorMasivo").classList.contains("show")) pmCargarMisPublicaciones();
   return r;
+};
+
+// ================================================================
+// MI TIENDA — configuración de la tienda online del cliente
+// Tabla nexo_tiendas (una fila por cliente). La tienda pública es tienda.html?t=<slug>.
+// Código propio (CSS/HTML): solo superadmin (lo controla también la base).
+// ================================================================
+const TIENDA_FUENTES = ["Montserrat","Poppins","Inter","Nunito","Roboto","Open Sans","Lato","Raleway","Rubik","Quicksand","Playfair Display","Merriweather","Oswald","Work Sans","DM Sans"];
+const TIENDA_PAGOS = ["Transferencia","Efectivo","Mercado Pago","Tarjeta"];
+let mtCliente = null;   // {id, slug, nombre, logo, color_*}
+let mtFila = null;      // fila de nexo_tiendas (o null si todavía no tiene)
+let mtTimer = null;
+
+function mtDefaults(c){
+  return {
+    marca_texto: c.nombre || "", marca_acento: "", usar_logo: !!c.logo,
+    titulo: c.nombre || "", eslogan: "Todo lo que necesitás, en un solo lugar",
+    colores: {primario: c.color_primario || "#0A317B", oscuro: c.color_oscuro || "#061F50", acento: c.color_acento || "#FFC700", fondo: "#F4F6F9"},
+    fuente: "Montserrat",
+    pedidos_abiertos: true, texto_abierto: "🟢 Pedidos abiertos", texto_cerrado: "🔴 Pedidos cerrados",
+    features: ["🚚 Envíos a domicilio", "💳 Medios de pago", "📲 Pedido directo"],
+    mostrar_features: true, mostrar_buscador: true, mostrar_categorias: true,
+    whatsapp: "", pide_email: true, pide_telefono: false,
+    entrega_envio: true, entrega_retiro: true, direccion_retiro: "",
+    pagos: ["Transferencia", "Efectivo"], descuento_efectivo: 0, envio_gratis_desde: 0, envio_solo_transferencia: false,
+    nota_envio: "", pie: "© " + (c.nombre || "")
+  };
+}
+function mtUrl(){ return new URL("tienda.html?t=" + encodeURIComponent(mtCliente ? mtCliente.slug : ""), location.href).href; }
+
+async function renderMiTienda(){
+  const box = document.getElementById("mtContenido");
+  box.innerHTML = `<div style="padding:20px;color:var(--text-soft);">Cargando…</div>`;
+  try{
+    const [rc, rt] = await Promise.all([
+      fetch(SB_URL+"/rest/v1/nexo_clientes?select=id,slug,nombre,logo,color_primario,color_oscuro,color_acento"+(clienteId?"&id=eq."+clienteId:""), {headers:{"apikey":SB_KEY}}),
+      fetch(SB_URL+"/rest/v1/nexo_tiendas?select=*", {headers:{"apikey":SB_KEY}})
+    ]);
+    if(!rc.ok) throw new Error(await rc.text());
+    if(!rt.ok) throw new Error(await rt.text());
+    mtCliente = (await rc.json())[0] || null;
+    mtFila = (await rt.json())[0] || null;
+  }catch(e){
+    box.innerHTML = `<div style="padding:20px;color:var(--red);">❌ No se pudo cargar la tienda: ${esc(e.message)}</div>`;
+    return;
+  }
+  if(!mtCliente || !mtCliente.slug){ box.innerHTML = `<div style="padding:20px;">Este cliente no tiene un identificador (slug) para la tienda.</div>`; return; }
+  const cfg = Object.assign({}, mtDefaults(mtCliente), (mtFila && mtFila.config) || {});
+  cfg.colores = Object.assign({}, mtDefaults(mtCliente).colores, ((mtFila && mtFila.config) || {}).colores || {});
+  const publicada = !!(mtFila && mtFila.publicada);
+  const chk = (id, v, txt) => `<label class="mt-chk"><input type="checkbox" id="${id}" ${v?"checked":""} onchange="mtCambio()"> ${txt}</label>`;
+  const inp = (id, label, v, extra) => `<div class="form-group"><label for="${id}">${label}</label><input id="${id}" value="${esc(v==null?"":v)}" oninput="mtCambio()" ${extra||""}></div>`;
+  const col = (id, label, v) => `<div class="form-group"><label for="${id}">${label}</label><div class="mt-color"><input type="color" id="${id}" value="${esc(v)}" oninput="mtCambio()"><code id="${id}_txt">${esc(v)}</code></div></div>`;
+  box.innerHTML = `
+  <div class="mt-grid">
+    <div class="mt-form">
+      <div class="card mt-card">
+        <h3>🌐 Tu tienda</h3>
+        <div class="mt-link"><a href="${esc(mtUrl())}" target="_blank" rel="noopener" id="mtLink">${esc(mtUrl())}</a>
+          <button class="btn btn-ghost btn-sm" onclick="mtCopiarLink()">📋 Copiar</button></div>
+        <div class="mt-estado ${publicada?"on":""}" id="mtEstado">${publicada?"🟢 Publicada: cualquiera con el link la puede ver":"⚪ Sin publicar: solo la ves vos en la vista previa"}</div>
+        ${chk("mtPublicada", publicada, "<strong>Publicar la tienda</strong>")}
+        ${chk("mtAbiertos", cfg.pedidos_abiertos !== false, "Estoy tomando pedidos")}
+      </div>
+      <div class="card mt-card">
+        <h3>🏷️ Marca y textos</h3>
+        ${chk("mtUsarLogo", !!cfg.usar_logo, "Mostrar el logo (se carga en 🎨 Mi marca)" + (mtCliente.logo ? "" : " — <em>todavía no hay logo</em>"))}
+        <div class="form-grid">${inp("mtMarcaTexto","Nombre arriba (parte 1)",cfg.marca_texto)}${inp("mtMarcaAcento","Nombre arriba (parte 2, color acento)",cfg.marca_acento)}</div>
+        <div class="form-grid">${inp("mtTitulo","Título grande",cfg.titulo)}${inp("mtEslogan","Frase debajo del título",cfg.eslogan)}</div>
+        <div class="form-grid">${inp("mtTxtAbierto","Cartel cuando tomás pedidos",cfg.texto_abierto)}${inp("mtTxtCerrado","Cartel cuando no",cfg.texto_cerrado)}</div>
+        ${inp("mtPie","Texto del pie de página",cfg.pie)}
+      </div>
+      <div class="card mt-card">
+        <h3>🎨 Colores y letra</h3>
+        <div class="form-grid">${col("mtColPrim","Principal",cfg.colores.primario)}${col("mtColOsc","Oscuro (degradado)",cfg.colores.oscuro)}</div>
+        <div class="form-grid">${col("mtColAc","Acento (botón del pedido)",cfg.colores.acento)}${col("mtColFondo","Fondo",cfg.colores.fondo)}</div>
+        <div id="mtAvisoColores" class="mt-aviso" style="display:none;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 12px;">
+          <button class="btn btn-ghost btn-sm" onclick="mtColoresDeMarca()">↺ Usar los colores de Mi marca</button>
+        </div>
+        <div class="form-group"><label for="mtFuente">Letra</label><select id="mtFuente" onchange="mtCambio()">${TIENDA_FUENTES.map(f=>`<option ${f===cfg.fuente?"selected":""}>${f}</option>`).join("")}</select></div>
+      </div>
+      <div class="card mt-card">
+        <h3>🧩 Secciones</h3>
+        ${chk("mtMostrarFeat", cfg.mostrar_features !== false, "Mostrar los 3 carteles informativos")}
+        <div class="form-grid cols3">${[0,1,2].map(i=>inp("mtFeat"+i,"Cartel "+(i+1),(cfg.features||[])[i]||"")).join("")}</div>
+        ${chk("mtMostrarBusc", cfg.mostrar_buscador !== false, "Mostrar el buscador")}
+        ${chk("mtMostrarCat", cfg.mostrar_categorias !== false, "Mostrar las categorías (salen del rubro de cada producto)")}
+      </div>
+      <div class="card mt-card">
+        <h3>🛒 Pedidos</h3>
+        ${inp("mtWhatsapp","WhatsApp donde llegan los pedidos (con código de país, ej: 5491160123520)",cfg.whatsapp,'inputmode="numeric"')}
+        ${chk("mtPideEmail", cfg.pide_email !== false, "Pedir email")} ${chk("mtPideTel", !!cfg.pide_telefono, "Pedir teléfono")}
+        <div style="margin-top:8px;font-size:12px;font-weight:700;">Entrega</div>
+        ${chk("mtEnvio", cfg.entrega_envio !== false, "🚚 Envío")} ${chk("mtRetiro", cfg.entrega_retiro !== false, "🏬 Retiro en local")}
+        <div class="form-grid">${inp("mtDirRetiro","Dirección de retiro",cfg.direccion_retiro)}${inp("mtEnvioGratis","Envío gratis desde $ (0 = no)",cfg.envio_gratis_desde,'type="number" min="0" step="1000"')}</div>
+        ${inp("mtNotaEnvio","Aclaración del envío",cfg.nota_envio)}
+        <div style="margin-top:8px;font-size:12px;font-weight:700;">Formas de pago</div>
+        ${TIENDA_PAGOS.map((p,i)=>chk("mtPago"+i, (cfg.pagos||[]).includes(p), p)).join(" ")}
+        <div class="form-grid">${inp("mtDescEf","Descuento pagando en efectivo (%)",cfg.descuento_efectivo,'type="number" min="0" max="50" step="1"')}<div class="form-group" style="justify-content:flex-end;">${chk("mtSoloTransf", !!cfg.envio_solo_transferencia, "Con envío, solo transferencia")}</div></div>
+      </div>
+      ${esSuperadmin ? `<div class="card mt-card mt-sa">
+        <h3>🧑‍💻 Código propio <span class="badge badge-blue">solo superadmin</span></h3>
+        <div style="font-size:12px;color:var(--text-soft);margin-bottom:8px;">Se aplica a esta tienda nada más. El CSS pisa el diseño; el HTML se agrega arriba (debajo del encabezado) y abajo (antes del pie). Los &lt;script&gt; no se ejecutan.</div>
+        <div class="form-group"><label for="mtCss">CSS</label><textarea id="mtCss" rows="6" spellcheck="false" oninput="mtCambio()">${esc((mtFila&&mtFila.css_personalizado)||"")}</textarea></div>
+        <div class="form-group"><label for="mtHtmlArriba">HTML arriba</label><textarea id="mtHtmlArriba" rows="4" spellcheck="false" oninput="mtCambio()">${esc((mtFila&&mtFila.html_arriba)||"")}</textarea></div>
+        <div class="form-group"><label for="mtHtmlAbajo">HTML abajo</label><textarea id="mtHtmlAbajo" rows="4" spellcheck="false" oninput="mtCambio()">${esc((mtFila&&mtFila.html_abajo)||"")}</textarea></div>
+      </div>` : ""}
+      <div class="mt-acciones">
+        <span id="mtGuardadoInfo" style="font-size:12px;color:var(--text-soft);">${mtFila ? "Última actualización: " + fFecha(mtFila.updated_at) : "Todavía no guardaste la tienda"}</span>
+        <button class="btn btn-primary admin-only" id="btnMtGuardar" onclick="mtGuardar()">💾 Guardar cambios</button>
+      </div>
+    </div>
+    <div class="mt-preview">
+      <div class="mt-preview-bar"><span>Vista previa</span>
+        <span><button class="btn btn-ghost btn-sm" onclick="mtTamPreview('movil')">📱</button><button class="btn btn-ghost btn-sm" onclick="mtTamPreview('pc')">🖥️</button></span></div>
+      <div class="mt-marco" id="mtMarco"><iframe id="mtIframe" title="Vista previa de la tienda" src="${esc(new URL("tienda.html?t="+encodeURIComponent(mtCliente.slug)+"&preview=1", location.href).href)}"></iframe></div>
+    </div>
+  </div>`;
+  if(!esAdmin()) box.querySelectorAll("input,select,textarea").forEach(el=>el.disabled = true);
+  mtRevisarColores();
+}
+function mtLeerConfig(){
+  const v = id => { const e = document.getElementById(id); return e ? e.value : ""; };
+  const c = id => { const e = document.getElementById(id); return !!(e && e.checked); };
+  return {
+    usar_logo: c("mtUsarLogo"), marca_texto: v("mtMarcaTexto").trim(), marca_acento: v("mtMarcaAcento").trim(),
+    titulo: v("mtTitulo").trim(), eslogan: v("mtEslogan").trim(),
+    texto_abierto: v("mtTxtAbierto").trim(), texto_cerrado: v("mtTxtCerrado").trim(), pie: v("mtPie").trim(),
+    colores: {primario: v("mtColPrim"), oscuro: v("mtColOsc"), acento: v("mtColAc"), fondo: v("mtColFondo")},
+    fuente: v("mtFuente"),
+    pedidos_abiertos: c("mtAbiertos"),
+    mostrar_features: c("mtMostrarFeat"), features: [0,1,2].map(i=>v("mtFeat"+i).trim()),
+    mostrar_buscador: c("mtMostrarBusc"), mostrar_categorias: c("mtMostrarCat"),
+    whatsapp: v("mtWhatsapp").replace(/\D/g,""), pide_email: c("mtPideEmail"), pide_telefono: c("mtPideTel"),
+    entrega_envio: c("mtEnvio"), entrega_retiro: c("mtRetiro"), direccion_retiro: v("mtDirRetiro").trim(),
+    envio_gratis_desde: Math.max(0, parseFloat(v("mtEnvioGratis"))||0), nota_envio: v("mtNotaEnvio").trim(),
+    pagos: TIENDA_PAGOS.filter((p,i)=>c("mtPago"+i)),
+    descuento_efectivo: Math.min(50, Math.max(0, parseFloat(v("mtDescEf"))||0)), envio_solo_transferencia: c("mtSoloTransf")
+  };
+}
+function mtCodigo(){
+  const v = id => { const e = document.getElementById(id); return e ? e.value : null; };
+  return {css: v("mtCss"), html_arriba: v("mtHtmlArriba"), html_abajo: v("mtHtmlAbajo")};
+}
+function mtRevisarColores(){
+  const cfg = mtLeerConfig(), col = cfg.colores, avisos = [];
+  ["mtColPrim","mtColOsc","mtColAc","mtColFondo"].forEach(id=>{ const t = document.getElementById(id+"_txt"); if(t) t.textContent = document.getElementById(id).value; });
+  if(_hexOk(col.primario) && _hexOk(col.fondo) && _contraste(col.primario, col.fondo) < 3) avisos.push("El color principal casi no se distingue del fondo (precios y botones se van a leer mal).");
+  if(_hexOk(col.acento) && _hexOk(col.fondo) && _contraste(col.acento, col.fondo) < 1.4) avisos.push("El acento es muy parecido al fondo: el botón del pedido no se va a destacar.");
+  if(_hexOk(col.primario) && _hexOk(col.oscuro) && _contraste(_textoSobre(col.primario), col.oscuro) < 3) avisos.push("El título sobre el degradado va a costar leerse: probá un oscuro más oscuro.");
+  const el = document.getElementById("mtAvisoColores");
+  if(el){ el.style.display = avisos.length ? "" : "none"; el.innerHTML = avisos.map(a=>"⚠️ "+esc(a)).join("<br>"); }
+}
+function mtCambio(){
+  mtRevisarColores();
+  const pub = document.getElementById("mtPublicada"), est = document.getElementById("mtEstado");
+  if(pub && est){ est.className = "mt-estado" + (pub.checked ? " on" : ""); est.textContent = pub.checked ? "🟢 Publicada: cualquiera con el link la puede ver (al guardar)" : "⚪ Sin publicar: solo la ves vos en la vista previa"; }
+  clearTimeout(mtTimer);
+  mtTimer = setTimeout(mtEnviarPreview, 150);
+}
+function mtEnviarPreview(){
+  const f = document.getElementById("mtIframe");
+  if(!f || !f.contentWindow) return;
+  const datos = {config: mtLeerConfig()};
+  if(esSuperadmin) Object.assign(datos, mtCodigo());
+  f.contentWindow.postMessage({tipo:"nexo-tienda-preview", datos}, location.origin);
+}
+window.addEventListener("message", e=>{
+  if(e.origin === location.origin && e.data && e.data.tipo === "nexo-tienda-lista") mtEnviarPreview();
+});
+function mtColoresDeMarca(){
+  if(!mtCliente) return;
+  const d = mtDefaults(mtCliente).colores;
+  document.getElementById("mtColPrim").value = d.primario;
+  document.getElementById("mtColOsc").value = d.oscuro;
+  document.getElementById("mtColAc").value = d.acento;
+  mtCambio();
+}
+function mtTamPreview(t){
+  const m = document.getElementById("mtMarco"); if(m) m.classList.toggle("pc", t === "pc");
+}
+async function mtCopiarLink(){
+  try{ await navigator.clipboard.writeText(mtUrl()); toast("Link copiado","ok"); }
+  catch(e){ toast("Copialo a mano: "+mtUrl(),"err",6000); }
+}
+async function mtGuardar(){
+  if(checkViewer("Guardar la tienda")) return;
+  const cfg = mtLeerConfig();
+  const publicar = document.getElementById("mtPublicada").checked;
+  if(publicar && !cfg.whatsapp){ toast("Cargá el WhatsApp donde llegan los pedidos antes de publicar.","err",5000); return; }
+  if(publicar && !cfg.entrega_envio && !cfg.entrega_retiro){ toast("Elegí al menos una forma de entrega.","err"); return; }
+  if(publicar && !cfg.pagos.length){ toast("Elegí al menos una forma de pago.","err"); return; }
+  const fila = {cliente_id: mtCliente.id, publicada: publicar, plantilla: "moderna", config: cfg};
+  if(esSuperadmin){ const c = mtCodigo(); fila.css_personalizado = c.css || ""; fila.html_arriba = c.html_arriba || ""; fila.html_abajo = c.html_abajo || ""; }
+  const btn = document.getElementById("btnMtGuardar"); btn.disabled = true;
+  try{
+    const r = await fetch(SB_URL+"/rest/v1/nexo_tiendas?on_conflict=cliente_id", {
+      method:"POST", headers:{"apikey":SB_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=representation"},
+      body: JSON.stringify(fila)
+    });
+    if(!r.ok) throw new Error(await r.text());
+    mtFila = (await r.json())[0] || mtFila;
+    // El botón "Ver tienda" del menú apunta a la tienda nueva
+    try{ await sbUpdate("nexo_clientes", "id=eq."+mtCliente.id, {tienda_url: mtUrl()}); clienteTiendaUrl = mtUrl(); }catch(e){}
+    document.getElementById("mtGuardadoInfo").textContent = "Guardado " + fFecha(new Date().toISOString());
+    toast(publicar ? "✅ Tienda guardada y publicada" : "✅ Tienda guardada (sin publicar)", "ok", 4000);
+  }catch(e){
+    toast("No se pudo guardar: " + e.message, "err", 7000);
+  }finally{ btn.disabled = false; }
+}
+// "Ver tienda" del menú: si el cliente ya configuró su tienda nueva, abre esa
+const _verTiendaClienteOrig = verTiendaCliente;
+verTiendaCliente = async function(){
+  try{
+    const [rc, rt] = await Promise.all([
+      fetch(SB_URL+"/rest/v1/nexo_clientes?select=slug"+(clienteId?"&id=eq."+clienteId:""), {headers:{"apikey":SB_KEY}}),
+      fetch(SB_URL+"/rest/v1/nexo_tiendas?select=cliente_id,publicada", {headers:{"apikey":SB_KEY}})
+    ]);
+    const c = rc.ok ? (await rc.json())[0] : null, t = rt.ok ? (await rt.json())[0] : null;
+    if(c && c.slug && t){
+      const url = new URL("tienda.html?t="+encodeURIComponent(c.slug)+(t.publicada?"":"&preview=1"), location.href).href;
+      window.open(url, "_blank");
+      if(!t.publicada) toast("Tu tienda todavía no está publicada: la ves en modo vista previa.","ok",4500);
+      return;
+    }
+  }catch(e){}
+  return _verTiendaClienteOrig();
 };
 
 // ================================================================
@@ -7218,6 +7479,7 @@ async function mostrarSeccion(id){
   if(id==="panel") renderPanel();
   if(id==="clientes") renderClientes();
   if(id==="marca") renderMarca();
+  if(id==="mitienda") renderMiTienda();
   if(id==="stock"){ renderStock(); mostrarUltimaSync("stock","ultimaSyncStock"); }
   if(id==="alertas") renderAlertas();
   if(id==="movimientos") renderMovimientos();
