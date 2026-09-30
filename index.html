@@ -9844,10 +9844,10 @@ async function verAutomatizacionPrecio(mlItemId, sku){
       <div><strong>Precio mínimo actual:</strong> $${fmt(data.min_price||0)}</div>
       <div><strong>Precio máximo actual:</strong> $${fmt(data.max_price||0)}</div>
       ${data.status_detail?.message?'<div style="margin-top:6px;color:var(--text-soft);font-size:12px;">'+esc(data.status_detail.message)+'</div>':''}
-      <div style="margin-top:10px;font-size:12px;color:var(--text-soft);">${activa?'Mientras esté activa, MercadoLibre le ajusta el precio dentro del rango de abajo — podés modificar ese rango sin desactivarla.':'Está pausada — no está ajustando el precio, podés actualizarlo directo desde el simulador o Análisis ML.'}</div>
+      <div style="margin-top:10px;font-size:12px;color:var(--text-soft);">${activa?'Mientras esté activa, MercadoLibre le ajusta el precio dentro del rango de abajo — podés modificar ese rango sin desactivarla.':'Está pausada (en general porque la publicación está pausada o sin stock): no está ajustando el precio ahora. Podés dejar el rango listo abajo y se aplica cuando se reactive, como en MercadoLibre.'}</div>
     `;
-    document.getElementById("btnDesactivarAutomatizacion").style.display=activa?"inline-flex":"none";
-    if(activa && _autoPrecioActual.ruleId){
+    document.getElementById("btnDesactivarAutomatizacion").style.display=_autoPrecioActual.ruleId?"inline-flex":"none";
+    if(_autoPrecioActual.ruleId){
       document.getElementById("autoPrecioMin").value = data.min_price||"";
       document.getElementById("autoPrecioMax").value = data.max_price||"";
       document.getElementById("autoPrecioRangoWrap").style.display="block";
@@ -9867,7 +9867,7 @@ async function verAutomatizacionPrecio(mlItemId, sku){
         const cajaPtw=document.createElement("div");
         cajaPtw.style.cssText="margin-top:12px;padding:10px 12px;background:#f0f9ff;border-radius:8px;border:1px solid #bae6fd;font-size:12px;";
         cajaPtw.innerHTML = `📊 <strong>Precio recomendado por ML para competir:</strong> $${fmt(ptw)}`+
-          (activa?` <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px;font-size:11px;" onclick="document.getElementById('autoPrecioMin').value=${ptw};">Usar como mínimo</button>`:"");
+          (_autoPrecioActual.ruleId?` <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px;font-size:11px;" onclick="document.getElementById('autoPrecioMin').value=${ptw};">Usar como mínimo</button>`:"");
         document.getElementById("autoPrecioContenido").appendChild(cajaPtw);
       }
     }catch(e){ /* si falla, simplemente no se muestra esta info extra */ }
