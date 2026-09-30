@@ -805,6 +805,9 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
                 <option value="Bajo mínimo">🟠 Bajo mínimo</option>
                 <option value="Con stock">🟢 Con stock</option>
               </select>
+              <select id="stockUbicFiltro" onchange="renderStock()" title="Dónde está el stock" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;">
+                <option value="">Todas las ubicaciones</option>
+              </select>
               <button class="btn btn-ghost" onclick="exportarStockCSV()">⬇️ Exportar stock CSV</button>
               <label class="btn btn-ghost admin-only" style="cursor:pointer;" title="Importar stock desde CSV">
                 ⬆️ Importar stock CSV / ML
@@ -2105,12 +2108,13 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
               <span id="ultimaSyncFees" style="font-size:10px;color:var(--text-soft);"></span>
               <button class="btn btn-ghost btn-sm" onclick="revisarPreciosDinamicos()" title="Revisa qué publicaciones tienen 'Automatización de precios' activa, cuáles son de Catálogo de ML, y el estado real (activa/pausada/inactiva) de cada una">🎯 Precio dinámico / catálogo / estado</button>
               <span id="ultimaSyncDinamico" style="font-size:10px;color:var(--text-soft);"></span>
+              <button class="btn btn-primary btn-sm admin-only" id="btnCompTodos" onclick="compActualizarTodos()" title="Consulta en MercadoLibre a los otros vendedores de cada producto de catálogo: precio, envío, reputación y cambios de precio">🥊 Actualizar competencia</button>
             </div>
           </div>
           <div id="analisisInfoPub" style="display:none;font-size:12px;color:var(--text-soft);padding:8px 16px;"></div>
           <div class="table-wrap">
             <table>
-              <thead id="analisisThead"><tr><th>SKU</th><th>Producto</th><th>Costo ($)</th><th>Precio ML ($)</th><th>Comisión ML</th><th>Envío</th><th>Impuesto (est.)</th><th>Percepción (est.)</th><th>Recibís ($)</th><th>Margen ($)</th><th>Margen %</th><th>Recomendación</th></tr></thead>
+              <thead id="analisisThead"><tr><th>SKU</th><th>Producto</th><th>Costo ($)</th><th>Precio ML ($)</th><th>Competencia</th><th>Comisión ML</th><th>Envío</th><th>Impuesto (est.)</th><th>Percepción (est.)</th><th>Recibís ($)</th><th>Margen ($)</th><th>Margen %</th><th>Recomendación</th></tr></thead>
               <tbody id="analisisBody"></tbody>
             </table>
           </div>
@@ -3202,6 +3206,25 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="cerrarPlanifFull()">Cerrar</button>
       <button class="btn btn-primary" id="btnPfGenerar" style="display:none;" onclick="pfGenerar()">📝 Crear pedidos en borrador</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modalCompetencia">
+  <div class="modal" style="max-width:1100px;width:96vw;">
+    <h3 id="compTitulo">🥊 Competencia</h3>
+    <div id="compCabecera" style="margin-bottom:12px;"></div>
+    <div id="compVincular" style="display:none;border:1.5px dashed var(--border);border-radius:10px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:12px;color:var(--text-soft);margin-bottom:8px;">Buscá el producto en el catálogo de MercadoLibre (por nombre, marca y modelo, o código de barras) y vinculalo:</div>
+      <div style="display:flex;gap:8px;">
+        <input class="search-input" type="text" id="compBuscarTxt" style="flex:1;" onkeydown="if(event.key==='Enter') compBuscarCatalogo()">
+        <button class="btn btn-primary" onclick="compBuscarCatalogo()">🔍 Buscar</button>
+      </div>
+      <div id="compResultados" style="max-height:260px;overflow:auto;margin-top:8px;"></div>
+    </div>
+    <div id="compCuerpo"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="cerrarCompetencia()">Cerrar</button>
     </div>
   </div>
 </div>
@@ -4442,7 +4465,7 @@ function cerrarImportarML(){ document.getElementById("modalImportarML").classLis
 // ================================================================
 let mlPubs = [];
 let _mlPubsCargadas = false;
-const ANALISIS_THEAD_PRODUCTO = `<tr><th>SKU</th><th>Producto</th><th>Costo ($)</th><th>Precio ML ($)</th><th>Comisión ML</th><th>Envío</th><th>Impuesto (est.)</th><th>Percepción (est.)</th><th>Recibís ($)</th><th>Margen ($)</th><th>Margen %</th><th>Recomendación</th></tr>`;
+const ANALISIS_THEAD_PRODUCTO = `<tr><th>SKU</th><th>Producto</th><th>Costo ($)</th><th>Precio ML ($)</th><th title="Precio más bajo de otros vendedores del mismo producto de catálogo de ML. Clic en la celda para ver el detalle.">Competencia</th><th>Comisión ML</th><th>Envío</th><th>Impuesto (est.)</th><th>Percepción (est.)</th><th>Recibís ($)</th><th>Margen ($)</th><th>Margen %</th><th>Recomendación</th></tr>`;
 const ANALISIS_THEAD_PUB = `<tr><th>SKU</th><th>Publicación</th><th>Título en ML</th><th>Costo ($)</th><th>Precio ML ($)</th><th>Comisión ML</th><th>Envío</th><th>Impuesto (est.)</th><th>Percepción (est.)</th><th>Recibís ($)</th><th>Margen ($)</th><th>Margen %</th><th>Recomendación</th></tr>`;
 
 function vistaAnalisis(){ const s = document.getElementById("analisisVista"); return s ? s.value : "producto"; }
@@ -5189,6 +5212,325 @@ function celdaUltimaCompra(sku){
   if(!u) return `<td style="font-size:12px;color:var(--text-soft);">—</td>`;
   const tip=[u.origen==="compra"?"Compra":"Ingreso de stock (no hay compra cargada)", u.proveedor, u.factura?"Factura "+u.factura:"", u.cantidad+" u."+(u.costo?" a $"+fmt(u.costo):"")].filter(Boolean).join(" · ");
   return `<td style="font-size:12px;white-space:nowrap;" title="${esc(tip)}">${fFecha(u.fecha)}<div style="font-size:11px;color:var(--text-soft);">${u.cantidad} u.${u.costo?" · $"+fmt(u.costo):""}</div></td>`;
+}
+
+// ================================================================
+// Stock Actual: filtro por ubicación (depósito / Full / revisión / en camino)
+// ================================================================
+const STOCK_UBIC_OPC=[
+  ["", "Todas las ubicaciones"],
+  ["dep_si", "🏠 Con stock en depósito", f=>f.dep>0],
+  ["dep_no", "🏠 Sin stock en depósito", f=>f.dep<=0],
+  ["full_si", "📦 Con stock en Full", f=>f.full>0],
+  ["full_no", "📦 Sin stock en Full", f=>f.full<=0],
+  ["solo_dep", "Solo en depósito (Full en 0)", f=>f.dep>0 && f.full<=0],
+  ["solo_full", "Solo en Full (depósito en 0)", f=>f.full>0 && f.dep<=0],
+  ["ambos", "En depósito y en Full", f=>f.dep>0 && f.full>0],
+  ["revision", "🔧 Con unidades en revisión", f=>f.revision>0],
+  ["camino", "🚚 Con pedido en camino", f=>cantidadPendientePedido(f.p.sku)>0],
+  ["ninguno", "⛔ Sin stock en ningún lado", f=>f.dep<=0 && f.full<=0 && f.revision<=0]
+];
+function stockUbicPasa(f){
+  const v=document.getElementById("stockUbicFiltro")?.value||"";
+  const o=STOCK_UBIC_OPC.find(x=>x[0]===v);
+  return !o || !o[2] || o[2](f);
+}
+// Pone la cantidad de productos de cada opción (según los otros filtros activos)
+function stockUbicContar(base){
+  const sel=document.getElementById("stockUbicFiltro"); if(!sel) return;
+  const actual=sel.value;
+  sel.innerHTML=STOCK_UBIC_OPC.map(([v,t,fn])=>`<option value="${v}">${t}${fn?` (${base.filter(fn).length})`:""}</option>`).join("");
+  sel.value=actual;
+}
+// ================================================================
+// Competencia en MercadoLibre (Análisis ML → vista Por producto)
+// Fuente: /products/{catalog_product_id}/items (vendedores que ofrecen el mismo
+// producto de catálogo) + /users?ids= (apodo y reputación). La API de ML no deja
+// ver publicaciones tradicionales de otros vendedores, solo las del catálogo.
+// ================================================================
+let competencia = {};          // sku → fila de nexo_competencia
+let _compCargada = false;
+let _compMisIds = null;        // ids de mis cuentas de ML (para marcar "vos")
+const COMP_MAX_OFERTAS = 200;
+
+async function cargarCompetencia(forzar){
+  if(_compCargada && !forzar) return;
+  try{
+    const filas = await sbGet("nexo_competencia", "select=*");
+    competencia = {};
+    (filas||[]).forEach(f=>{ competencia[(f.sku||"").toUpperCase()] = f; });
+    _compCargada = true;
+  }catch(e){ competencia = {}; }
+}
+function compDe(p){ return competencia[(p.sku||"").toUpperCase()] || null; }
+function compCatalogId(p){
+  const c = compDe(p);
+  return (c && c.catalog_product_id) || p.catalog_product_id || "";
+}
+async function compMisIds(){
+  if(_compMisIds) return _compMisIds;
+  const ids = new Set();
+  try{
+    const st = await mlApi({grant_type:"status"});
+    (st.data?.cuentas||[]).forEach(c=>ids.add(String(c.ml_user_id)));
+    if(st.data?.user_id) ids.add(String(st.data.user_id));
+  }catch(e){}
+  if(typeof mlUserId!=="undefined" && mlUserId) ids.add(String(mlUserId));
+  _compMisIds = ids;
+  return ids;
+}
+function compHace(iso){
+  if(!iso) return "";
+  const min = Math.round((Date.now()-new Date(iso).getTime())/60000);
+  if(min < 60) return "hace "+Math.max(min,1)+" min";
+  const h = Math.round(min/60);
+  if(h < 48) return "hace "+h+" h";
+  return fFecha(iso);
+}
+const COMP_REP = {"5_green":["#16a34a","Verde"],"4_light_green":["#65a30d","Verde claro"],"3_yellow":["#ca8a04","Amarilla"],"2_orange":["#ea580c","Naranja"],"1_red":["#dc2626","Roja"]};
+const COMP_LOG = {fulfillment:"Full", cross_docking:"Colecta", xd_drop_off:"Punto de despacho", drop_off:"Correo", self_service:"Flex"};
+function compPrecioMio(p){ return calcAnaliML(p).precio || 0; }
+
+// Márgenes a otro precio (misma lógica que calcAnaliML, escalando comisión e impuestos)
+function calcAnaliMLConPrecio(p, precioNuevo){
+  const a = calcAnaliML(p);
+  if(!a.precio) return null;
+  const f = precioNuevo / a.precio;
+  const comision = a.comisionPct*f + a.comisionFixed;
+  const impuesto = a.impuesto*f, percepcion = a.percepcion*f;
+  const recibis = precioNuevo - comision - a.envio - impuesto - percepcion;
+  const margen = recibis - (p.costo||0);
+  return {recibis, margen, margenPct: precioNuevo>0 ? margen/precioNuevo*100 : 0};
+}
+
+// Trae y guarda la competencia de un producto
+async function compActualizarSku(sku, silencioso){
+  const p = productos.find(x=>x.sku===sku);
+  if(!p) return {ok:false, motivo:"no existe"};
+  const cat = compCatalogId(p);
+  if(!cat) return {ok:false, motivo:"sin_catalogo"};
+  const misIds = await compMisIds();
+  // 1) Ofertas del producto de catálogo (paginado)
+  let ofertas = [], total = 0, offset = 0;
+  while(offset < COMP_MAX_OFERTAS){
+    const r = await mlGet(`/products/${encodeURIComponent(cat)}/items?limit=50&offset=${offset}`);
+    if(!r.ok){
+      if(r.status===404 && !ofertas.length){ total = 0; break; } // "No winners": nadie vende ese producto
+      if(!silencioso) toast("No se pudo consultar la competencia: "+_mlError(r),"err",6000);
+      return {ok:false, motivo:"api", status:r.status};
+    }
+    const res = r.data.results || [];
+    total = r.data.paging?.total ?? res.length;
+    ofertas.push(...res);
+    offset += 50;
+    if(!res.length || offset >= total) break;
+  }
+  // 2) Apodo y reputación de los vendedores (de a 20)
+  const sellerIds = [...new Set(ofertas.map(o=>String(o.seller_id)))];
+  const vendedores = {};
+  for(let i=0;i<sellerIds.length;i+=20){
+    const r = await mlGet("/users?ids="+sellerIds.slice(i,i+20).join(","));
+    if(r.ok && Array.isArray(r.data)) r.data.forEach(x=>{ if(x.code===200 && x.body) vendedores[String(x.body.id)] = x.body; });
+  }
+  // 3) Precio anterior de cada vendedor → fecha del último cambio que vimos
+  const previo0 = compDe(p);
+  const previo = previo0 && previo0.actualizado_at ? previo0 : null; // recién vinculado: todavía no hay datos anteriores
+  const antes = {};
+  ((previo && previo.ofertas)||[]).forEach(o=>{ antes[o.item_id] = o; });
+  const ahora = new Date().toISOString();
+  const lista = ofertas.map(o=>{
+    const v = vendedores[String(o.seller_id)] || {};
+    const a = antes[o.item_id];
+    const cambio = a && Number(a.precio)!==Number(o.price);
+    return {
+      item_id:o.item_id, seller_id:o.seller_id, vendedor:v.nickname||("Vendedor "+o.seller_id),
+      reputacion:v.seller_reputation?.level_id||"", medalla:v.seller_reputation?.power_seller_status||"",
+      ventas_hist:v.seller_reputation?.transactions?.total||0, tienda_oficial:!!o.official_store_id,
+      precio:Number(o.price)||0, precio_original:o.original_price||null,
+      envio_gratis:!!o.shipping?.free_shipping, logistica:o.shipping?.logistic_type||"",
+      tipo:o.listing_type_id||"", garantia:o.warranty||"",
+      es_mio: misIds.has(String(o.seller_id)),
+      precio_anterior: cambio ? Number(a.precio) : (a ? a.precio_anterior ?? null : null),
+      precio_desde: cambio ? ahora : (a ? (a.precio_desde || previo.actualizado_at) : ahora),
+      visto_desde: a ? (a.visto_desde || previo.actualizado_at) : ahora,
+      nuevo: !a && !!previo
+    };
+  }).sort((x,y)=>x.precio-y.precio);
+  const otros = lista.filter(o=>!o.es_mio);
+  const precios = otros.map(o=>o.precio);
+  const mediana = precios.length ? precios[Math.floor((precios.length-1)/2)] : null;
+  const miPrecio = compPrecioMio(p);
+  const resumen = {
+    total, vendedores: otros.length, min: precios.length?precios[0]:null, max: precios.length?precios[precios.length-1]:null, mediana,
+    mi_precio: miPrecio, mi_posicion: miPrecio ? otros.filter(o=>o.precio < miPrecio).length + 1 : null,
+    full: otros.filter(o=>o.logistica==="fulfillment").length,
+    mas_barato: otros[0] ? {vendedor:otros[0].vendedor, precio:otros[0].precio, item_id:otros[0].item_id} : null,
+    se_fueron: previo ? ((previo.ofertas||[]).filter(o=>!o.es_mio && !lista.some(n=>n.item_id===o.item_id)).length) : 0
+  };
+  const fila = {cliente_id:clienteId, sku:p.sku, catalog_product_id:cat, vinculo:(previo0&&previo0.vinculo)||(p.catalog_product_id===cat?"auto":"manual"),
+    producto_ml:(previo0&&previo0.producto_ml)||null, ofertas:lista, resumen, actualizado_at:ahora};
+  const r = await fetch(SB_URL+"/rest/v1/nexo_competencia?on_conflict=cliente_id,sku", {
+    method:"POST", headers:{"apikey":SB_KEY,"Authorization":"Bearer "+sbAuth(),"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"},
+    body:JSON.stringify(fila)});
+  if(!r.ok){ if(!silencioso) toast("No se pudo guardar la competencia.","err"); return {ok:false, motivo:"db"}; }
+  fetch(SB_URL+"/rest/v1/nexo_competencia_hist", {method:"POST", headers:{"apikey":SB_KEY,"Authorization":"Bearer "+sbAuth(),"Content-Type":"application/json","Prefer":"return=minimal"},
+    body:JSON.stringify({cliente_id:clienteId, sku:p.sku, mi_precio:miPrecio||null, min_precio:resumen.min, mediana, vendedores:otros.length})}).catch(()=>{});
+  competencia[p.sku.toUpperCase()] = fila;
+  return {ok:true, fila};
+}
+
+// Actualiza todos los productos con catálogo
+async function compActualizarTodos(){
+  if(checkViewer("Actualizar competencia")) return;
+  const lista = productos.filter(p=>p.ml_item_id && compCatalogId(p));
+  if(!lista.length){ toast("Ningún producto tiene producto de catálogo de ML vinculado. Abrí 🥊 en un producto para vincularlo.","err",6000); return; }
+  const btn = document.getElementById("btnCompTodos");
+  if(btn){ btn.disabled = true; }
+  let ok=0, err=0;
+  for(let i=0;i<lista.length;i++){
+    if(btn) btn.textContent = `🥊 Competencia… ${i+1}/${lista.length}`;
+    const r = await compActualizarSku(lista[i].sku, true);
+    r.ok ? ok++ : err++;
+    if(r.status===401){ toast("La conexión con MercadoLibre venció. Reconectá la cuenta.","err",6000); break; }
+  }
+  if(btn){ btn.disabled = false; btn.textContent = "🥊 Actualizar competencia"; }
+  renderAnalisis();
+  toast(`Competencia actualizada: ${ok} producto(s)${err?` · ${err} con error`:""} ✅`, err?"err":"ok", 5000);
+}
+
+// Celda de la tabla de Análisis
+function celdaCompetencia(p){
+  const c = compDe(p), cat = compCatalogId(p);
+  if(!cat) return `<td style="font-size:11px;"><a href="#" onclick="abrirCompetencia('${esc(p.sku)}');return false;" style="color:var(--text-soft);" title="Este producto no está vinculado a un producto de catálogo de ML. Hacé clic para buscarlo y vincularlo.">🔗 vincular</a></td>`;
+  if(!c || !c.actualizado_at) return `<td style="font-size:11px;"><a href="#" onclick="abrirCompetencia('${esc(p.sku)}');return false;" style="color:var(--ml-blue);">🥊 ver</a></td>`;
+  const s = c.resumen, mio = compPrecioMio(p);
+  if(!s.vendedores) return `<td style="font-size:11px;cursor:pointer;" onclick="abrirCompetencia('${esc(p.sku)}')" title="Nadie más vende este producto de catálogo">🏆 sin competencia<div style="color:var(--text-soft);">${compHace(c.actualizado_at)}</div></td>`;
+  const dif = mio && s.min ? (mio - s.min)/s.min*100 : 0;
+  const color = !mio ? "var(--text)" : dif <= 0 ? "var(--green)" : dif <= 5 ? "var(--orange)" : "var(--red)";
+  const txt = !mio ? "" : dif <= 0 ? "sos el más barato" : `+${dif.toFixed(1)}% vs mín.`;
+  return `<td style="font-size:12px;cursor:pointer;white-space:nowrap;" onclick="abrirCompetencia('${esc(p.sku)}')" title="Más barato: ${esc(s.mas_barato?.vendedor||"")} · Mediana $${fmt(s.mediana)} · ${s.vendedores} vendedor(es). Clic para ver el detalle.">
+    <div style="font-weight:700;color:${color};">mín $${fmt(s.min)}</div>
+    <div style="font-size:10px;color:${color};">${txt}</div>
+    <div style="font-size:10px;color:var(--text-soft);">${s.vendedores} vend. · ${compHace(c.actualizado_at)}</div></td>`;
+}
+
+// ── Modal de detalle ──
+let _compSku = null;
+function abrirCompetencia(sku){
+  _compSku = sku;
+  document.getElementById("modalCompetencia").classList.add("show");
+  compRender();
+}
+function cerrarCompetencia(){ document.getElementById("modalCompetencia").classList.remove("show"); }
+async function compActualizarActual(){
+  if(checkViewer("Actualizar competencia")) return;
+  const b = document.getElementById("btnCompActualizar"); if(b){ b.disabled = true; b.textContent = "⏳ Consultando ML…"; }
+  await compActualizarSku(_compSku, false);
+  if(b){ b.disabled = false; b.textContent = "🔄 Actualizar ahora"; }
+  compRender(); renderAnalisis();
+}
+function compUsarPrecio(precio){
+  const inp = document.getElementById("precioAn_"+_compSku);
+  if(inp){ inp.value = Math.round(precio); inp.style.borderColor = "var(--orange)"; }
+  cerrarCompetencia();
+  toast("Precio cargado en la tabla. Revisalo y tocá 💲 para publicarlo en ML.","ok",6000);
+}
+function compRender(){
+  const p = productos.find(x=>x.sku===_compSku); if(!p) return;
+  const c = compDe(p), cat = compCatalogId(p), mio = compPrecioMio(p);
+  document.getElementById("compTitulo").innerHTML = `🥊 Competencia — <span class="sku-tag">${esc(p.sku)}</span> ${esc(p.nombre||"")}`;
+  const cab = document.getElementById("compCabecera"), cuerpo = document.getElementById("compCuerpo");
+  document.getElementById("compVincular").style.display = "none";
+  if(!cat){
+    cab.innerHTML = `<div style="font-size:13px;">Este producto no está vinculado a un <strong>producto de catálogo de MercadoLibre</strong>. La API de ML solo muestra la competencia de productos de catálogo: buscalo y vinculalo.</div>`;
+    cuerpo.innerHTML = "";
+    compMostrarVincular(p);
+    return;
+  }
+  if(!c || !c.actualizado_at){
+    cab.innerHTML = `<div style="font-size:13px;">Producto de catálogo <strong>${esc(cat)}</strong>. Todavía no se consultó la competencia.</div>`;
+    cuerpo.innerHTML = `<div style="text-align:center;padding:20px;"><button class="btn btn-primary admin-only" onclick="compActualizarActual()">🥊 Consultar competencia ahora</button></div>`;
+    return;
+  }
+  const s = c.resumen||{}, otros = (c.ofertas||[]).filter(o=>!o.es_mio);
+  const mg = (precio)=>{ const m = calcAnaliMLConPrecio(p, precio); return m ? `<span class="${m.margenPct>=15?'num-pos':m.margenPct>=10?'':'num-neg'}">${m.margenPct.toFixed(1)}%</span>` : "—"; };
+  const aMio = mio ? calcAnaliML(p) : null;
+  const sugerido = s.min ? s.min - 1 : null;
+  cab.innerHTML = `
+    <div class="stats-grid" style="margin-bottom:10px;">
+      <div class="stat-card"><div class="label">Tu precio</div><div class="value">$${fmt(mio)}</div><div class="sub">margen ${aMio?aMio.margenPct.toFixed(1)+"%":"—"}${s.mi_posicion&&s.vendedores?` · puesto ${s.mi_posicion} de ${s.vendedores+1}`:""}</div></div>
+      <div class="stat-card"><div class="label">Más barato</div><div class="value" style="color:var(--red);">${s.min!=null?"$"+fmt(s.min):"—"}</div><div class="sub">${esc(s.mas_barato?.vendedor||"sin competencia")}${s.min?` · tu margen ahí: ${mg(s.min)}`:""}</div></div>
+      <div class="stat-card"><div class="label">Precio del medio</div><div class="value">${s.mediana!=null?"$"+fmt(s.mediana):"—"}</div><div class="sub">máx ${s.max!=null?"$"+fmt(s.max):"—"}</div></div>
+      <div class="stat-card"><div class="label">Vendedores</div><div class="value">${s.vendedores||0}</div><div class="sub">${s.full||0} con Full${s.se_fueron?` · ${s.se_fueron} ya no está(n)`:""}</div></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--text-soft);">
+      Producto de catálogo <a href="https://www.mercadolibre.com.ar/p/${encodeURIComponent(cat)}" target="_blank" rel="noopener">${esc(cat)}</a>
+      · actualizado ${compHace(c.actualizado_at)}
+      <button class="btn btn-ghost btn-sm admin-only" id="btnCompActualizar" onclick="compActualizarActual()">🔄 Actualizar ahora</button>
+      <button class="btn btn-ghost btn-sm admin-only" onclick="compMostrarVincular(productos.find(x=>x.sku===_compSku))">🔗 Cambiar producto vinculado</button>
+      ${sugerido && mio && mio>sugerido ? `<button class="btn btn-primary btn-sm admin-only" onclick="compUsarPrecio(${sugerido})" title="Carga el precio en la tabla de Análisis; no se publica hasta que toques 💲">Usar $${fmt(sugerido)} (1 menos que el más barato · margen ${mg(sugerido)})</button>`:""}
+    </div>`;
+  const rep = o=>{ const r = COMP_REP[o.reputacion]; return r ? `<span title="Reputación ${r[1]}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${r[0]};margin-right:4px;"></span>` : ""; };
+  cuerpo.innerHTML = `<div class="table-wrap" style="max-height:46vh;overflow:auto;"><table>
+    <thead><tr><th>#</th><th>Vendedor</th><th>Precio</th><th>vs tu precio</th><th>Tu margen a ese precio</th><th>Envío</th><th>Tipo</th><th title="Cuándo vimos por última vez un cambio de precio de ese vendedor (se registra cada vez que actualizás)">Precio desde</th><th></th></tr></thead>
+    <tbody>${(c.ofertas||[]).map((o,i)=>{
+      const d = mio ? (o.precio-mio)/mio*100 : 0;
+      const flecha = o.precio_anterior!=null && o.precio_anterior!==o.precio ? (o.precio<o.precio_anterior?`<span style="color:var(--red);" title="Antes $${fmt(o.precio_anterior)}">▼</span>`:`<span style="color:var(--green);" title="Antes $${fmt(o.precio_anterior)}">▲</span>`) : "";
+      return `<tr style="${o.es_mio?'background:color-mix(in srgb, var(--ml-blue) 10%, transparent);font-weight:700;':''}">
+        <td class="num">${i+1}</td>
+        <td style="font-size:12px;">${rep(o)}${esc(o.vendedor)}${o.es_mio?' <span class="badge badge-blue" style="font-size:9px;">vos</span>':''}${o.tienda_oficial?' <span class="badge badge-gray" style="font-size:9px;">Tienda oficial</span>':''}${o.nuevo?' <span class="badge badge-orange" style="font-size:9px;">nuevo</span>':''}
+          <div style="font-size:10px;color:var(--text-soft);">${o.medalla?"MercadoLíder "+esc(o.medalla)+" · ":""}${fmt(o.ventas_hist)} ventas</div></td>
+        <td class="num" style="font-weight:700;">${flecha} $${fmt(o.precio)}${o.precio_original?`<div style="font-size:10px;color:var(--text-soft);text-decoration:line-through;">$${fmt(o.precio_original)}</div>`:""}</td>
+        <td class="num" style="color:${o.es_mio?'var(--text-soft)':d<0?'var(--red)':'var(--green)'};">${o.es_mio||!mio?"—":(d>0?"+":"")+d.toFixed(1)+"%"}</td>
+        <td class="num">${o.es_mio?"—":mg(o.precio)}</td>
+        <td style="font-size:11px;">${o.logistica==="fulfillment"?'<span class="badge badge-green" style="font-size:9px;">⚡ Full</span>':esc(COMP_LOG[o.logistica]||o.logistica||"—")}${o.envio_gratis?'<div style="font-size:10px;color:var(--green);">envío gratis</div>':''}</td>
+        <td style="font-size:11px;">${o.tipo==="gold_pro"?"Premium":o.tipo==="gold_special"?"Clásica":esc(o.tipo)}</td>
+        <td style="font-size:11px;white-space:nowrap;">${fFecha(o.precio_desde)}${o.precio_anterior!=null&&o.precio_anterior!==o.precio?`<div style="font-size:10px;color:var(--text-soft);">antes $${fmt(o.precio_anterior)}</div>`:""}</td>
+        <td><a href="https://articulo.mercadolibre.com.ar/${esc(o.item_id.replace(/^MLA/,"MLA-"))}" target="_blank" rel="noopener" title="Ver publicación">↗</a></td>
+      </tr>`; }).join("") || `<tr><td colspan="9" style="text-align:center;padding:18px;color:var(--text-soft);">Nadie más vende este producto de catálogo.</td></tr>`}</tbody></table></div>
+    <div style="font-size:11px;color:var(--text-soft);margin-top:8px;">Se muestran los vendedores del producto de catálogo de ML (hasta ${COMP_MAX_OFERTAS}). "Precio desde" es la fecha en que NEXO vio ese precio por primera vez: cuanto más seguido actualices, más precisa. ML no permite ver publicaciones tradicionales de otros vendedores.</div>`;
+  compRol();
+}
+
+function compRol(){ if(!esAdmin()) document.querySelectorAll("#modalCompetencia .admin-only").forEach(el=>el.style.display="none"); }
+
+// ── Vincular con un producto de catálogo ──
+function compMostrarVincular(p){
+  const box = document.getElementById("compVincular");
+  box.style.display = "";
+  document.getElementById("compBuscarTxt").value = (p && p.nombre) || "";
+  document.getElementById("compResultados").innerHTML = "";
+}
+async function compBuscarCatalogo(){
+  const q = document.getElementById("compBuscarTxt").value.trim();
+  if(!q) return;
+  const out = document.getElementById("compResultados");
+  out.innerHTML = `<div style="padding:10px;color:var(--text-soft);">⏳ Buscando en el catálogo de ML…</div>`;
+  const esCodigo = /^\d{8,14}$/.test(q);
+  const r = await mlGet(esCodigo ? `/products/search?status=active&site_id=MLA&product_identifier=${q}` : `/products/search?status=active&site_id=MLA&q=${encodeURIComponent(q)}&limit=12`);
+  if(!r.ok){ out.innerHTML = `<div style="padding:10px;color:var(--red);">No se pudo buscar: ${esc(_mlError(r))}</div>`; return; }
+  const res = (r.data.results||[]).slice(0,12);
+  out.innerHTML = res.length ? res.map(x=>{
+    const img = x.pictures?.[0]?.url || "";
+    const attr = id=>(x.attributes||[]).find(a=>a.id===id)?.value_name||"";
+    return `<div style="display:flex;gap:10px;align-items:center;padding:8px;border-bottom:1px solid var(--border);">
+      ${img?`<img src="${esc(img)}" style="width:44px;height:44px;object-fit:contain;background:#fff;border-radius:6px;">`:""}
+      <div style="flex:1;font-size:12px;"><strong>${esc(x.name||"")}</strong><div style="color:var(--text-soft);font-size:11px;">${esc([attr("BRAND"),attr("MODEL")].filter(Boolean).join(" · "))} · ${esc(x.id)}</div></div>
+      <a href="https://www.mercadolibre.com.ar/p/${encodeURIComponent(x.id)}" target="_blank" rel="noopener" style="font-size:12px;">ver ↗</a>
+      <button class="btn btn-primary btn-sm admin-only" onclick="compVincularA('${esc(x.id)}','${esc((x.name||"").replace(/'/g,""))}')">Vincular</button>
+    </div>`; }).join("") : `<div style="padding:10px;color:var(--text-soft);">No se encontró nada. Probá con la marca y el modelo, o con el código de barras (EAN).</div>`;
+  compRol();
+}
+async function compVincularA(catId, nombre){
+  if(checkViewer("Vincular competencia")) return;
+  const p = productos.find(x=>x.sku===_compSku); if(!p) return;
+  const fila = {cliente_id:clienteId, sku:p.sku, catalog_product_id:catId, vinculo:"manual", producto_ml:nombre||null, ofertas:[], resumen:{}, actualizado_at:null};
+  const r = await fetch(SB_URL+"/rest/v1/nexo_competencia?on_conflict=cliente_id,sku", {
+    method:"POST", headers:{"apikey":SB_KEY,"Authorization":"Bearer "+sbAuth(),"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"},
+    body:JSON.stringify(fila)});
+  if(!r.ok){ toast("No se pudo vincular.","err"); return; }
+  competencia[p.sku.toUpperCase()] = fila;
+  await compActualizarActual();
 }
 
 // ================================================================
@@ -6501,6 +6843,8 @@ function renderStock(){
     else { estado="Con stock"; cls="badge-green"; }
     return {p, dep, revision, full, total, vend, ultimaVenta, estado, cls};
   }).filter(f=>!estadoFiltro || f.estado===estadoFiltro);
+  stockUbicContar(filas);
+  const _filasUbic = filas.filter(stockUbicPasa); filas.length = 0; filas.push(..._filasUbic);
 
   const rows = filas.map(f=>{
     const {p, dep, revision, full, total, vend, ultimaVenta, estado, cls}=f;
@@ -6527,7 +6871,7 @@ function renderStock(){
       <td><span class="badge ${cls}">${estado}</span></td>
     </tr>`;
   });
-  document.getElementById("stockBody").innerHTML = rows.join("") || `<tr><td colspan="13" style="text-align:center;padding:24px;color:var(--text-soft);">${q||estadoFiltro?"Sin resultados para ese filtro.":"Sin productos."}</td></tr>`;
+  document.getElementById("stockBody").innerHTML = rows.join("") || `<tr><td colspan="13" style="text-align:center;padding:24px;color:var(--text-soft);">${q||estadoFiltro||document.getElementById("stockUbicFiltro")?.value?"Sin resultados para ese filtro.":"Sin productos."}</td></tr>`;
 }
 async function guardarAjusteFullML(sku){
   if(checkViewer("Ajustar stock Full ML")) return;
@@ -7032,6 +7376,7 @@ function renderAnalisis(){
         </div>
         <div style="font-size:10px;color:${a.desactualizado?'var(--red)':'var(--text-soft)'};text-align:right;">${a.precioMLReal?(a.desactualizado?'⚠️ desactualizado':'✓ real ML'):'* sin sincronizar'}</div>
       </td>
+      ${celdaCompetencia(p)}
       <td class="num" style="color:var(--orange);cursor:help;" title="${a.comisionReal?('Cargo por vender: $'+fmt(a.comisionPct)+(a.comisionFixed>0?' + Costo por unidad: $'+fmt(a.comisionFixed):'')):'Comisión estimada (10%) — sincronizá para tener el dato real'}">$${fmt(a.comision)}${a.comisionReal?' ✓':' *'}</td>
       <td class="num" style="color:var(--orange);" title="${a.envio>0?'Costo de envío Full/gratis sincronizado con ML':'Sin datos de envío sincronizados'}">$${fmt(a.envio)}${a.comisionReal?(a.envio>0?' ✓':''):' *'}</td>
       <td class="num" style="color:var(--orange);" title="Estimado configurable, no es un dato real por venta">$${fmt(a.impuesto)} *</td>
@@ -7041,7 +7386,7 @@ function renderAnalisis(){
       <td class="num ${a.margenPct>=25?'num-pos':a.margenPct>=10?'':'num-neg'}">${a.margenPct.toFixed(1)}%</td>
       <td><span class="badge ${a.cls}">${a.rec}</span></td>
     </tr>`;
-  }).join("")||`<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--text-soft);">Sin productos.</td></tr>`;
+  }).join("")||`<tr><td colspan="13" style="text-align:center;padding:24px;color:var(--text-soft);">Sin productos.</td></tr>`;
 }
 
 async function guardarImpuestoPct(){
@@ -7849,7 +8194,7 @@ async function mostrarSeccion(id){
     _mlPubsCargadas=false; if(vistaAnalisis()==="publicacion") await cargarMlPubs();
   }
   if(id==="mercado"){ renderMercado(); }
-  if(id==="analisis"){ renderAnalisis(); mostrarUltimaSync("fees","ultimaSyncFees"); mostrarUltimaSync("dinamico","ultimaSyncDinamico"); }
+  if(id==="analisis"){ await cargarCompetencia(true); renderAnalisis(); mostrarUltimaSync("fees","ultimaSyncFees"); mostrarUltimaSync("dinamico","ultimaSyncDinamico"); }
 }
 
 // ================================================================
