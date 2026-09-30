@@ -132,6 +132,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 }
 .nav-item .icon{font-size:16px;width:20px;text-align:center;}
 a.nav-item{text-decoration:none;}
+.stat-card .sub{font-size:11px;color:var(--text-soft);margin-top:4px;}
 .sidebar-footer{
   margin-top:auto;padding:16px 20px;border-top:1px solid color-mix(in srgb, var(--brand-oscuro-txt) 8%, transparent);
 }
@@ -816,7 +817,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>SKU</th><th>Producto</th><th>Proveedor</th><th>Stock Depósito</th><th title="Devoluciones defectuosas/dañadas que todavía no se resolvieron — no cuentan como vendible">En revisión</th><th>Stock Full ML</th><th>Ajuste Full ML</th><th>Stock Total</th><th>Vendido</th><th>Última venta</th><th>Estado</th></tr></thead>
+              <thead><tr><th>SKU</th><th>Producto</th><th>Proveedor</th><th>Stock Depósito</th><th title="Devoluciones defectuosas/dañadas que todavía no se resolvieron — no cuentan como vendible">En revisión</th><th title="Pedido a proveedor y todavía no ingresado (borrador, aprobado o enviado). Pasá el mouse para ver el detalle.">Pedido en camino</th><th>Stock Full ML</th><th>Ajuste Full ML</th><th>Stock Total</th><th>Vendido</th><th>Última venta</th><th>Estado</th></tr></thead>
               <tbody id="stockBody"></tbody>
             </table>
           </div>
@@ -2514,6 +2515,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
       <div class="page-header">
         <div><h2>Pedidos a Proveedores</h2><div class="sub">Órdenes de compra a proveedores</div></div>
         <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary admin-only" onclick="abrirPlanifFull()" title="Subí el Reporte de Planificación de Full (Excel): compara lo sugerido con tu depósito y lo pedido, y arma pedidos en borrador por proveedor">📊 Planificación Full</button>
           <button class="btn btn-ghost admin-only" onclick="abrirImportadorPedidoFullML()" title="Subí el PDF de instrucciones de preparación de un envío a Full ML — compara lo pedido contra tu stock de depósito y arma pedidos por lo que falta">📥 Importar PDF Full ML</button>
           <button class="btn btn-primary admin-only" onclick="generarPedidoReposicion()">📋 Generar pedido de reposición</button>
         </div>
@@ -3160,6 +3162,46 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="cerrarImportarML()">Cerrar</button>
       <button class="btn btn-success" id="btnImpMLConfirmar" style="display:none;" onclick="confirmarImportarML()">✅ Importar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modalPlanifFull">
+  <div class="modal" style="max-width:1180px;width:96vw;">
+    <h3>📊 Planificación Full ML → pedidos a proveedores</h3>
+    <p style="font-size:13px;color:var(--text-soft);margin-bottom:14px;">
+      Subí el <strong>Reporte de Planificación de envíos</strong> que descargás de Full (Excel). Tomamos las <strong>Unidades sugeridas para enviar</strong> de cada SKU,
+      descontamos lo que tenés en <strong>Stock Depósito</strong> y lo que ya está <strong>pedido y todavía no ingresó</strong>, y armamos un pedido en
+      <strong>borrador</strong> por proveedor. Después lo revisás, lo editás y lo aprobás en Pedidos a Prov. Nada se envía al proveedor desde acá.
+    </p>
+    <div id="pfDropZone" style="border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;margin-bottom:14px;"
+         ondragover="event.preventDefault();this.style.borderColor='var(--ml-blue)'" ondragleave="this.style.borderColor='var(--border)'" ondrop="pfDrop(event)">
+      <div style="font-size:13px;font-weight:700;color:var(--brand-oscuro);margin-bottom:8px;">Arrastrá el Excel acá o</div>
+      <label class="btn btn-primary" style="cursor:pointer;">📂 Seleccionar archivo
+        <input type="file" id="pfFile" accept=".xlsx,.xls,.csv" style="display:none;" onchange="pfCargar(this)">
+      </label>
+      <div id="pfArchivoNombre" style="font-size:12px;color:var(--text-soft);margin-top:8px;"></div>
+    </div>
+    <div id="pfPreviewWrap" style="display:none;">
+      <div class="stats-grid" id="pfResumen" style="margin-bottom:14px;"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
+        <div id="pfFiltros" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+        <input class="search-input" type="text" id="pfBuscar" placeholder="Buscar SKU, producto o proveedor…" oninput="pfRender()" style="flex:1;min-width:180px;">
+        <button class="btn btn-ghost btn-sm" onclick="pfMarcarVisibles(true)">Marcar todos</button>
+        <button class="btn btn-ghost btn-sm" onclick="pfMarcarVisibles(false)">Desmarcar</button>
+      </div>
+      <div class="table-wrap" style="max-height:48vh;overflow:auto;margin-bottom:12px;">
+        <table>
+          <thead><tr><th></th><th>SKU</th><th>Producto</th><th>Urgencia ML</th><th title="Unidades vendidas en Full, últimos 30 días">Vend. 30d</th><th title="Aptas para vender en Full hoy">En Full</th><th title="Unidades sugeridas para enviar (reporte ML)">Pide ML</th><th>Depósito</th><th title="Pedido a proveedor y todavía no ingresado (borrador, aprobado o enviado)">En camino</th><th title="Lo que podés mandar ya desde el depósito">Enviar ya</th><th title="Editable — sugerido = Pide ML − depósito − en camino">A pedir</th><th>Proveedor</th><th>Situación</th></tr></thead>
+          <tbody id="pfBody"></tbody>
+        </table>
+      </div>
+      <div id="pfTotales" style="font-size:13px;margin-bottom:6px;"></div>
+      <div style="font-size:11px;color:var(--text-soft);">Si volvés a subir el reporte, lo que ya está en borrador cuenta como "en camino", así no se pide dos veces.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="cerrarPlanifFull()">Cerrar</button>
+      <button class="btn btn-primary" id="btnPfGenerar" style="display:none;" onclick="pfGenerar()">📝 Crear pedidos en borrador</button>
     </div>
   </div>
 </div>
@@ -4897,6 +4939,221 @@ iniciar = async function(){
   }
   return r;
 };
+// ================================================================
+// Pedidos pendientes de ingreso (para Stock Actual)
+// ================================================================
+function pedidosPendientesDe(sku){
+  const skuUp=(sku||"").toUpperCase().trim();
+  const out=[];
+  for(const pp of pedidosProv){
+    if(!["borrador","aprobado","enviado"].includes(pp.estado)) continue;
+    let lineas=pp.lineas||[];
+    if(typeof lineas==="string"){ try{ lineas=JSON.parse(lineas); }catch(e){ lineas=[]; } }
+    let q=0;
+    for(const l of lineas){ if((l.sku||"").toUpperCase().trim()===skuUp) q+=Number(l.cantidad)||0; }
+    if(q>0) out.push({id:pp.id, proveedor:pp.proveedor, estado:pp.estado, fecha:pp.fecha, cantidad:q});
+  }
+  return out;
+}
+const PP_ESTADO_TXT={borrador:"borrador",aprobado:"aprobado",enviado:"enviado al proveedor"};
+function celdaPedidoPendiente(sku){
+  const ps=pedidosPendientesDe(sku);
+  const q=ps.reduce((a,p)=>a+p.cantidad,0);
+  if(!q) return `<td class="num" style="color:var(--text-soft);">—</td>`;
+  const tip=ps.map(p=>`${p.cantidad} u. · ${p.proveedor} · ${fFecha(p.fecha)} · ${PP_ESTADO_TXT[p.estado]||p.estado}`).join("\n");
+  const soloBorr=ps.every(p=>p.estado==="borrador");
+  return `<td class="num" title="${esc(tip)}"><a href="#pedidosprov" onclick="return navClick(event,'pedidosprov')" style="font-weight:700;color:${soloBorr?'var(--text-soft)':'var(--ml-blue)'};text-decoration:none;">${q}${soloBorr?' <span style="font-size:10px;font-weight:600;">(borrador)</span>':''}</a></td>`;
+}
+
+// ================================================================
+// Planificación Full ML (Excel "Reporte de Planificación de envíos")
+// → compara con depósito y pedidos en camino → arma borradores por proveedor
+// ================================================================
+let pfLineas=[], pfArchivo="", pfFiltro="pedir";
+
+function abrirPlanifFull(){
+  if(checkViewer("Importar planificación Full")) return;
+  pfLineas=[]; pfArchivo="";
+  document.getElementById("pfFile").value="";
+  document.getElementById("pfArchivoNombre").textContent="";
+  document.getElementById("pfPreviewWrap").style.display="none";
+  document.getElementById("pfBuscar").value="";
+  document.getElementById("modalPlanifFull").classList.add("show");
+}
+function cerrarPlanifFull(){ document.getElementById("modalPlanifFull").classList.remove("show"); }
+function pfDrop(ev){
+  ev.preventDefault();
+  document.getElementById("pfDropZone").style.borderColor="var(--border)";
+  const f=ev.dataTransfer.files[0]; if(f) pfLeerArchivo(f);
+}
+function pfCargar(input){ const f=input.files[0]; if(f) pfLeerArchivo(f); input.value=""; }
+
+function _pfNum(v){
+  if(v===null||v===undefined||v==="") return 0;
+  if(typeof v==="number") return v;
+  const s=String(v).replace(/\$/g,"").replace(/\s/g,"");
+  const n=Number(s.includes(",")?s.replace(/\./g,"").replace(",","."):s.replace(/\./g,""));
+  return isNaN(n)?0:n;
+}
+function _pfNorm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ").trim(); }
+
+// Lee las filas del reporte: busca la fila de encabezados (SKU + Unidades sugeridas) y suma por SKU
+function pfParsearFilas(filas){
+  let hi=-1, col={};
+  for(let i=0;i<Math.min(filas.length,40);i++){
+    const f=(filas[i]||[]).map(_pfNorm);
+    const iSku=f.findIndex(x=>x==="sku");
+    const iSug=f.findIndex(x=>x.startsWith("unidades sugeridas"));
+    if(iSku>=0 && iSug>=0){
+      hi=i;
+      col={sku:iSku, sug:iSug,
+        prod:f.findIndex(x=>x==="producto"),
+        vend:f.findIndex(x=>x.startsWith("unidades vendidas")),
+        aptas:f.findIndex(x=>x.startsWith("aptas")),
+        pendFull:f.findIndex(x=>x.startsWith("unidades pendientes de ingreso")),
+        lim:f.findIndex(x=>x.startsWith("fecha limite")),
+        urg:f.findIndex(x=>x.startsWith("urgencia"))};
+      break;
+    }
+  }
+  if(hi<0) throw new Error("No encontré las columnas «SKU» y «Unidades sugeridas para enviar». ¿Es el Reporte de Planificación de Full?");
+  const porSku={};
+  const ordenUrg={"urgente":0,"esta semana":1,"proxima semana":2,"en 2 semanas":3,"sin urgencia":4};
+  for(let i=hi+1;i<filas.length;i++){
+    const r=filas[i]||[];
+    const sku=String(r[col.sku]??"").trim();
+    if(!sku) continue;
+    const k=sku.toUpperCase();
+    const g=porSku[k]||(porSku[k]={sku, nombreML:"", vend:0, aptas:0, pendFull:0, sug:0, lim:"", urg:"", urgOrden:9, filas:0});
+    g.filas++;
+    if(!g.nombreML && col.prod>=0) g.nombreML=String(r[col.prod]||"");
+    g.vend+=col.vend>=0?_pfNum(r[col.vend]):0;
+    g.aptas+=col.aptas>=0?_pfNum(r[col.aptas]):0;
+    g.pendFull+=col.pendFull>=0?_pfNum(r[col.pendFull]):0;
+    const s=_pfNum(r[col.sug]); g.sug+=s;
+    if(s>0){
+      const u=String(col.urg>=0?r[col.urg]||"":"").trim(), uo=ordenUrg[_pfNorm(u)]??8;
+      if(uo<g.urgOrden){ g.urgOrden=uo; g.urg=u; g.lim=String(col.lim>=0?r[col.lim]||"":"").trim(); }
+    }
+  }
+  return Object.values(porSku);
+}
+
+async function pfLeerArchivo(file){
+  pfArchivo=file.name;
+  document.getElementById("pfArchivoNombre").textContent="📄 "+file.name;
+  try{
+    if(typeof XLSX==="undefined") throw new Error("No se pudo cargar el lector de Excel. Recargá la página.");
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(new Uint8Array(buf),{type:"array"});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const filas=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""});
+    const grupos=pfParsearFilas(filas);
+    pfLineas=grupos.map(g=>{
+      const prod=productos.find(p=>(p.sku||"").toUpperCase().trim()===g.sku.toUpperCase());
+      const dep=prod?Math.max(0,calcularStockDeposito(prod.sku)):0;
+      const camino=prod?cantidadPendientePedido(prod.sku):0;
+      const enviarYa=Math.min(g.sug,dep);
+      const falta=Math.max(0,g.sug-enviarYa);
+      const cubre=Math.min(falta,camino);
+      const pedir=Math.max(0,falta-cubre);
+      return Object.assign(g,{
+        enCatalogo:!!prod, sku:prod?prod.sku:g.sku, nombre:prod?prod.nombre:g.nombreML,
+        proveedor:prod?((prod.proveedor||"").toUpperCase().trim()||"SIN PROVEEDOR"):"",
+        costo:prod?(Number(prod.costo)||0):0, dep, camino, enviarYa, cubre, sugerido:pedir, pedir, incluir:pedir>0
+      });
+    }).sort((a,b)=>(b.pedir>0)-(a.pedir>0) || a.urgOrden-b.urgOrden || (a.proveedor||"").localeCompare(b.proveedor||"") || a.sku.localeCompare(b.sku));
+    if(!pfLineas.length) throw new Error("El archivo no tiene productos.");
+    pfFiltro=pfLineas.some(l=>l.pedir>0)?"pedir":"todos";
+    pfRender();
+  }catch(e){
+    document.getElementById("pfPreviewWrap").style.display="none";
+    toast("No se pudo leer el archivo: "+e.message,"err",6000);
+  }
+}
+
+function pfSituacion(l){
+  if(!l.enCatalogo) return `<span style="color:var(--orange);">No está en el Catálogo</span>`;
+  if(l.sug<=0) return `<span style="color:var(--text-soft);">ML no pide enviar</span>`;
+  const falta=l.sug-l.enviarYa;
+  if(falta<=0) return `<span style="color:var(--green);font-weight:600;">✅ Alcanza con el depósito</span>`;
+  if(falta-l.cubre<=0) return `<span style="color:var(--ml-blue);font-weight:600;">🕓 Alcanza con lo pedido</span>`;
+  return `<span style="color:var(--red);font-weight:600;">🛒 Faltan ${falta-l.cubre}</span>`;
+}
+function pfVisibles(){
+  const q=_pfNorm(document.getElementById("pfBuscar").value);
+  return pfLineas.map((l,i)=>({l,i})).filter(({l})=>{
+    if(pfFiltro==="pedir" && !(l.sugerido>0 || l.pedir>0)) return false;
+    if(pfFiltro==="sugeridos" && !(l.sug>0)) return false;
+    if(q && !_pfNorm(l.sku+" "+l.nombre+" "+l.proveedor).includes(q)) return false;
+    return true;
+  });
+}
+function pfSetFiltro(f){ pfFiltro=f; pfRender(); }
+function pfMarcar(i,v){ pfLineas[i].incluir=v; pfRender(); }
+function pfMarcarVisibles(v){ pfVisibles().forEach(({l})=>{ if(l.enCatalogo && l.pedir>0) l.incluir=v; }); pfRender(); }
+function pfCantidad(i,v){ const n=Math.max(0,parseInt(v)||0); pfLineas[i].pedir=n; pfLineas[i].incluir=n>0; pfRender(); }
+function pfProveedor(i,v){ pfLineas[i].proveedor=(v||"").toUpperCase().trim()||"SIN PROVEEDOR"; pfRender(); }
+
+function pfRender(){
+  const L=pfLineas;
+  const conSug=L.filter(l=>l.sug>0), sinCat=L.filter(l=>!l.enCatalogo && l.sug>0);
+  const tot=(arr,k)=>arr.reduce((a,l)=>a+(Number(l[k])||0),0);
+  const sel=L.filter(l=>l.incluir && l.enCatalogo && l.pedir>0);
+  const porProv={}; sel.forEach(l=>{ const g=porProv[l.proveedor]||(porProv[l.proveedor]={u:0,c:0,n:0}); g.u+=l.pedir; g.c+=l.pedir*l.costo; g.n++; });
+
+  document.getElementById("pfResumen").innerHTML=`
+    <div class="stat-card"><div class="label">ML sugiere enviar</div><div class="value">${fmtN(tot(conSug,"sug"))}</div><div class="sub">${conSug.length} SKU</div></div>
+    <div class="stat-card"><div class="label">Sale de tu depósito</div><div class="value" style="color:var(--green);">${fmtN(tot(conSug,"enviarYa"))}</div><div class="sub">lo podés mandar ya</div></div>
+    <div class="stat-card"><div class="label">Cubre lo pedido en camino</div><div class="value" style="color:var(--ml-blue);">${fmtN(tot(conSug,"cubre"))}</div><div class="sub">pedidos sin recibir</div></div>
+    <div class="stat-card"><div class="label">Falta pedir</div><div class="value" style="color:var(--red);">${fmtN(tot(conSug,"sugerido"))}</div><div class="sub">${conSug.filter(l=>l.sugerido>0).length} SKU${sinCat.length?` · ${sinCat.length} sin catálogo`:""}</div></div>`;
+
+  const b=(f,t)=>`<button class="btn btn-sm ${pfFiltro===f?'btn-primary':'btn-ghost'}" onclick="pfSetFiltro('${f}')">${t}</button>`;
+  document.getElementById("pfFiltros").innerHTML=b("pedir","🛒 A pedir")+b("sugeridos","📦 Todo lo que pide ML")+b("todos","Todo el archivo");
+
+  const vis=pfVisibles();
+  document.getElementById("pfBody").innerHTML=vis.map(({l,i})=>`
+    <tr style="${!l.enCatalogo?'opacity:.6;':''}">
+      <td><input type="checkbox" ${l.incluir?'checked':''} ${(!l.enCatalogo||l.pedir<=0)?'disabled':''} onchange="pfMarcar(${i},this.checked)"></td>
+      <td><span class="sku-tag">${esc(l.sku)}</span>${l.filas>1?`<div style="font-size:10px;color:var(--text-soft);" title="El SKU aparece en ${l.filas} filas del reporte; se suman">${l.filas} filas sumadas</div>`:""}</td>
+      <td style="max-width:160px;font-size:12px;">${esc(l.nombre||l.nombreML)}</td>
+      <td style="font-size:11px;white-space:nowrap;">${l.sug>0?`${esc(l.urg||"—")}${l.lim&&l.lim!=="-"?`<br><span style="color:var(--text-soft);">límite ${esc(l.lim)}</span>`:""}`:"—"}</td>
+      <td class="num">${fmtN(l.vend)}</td>
+      <td class="num">${fmtN(l.aptas)}</td>
+      <td class="num" style="font-weight:700;">${fmtN(l.sug)}</td>
+      <td class="num">${l.enCatalogo?fmtN(l.dep):"—"}</td>
+      <td class="num" style="color:var(--ml-blue);">${l.camino?fmtN(l.camino):"—"}</td>
+      <td class="num" style="color:var(--green);font-weight:600;">${l.enviarYa?fmtN(l.enviarYa):"—"}</td>
+      <td class="num">${l.enCatalogo?`<input type="number" min="0" value="${l.pedir}" style="width:64px;padding:3px 5px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;text-align:right;${l.pedir!==l.sugerido?'border-color:var(--orange);':''}" title="Sugerido: ${l.sugerido}" onchange="pfCantidad(${i},this.value)">`:"—"}</td>
+      <td style="font-size:12px;">${l.enCatalogo?`<input type="text" value="${esc(l.proveedor)}" list="provList" style="width:104px;padding:3px 5px;border:1.5px solid var(--border);border-radius:5px;font-size:11px;" onchange="pfProveedor(${i},this.value)">`:"—"}</td>
+      <td style="font-size:12px;white-space:nowrap;">${pfSituacion(l)}</td>
+    </tr>`).join("") || `<tr><td colspan="13" style="text-align:center;padding:18px;color:var(--text-soft);">Nada para mostrar con este filtro.</td></tr>`;
+
+  const provs=Object.entries(porProv).sort((a,b)=>b[1].c-a[1].c);
+  document.getElementById("pfTotales").innerHTML = sel.length
+    ? `<strong>Se van a crear ${provs.length} borrador(es):</strong> `+provs.map(([p,g])=>`${esc(p)} (${g.n} SKU · ${fmtN(g.u)} u. · $${fmt(g.c)})`).join(" · ")+
+      ` — <strong>Total $${fmt(sel.reduce((a,l)=>a+l.pedir*l.costo,0))}</strong> a costo de Catálogo.`
+    : `Marcá los productos que querés pedir.`;
+  document.getElementById("btnPfGenerar").style.display=sel.length?"inline-flex":"none";
+  document.getElementById("pfPreviewWrap").style.display="block";
+}
+function fmtN(n){ return (Number(n)||0).toLocaleString("es-AR"); }
+
+async function pfGenerar(){
+  if(checkViewer("Generar pedidos")) return;
+  const sel=pfLineas.filter(l=>l.incluir && l.enCatalogo && l.pedir>0);
+  if(!sel.length){ toast("No hay nada marcado para pedir.","err"); return; }
+  const porProv={};
+  sel.forEach(l=>{ (porProv[l.proveedor]=porProv[l.proveedor]||[]).push({sku:l.sku, nombre:l.nombre, cantPedir:l.pedir, costo:l.costo}); });
+  const obs="Generado desde Planificación Full ML"+(pfArchivo?" ("+pfArchivo+")":"")+" — revisar y aprobar";
+  mostrarCargando(true);
+  for(const [prov,lineas] of Object.entries(porProv)) await crearBorradorPP(prov, lineas, obs);
+  mostrarCargando(false);
+  cerrarPlanifFull();
+  if(typeof renderPedidosProv==="function") renderPedidosProv();
+  if(typeof renderStock==="function") renderStock();
+  toast(`Listo: ${Object.keys(porProv).length} pedido(s) en borrador. Revisalos, editalos y aprobalos en Pedidos a Prov. ✅`,"ok",6000);
+}
 
 // ================================================================
 // SUPERADMIN NEXO
@@ -6217,6 +6474,7 @@ function renderStock(){
       <td>${esc(p.proveedor||"")}</td>
       <td class="num ${dep<=0?'num-neg':''}">${dep}</td>
       <td class="num" style="${revision>0?'color:var(--orange);font-weight:700;':'color:var(--text-soft);'}" title="${revision>0?revision+' unidad(es) de devolución defectuosa/dañada, todavía sin resolver':''}">${revision>0?revision:'—'}</td>
+      ${celdaPedidoPendiente(p.sku)}
       <td class="num" style="font-weight:700;color:var(--ml-blue);">${full}</td>
       <td>
         <div style="display:flex;align-items:center;gap:6px;">
@@ -6232,7 +6490,7 @@ function renderStock(){
       <td><span class="badge ${cls}">${estado}</span></td>
     </tr>`;
   });
-  document.getElementById("stockBody").innerHTML = rows.join("") || `<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text-soft);">${q||estadoFiltro?"Sin resultados para ese filtro.":"Sin productos."}</td></tr>`;
+  document.getElementById("stockBody").innerHTML = rows.join("") || `<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--text-soft);">${q||estadoFiltro?"Sin resultados para ese filtro.":"Sin productos."}</td></tr>`;
 }
 async function guardarAjusteFullML(sku){
   if(checkViewer("Ajustar stock Full ML")) return;
