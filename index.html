@@ -131,6 +131,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   border-left-color:var(--ml-yellow);
 }
 .nav-item .icon{font-size:16px;width:20px;text-align:center;}
+a.nav-item{text-decoration:none;}
 .sidebar-footer{
   margin-top:auto;padding:16px 20px;border-top:1px solid color-mix(in srgb, var(--brand-oscuro-txt) 8%, transparent);
 }
@@ -589,75 +590,75 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
         <select id="saSelectorCliente" onchange="saCambiarCliente(this.value)" title="Cliente activo"
           style="width:100%;padding:7px 8px;border-radius:7px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:inherit;font-size:12px;"></select>
       </div>
-      <div class="nav-item" onclick="mostrarSeccion('clientes')">
+      <a class="nav-item" href="#clientes" data-sec="clientes" onclick="return navClick(event,'clientes')">
         <span class="icon">🏢</span> Clientes
-      </div>
+      </a>
     </div>
     <div class="nav-section">Principal</div>
-    <div class="nav-item active" onclick="mostrarSeccion('panel')">
+    <a class="nav-item active" href="#panel" data-sec="panel" onclick="return navClick(event,'panel')">
       <span class="icon">📊</span> Panel
-    </div>
+    </a>
     <div class="nav-section">Inventario</div>
-    <div class="nav-item" onclick="mostrarSeccion('productos')">
+    <a class="nav-item" href="#productos" data-sec="productos" onclick="return navClick(event,'productos')">
       <span class="icon">📦</span> Catálogo
-    </div>
-    <div class="nav-item" onclick="mostrarSeccion('stock')">
+    </a>
+    <a class="nav-item" href="#stock" data-sec="stock" onclick="return navClick(event,'stock')">
       <span class="icon">🏷️</span> Stock Actual
-    </div>
-    <div class="nav-item" onclick="mostrarSeccion('alertas')">
+    </a>
+    <a class="nav-item" href="#alertas" data-sec="alertas" onclick="return navClick(event,'alertas')">
       <span class="icon">⚠️</span> Alertas
-    </div>
+    </a>
     <div class="nav-section">Operaciones</div>
-    <div class="nav-item" onclick="mostrarSeccion('movimientos')">
+    <a class="nav-item" href="#movimientos" data-sec="movimientos" onclick="return navClick(event,'movimientos')">
       <span class="icon">↕️</span> Movimientos
-    </div>
-    <div class="nav-item" onclick="mostrarSeccion('compras')">
+    </a>
+    <a class="nav-item" href="#compras" data-sec="compras" onclick="return navClick(event,'compras')">
       <span class="icon">🧾</span> Compras
-    </div>
-    <div class="nav-item" onclick="mostrarSeccion('pedidosprov')">
+    </a>
+    <a class="nav-item" href="#pedidosprov" data-sec="pedidosprov" onclick="return navClick(event,'pedidosprov')">
       <span class="icon">📋</span> Pedidos a Prov.
-    </div>
-    <div class="nav-item" onclick="mostrarSeccion('ventas')">
+    </a>
+    <a class="nav-item" href="#ventas" data-sec="ventas" onclick="return navClick(event,'ventas')">
       <span class="icon">💸</span> Ventas
-    </div>
-    <div class="nav-item" onclick="mostrarSeccion('gastos')">
+    </a>
+    <a class="nav-item" href="#gastos" data-sec="gastos" onclick="return navClick(event,'gastos')">
       <span class="icon">🧮</span> Gastos
-    </div>
-    <div class="nav-item" onclick="mostrarSeccion('caja')">
+    </a>
+    <a class="nav-item" href="#caja" data-sec="caja" onclick="return navClick(event,'caja')">
       <span class="icon">💵</span> Caja
-    </div>
-    <div class="nav-item" onclick="mostrarSeccion('devoluciones')">
+    </a>
+    <a class="nav-item" href="#devoluciones" data-sec="devoluciones" onclick="return navClick(event,'devoluciones')">
       <span class="icon">↩️</span> Devoluciones / Garantías
-    </div>
-    <div class="nav-item" onclick="mostrarSeccion('cuentacorriente')">
+    </a>
+    <a class="nav-item" href="#cuentacorriente" data-sec="cuentacorriente" onclick="return navClick(event,'cuentacorriente')">
       <span class="icon">🏭</span> Cuenta Corriente
-    </div>
-    <div class="nav-item" onclick="mostrarSeccion('proveedores')">
+    </a>
+    <a class="nav-item" href="#proveedores" data-sec="proveedores" onclick="return navClick(event,'proveedores')">
       <span class="icon">🏭</span> Proveedores
-    </div>
-    <div class="nav-item" onclick="mostrarSeccion('listasprecios')">
+    </a>
+    <a class="nav-item" href="#listasprecios" data-sec="listasprecios" onclick="return navClick(event,'listasprecios')">
       <span class="icon">📋</span> Listas de Precios
-    </div>
+    </a>
     <div class="nav-section">Análisis</div>
-    <div class="nav-item" onclick="mostrarSeccion('analisis')">
+    <a class="nav-item" href="#analisis" data-sec="analisis" onclick="return navClick(event,'analisis')">
       <span class="icon">💰</span> Análisis ML
-    </div>
-    <div class="nav-item" onclick="mostrarSeccion('mercado')">
+    </a>
+    <a class="nav-item" href="#mercado" data-sec="mercado" onclick="return navClick(event,'mercado')">
       <span class="icon">📈</span> Mercado ML
-    </div>
+    </a>
     <div class="nav-section">Tienda</div>
-    <div class="nav-item admin-only" onclick="mostrarSeccion('marca')">
+    <a class="nav-item admin-only" href="#marca" data-sec="marca" onclick="return navClick(event,'marca')">
       <span class="icon">🎨</span> Mi marca
-    </div>
-    <div class="nav-item admin-only" onclick="mostrarSeccion('mitienda')">
+    </a>
+    <a class="nav-item admin-only" href="#mitienda" data-sec="mitienda" onclick="return navClick(event,'mitienda')">
       <span class="icon">🛍️</span> Mi tienda
-    </div>
-    <div class="nav-item" onclick="mostrarSeccion('ml')">
+    </a>
+    <a class="nav-item" href="#ml" data-sec="ml" onclick="return navClick(event,'ml')">
       <span class="icon">🔗</span> MercadoLibre
-    </div>
-    <div class="nav-item" onclick="mostrarSeccion('pedidos')">
+    </a>
+    <a class="nav-item" href="#pedidos" data-sec="pedidos" onclick="return navClick(event,'pedidos')">
       <span class="icon">🛍️</span> Pedidos
-    </div>
+    </a>
     <div class="nav-item" onclick="verTiendaCliente()">
       <span class="icon">🛒</span> Ver tienda
     </div>
@@ -4851,6 +4852,51 @@ verTiendaCliente = async function(){
   }catch(e){}
   return _verTiendaClienteOrig();
 };
+// ================================================================
+// Navegación con dirección propia por sección (#stock, #productos…)
+// - Cada ítem del menú es un link real: Ctrl/Cmd+clic, clic con la
+//   rueda o clic derecho → "Abrir en pestaña nueva" abre esa sección.
+// - Al entrar con #seccion en la dirección, se abre esa sección.
+// - Atrás / Adelante del navegador cambian de sección.
+// ================================================================
+function navSeccionDelHash(){
+  const id = decodeURIComponent((location.hash||"").replace(/^#/, "")).trim();
+  return /^[a-z]+$/.test(id) ? id : "";
+}
+function navMarcarActivo(id){
+  document.querySelectorAll(".nav-item").forEach(n=>n.classList.toggle("active", n.dataset.sec===id));
+}
+function navPuedeVer(id){
+  if(!id || !document.getElementById("sec-"+id)) return false;
+  const a = document.querySelector('.nav-item[data-sec="'+id+'"]');
+  if(!a) return false;
+  if(a.closest("#saNav") && !esSuperadmin) return false;
+  if(a.classList.contains("admin-only") && typeof esAdmin==="function" && !esAdmin()) return false;
+  return true;
+}
+function navClick(ev, id){
+  // Con Ctrl/Cmd/Shift o botón del medio: dejar que el navegador abra la pestaña nueva
+  if(ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey || ev.button===1) return true;
+  ev.preventDefault();
+  if(navSeccionDelHash()!==id) history.pushState(null, "", "#"+id);
+  mostrarSeccion(id);
+  return false;
+}
+window.addEventListener("popstate", ()=>{
+  const id = navSeccionDelHash() || "panel";
+  if(navPuedeVer(id) && !document.getElementById("sec-"+id).classList.contains("active")) mostrarSeccion(id);
+});
+// Al abrir el panel (o una pestaña nueva con #seccion), ir a esa sección cuando terminan de cargar los datos
+const _iniciarSinNav = iniciar;
+iniciar = async function(){
+  const r = await _iniciarSinNav.apply(this, arguments);
+  const id = navSeccionDelHash();
+  if(id && id!=="panel"){
+    if(navPuedeVer(id)) mostrarSeccion(id);
+    else history.replaceState(null, "", location.pathname+location.search);
+  }
+  return r;
+};
 
 // ================================================================
 // SUPERADMIN NEXO
@@ -5094,7 +5140,7 @@ async function renderClientes(){
         <td>${esc(f.cuentas_ml||"—")}</td>
         <td>${Number(f.productos).toLocaleString("es-AR")}</td>
         <td>${Number(f.ventas).toLocaleString("es-AR")}</td>
-        <td>${esc(f.ultima_venta||"—")}</td>
+        <td>${f.ultima_venta?fFecha(f.ultima_venta):"—"}</td>
         <td style="white-space:nowrap;">
           ${f.id===clienteId?"":`<button class="btn btn-primary btn-sm" onclick="saCambiarCliente('${f.id}')">Entrar</button>`}
           <button class="btn btn-ghost btn-sm" onclick="saVerUsuarios('${f.id}','${esc(f.nombre).replace(/'/g,"")}')">Usuarios</button>
@@ -6182,7 +6228,7 @@ function renderStock(){
       </td>
       <td class="num" style="font-weight:700;">${total}</td>
       <td class="num">${vend}</td>
-      <td style="font-size:12px;color:${ultimaVenta?'var(--text)':'var(--text-soft)'};">${ultimaVenta||'—'}</td>
+      <td style="font-size:12px;color:${ultimaVenta?'var(--text)':'var(--text-soft)'};">${ultimaVenta?fFecha(ultimaVenta):'—'}</td>
       <td><span class="badge ${cls}">${estado}</span></td>
     </tr>`;
   });
@@ -7468,7 +7514,8 @@ async function mostrarSeccion(id){
   document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
   document.querySelectorAll(".nav-item").forEach(n=>n.classList.remove("active"));
   document.getElementById("sec-"+id).classList.add("active");
-  event.currentTarget.classList.add("active");
+  navMarcarActivo(id);
+  if(navSeccionDelHash()!==id) history.pushState(null, "", "#"+id);
   if(window.innerWidth<=768) closeSidebar();
 
   // Recargar datos frescos desde Supabase al cambiar de sección
@@ -11677,9 +11724,8 @@ function mostrarSeccionDirecta(id){
   document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
   document.querySelectorAll(".nav-item").forEach(n=>n.classList.remove("active"));
   document.getElementById("sec-"+id).classList.add("active");
-  document.querySelectorAll(".nav-item").forEach(n=>{
-    if(n.textContent.toLowerCase().includes("pedidos a prov")) n.classList.add("active");
-  });
+  navMarcarActivo(id);
+  if(navSeccionDelHash()!==id) history.pushState(null, "", "#"+id);
 }
 
 async function crearBorradorPP(proveedor, lineas, obsPersonalizada){
