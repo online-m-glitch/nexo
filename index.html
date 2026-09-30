@@ -817,7 +817,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>SKU</th><th>Producto</th><th>Proveedor</th><th>Stock Depósito</th><th title="Devoluciones defectuosas/dañadas que todavía no se resolvieron — no cuentan como vendible">En revisión</th><th title="Pedido a proveedor y todavía no ingresado (borrador, aprobado o enviado). Pasá el mouse para ver el detalle.">Pedido en camino</th><th>Stock Full ML</th><th>Ajuste Full ML</th><th>Stock Total</th><th>Vendido</th><th>Última venta</th><th>Estado</th></tr></thead>
+              <thead><tr><th>SKU</th><th>Producto</th><th>Proveedor</th><th>Stock Depósito</th><th title="Devoluciones defectuosas/dañadas que todavía no se resolvieron — no cuentan como vendible">En revisión</th><th title="Pedido a proveedor y todavía no ingresado (borrador, aprobado o enviado). Pasá el mouse para ver el detalle.">Pedido en camino</th><th>Stock Full ML</th><th>Ajuste Full ML</th><th>Stock Total</th><th>Vendido</th><th title="Última compra cargada (o último ingreso de stock). Pasá el mouse para ver proveedor y factura.">Última compra</th><th>Última venta</th><th>Estado</th></tr></thead>
               <tbody id="stockBody"></tbody>
             </table>
           </div>
@@ -5156,6 +5156,42 @@ async function pfGenerar(){
 }
 
 // ================================================================
+// Última compra de un SKU (Stock Actual): sale de Compras;
+// si no hay compra cargada, del último Ingreso en Movimientos
+// ================================================================
+function ultimaCompraDe(sku){
+  const skuUp=(sku||"").toUpperCase().trim();
+  let mejor=null;
+  for(const c of (compras||[])){
+    let lineas=c.lineas||[];
+    if(typeof lineas==="string"){ try{ lineas=JSON.parse(lineas); }catch(e){ lineas=[]; } }
+    const ls=lineas.filter(l=>(l.sku||"").toUpperCase().trim()===skuUp);
+    if(!ls.length) continue;
+    const clave=(c.fecha||"")+"|"+(c.created_at||"");
+    if(!mejor || clave>mejor.clave){
+      mejor={clave, fecha:c.fecha, proveedor:c.proveedor||"", factura:c.factura||"",
+        cantidad:ls.reduce((a,l)=>a+(Number(l.cantidad)||0),0),
+        costo:Number(ls[ls.length-1].costo)||0, origen:"compra"};
+    }
+  }
+  if(mejor) return mejor;
+  for(const m of (movimientos||[])){
+    if(m.tipo!=="Ingreso" || (m.sku||"").toUpperCase().trim()!==skuUp) continue;
+    const clave=(m.fecha||"")+"|"+(m.created_at||m.id||"");
+    if(!mejor || clave>mejor.clave){
+      mejor={clave, fecha:m.fecha, proveedor:m.proveedor||"", factura:"", cantidad:Number(m.cantidad)||0, costo:Number(m.costo)||0, origen:"ingreso"};
+    }
+  }
+  return mejor;
+}
+function celdaUltimaCompra(sku){
+  const u=ultimaCompraDe(sku);
+  if(!u) return `<td style="font-size:12px;color:var(--text-soft);">—</td>`;
+  const tip=[u.origen==="compra"?"Compra":"Ingreso de stock (no hay compra cargada)", u.proveedor, u.factura?"Factura "+u.factura:"", u.cantidad+" u."+(u.costo?" a $"+fmt(u.costo):"")].filter(Boolean).join(" · ");
+  return `<td style="font-size:12px;white-space:nowrap;" title="${esc(tip)}">${fFecha(u.fecha)}<div style="font-size:11px;color:var(--text-soft);">${u.cantidad} u.${u.costo?" · $"+fmt(u.costo):""}</div></td>`;
+}
+
+// ================================================================
 // SUPERADMIN NEXO
 // ================================================================
 // ================================================================
@@ -6486,11 +6522,12 @@ function renderStock(){
       </td>
       <td class="num" style="font-weight:700;">${total}</td>
       <td class="num">${vend}</td>
+      ${celdaUltimaCompra(p.sku)}
       <td style="font-size:12px;color:${ultimaVenta?'var(--text)':'var(--text-soft)'};">${ultimaVenta?fFecha(ultimaVenta):'—'}</td>
       <td><span class="badge ${cls}">${estado}</span></td>
     </tr>`;
   });
-  document.getElementById("stockBody").innerHTML = rows.join("") || `<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--text-soft);">${q||estadoFiltro?"Sin resultados para ese filtro.":"Sin productos."}</td></tr>`;
+  document.getElementById("stockBody").innerHTML = rows.join("") || `<tr><td colspan="13" style="text-align:center;padding:24px;color:var(--text-soft);">${q||estadoFiltro?"Sin resultados para ese filtro.":"Sin productos."}</td></tr>`;
 }
 async function guardarAjusteFullML(sku){
   if(checkViewer("Ajustar stock Full ML")) return;
