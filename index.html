@@ -2212,9 +2212,11 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
           <div class="card" style="margin-bottom:16px;">
             <div class="card-header" style="flex-direction:column;align-items:stretch;gap:10px;">
               <h3 style="flex:none;">Buscá un producto en el catálogo de MercadoLibre</h3>
-              <div style="font-size:12px;color:var(--text-soft);">Ves el precio más bajo y más alto, cuántos vendedores compiten, la comisión exacta (Clásica) y lo que recibís. Cargá tu costo en la fila para ver la ganancia y el margen.</div>
+              <div style="font-size:12px;color:var(--text-soft);">Ves el precio más bajo y más alto, cuántos vendedores compiten, la comisión exacta (Clásica) y lo que recibís. Cargá tu costo en la fila (en pesos o en dólares) para ver la ganancia y el margen.</div>
               <div class="toolbar" style="flex-wrap:wrap;">
-                <input class="search-input" type="text" id="mercBuscarProd" placeholder="Ej: reflector led 10w, auriculares bluetooth…" style="width:300px;" onkeydown="if(event.key==='Enter')mercBuscarProductos()">
+                <select id="mercBuscarModo" title="Por qué buscar. Automático reconoce EAN, SKU de tu Catálogo y códigos MLA." onchange="mercModoPlaceholder()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;background:transparent;color:inherit;">
+                  <option value="auto">Automático</option><option value="titulo">Título</option><option value="ean">EAN</option><option value="marca">Marca</option><option value="sku">SKU (mi catálogo)</option><option value="codigo">Código ML</option></select>
+                <input class="search-input" type="text" id="mercBuscarProd" placeholder="Título, EAN, marca, SKU o código MLA…" style="width:300px;" onkeydown="if(event.key==='Enter')mercBuscarProductos()">
                 <button class="btn btn-primary btn-sm" id="btnMercBuscarProd" onclick="mercBuscarProductos()">🔎 Buscar</button>
                 <label style="font-size:12px;color:var(--text-soft);white-space:nowrap;" title="Costo del envío gratis que paga el vendedor, calculado por MercadoLibre con las medidas de la categoría">Envío
                   <select id="mercBuscarEnvioModo" onchange="mercEnvioModo(this.value)" style="padding:5px 6px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;background:transparent;color:inherit;">
@@ -2222,6 +2224,11 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
                   <input type="number" id="mercBuscarEnvio" value="0" min="0" step="100" oninput="renderMercBusqueda()" style="width:80px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;display:none;" placeholder="$"></label>
                 <label style="font-size:12px;color:var(--text-soft);white-space:nowrap;" title="Impuestos que se cobran por venta (ej. IIBB / retenciones). Es el mismo valor de Análisis ML.">Impuesto % <input type="number" id="mercBuscarImp" min="0" step="0.1" onchange="mercGuardarPct('impuesto_pct', this.value)" style="width:58px;padding:5px 6px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;"></label>
                 <label style="font-size:12px;color:var(--text-soft);white-space:nowrap;" title="Percepciones que ML te cobra al cierre del mes. Es el mismo valor de Análisis ML.">Percepción fin de mes % <input type="number" id="mercBuscarPer" min="0" step="0.1" onchange="mercGuardarPct('percepcion_pct', this.value)" style="width:58px;padding:5px 6px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;"></label>
+                <label style="font-size:12px;color:var(--text-soft);white-space:nowrap;" title="Para costos en dólares: se pasan a pesos con la cotización de venta del día">Dólar
+                  <select id="mercDolarTipo" onchange="mercDolarCambiarTipo(this.value)" style="padding:5px 4px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;background:transparent;color:inherit;"></select>
+                  $ <input type="number" id="mercDolarValor" min="0" step="any" onchange="mercDolarManual(this.value)" style="width:72px;padding:5px 6px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;">
+                  <button type="button" class="btn btn-ghost btn-sm" style="padding:3px 7px;" title="Traer la cotización de hoy" onclick="mercDolarCargar(true)">🔄</button>
+                  <span id="mercDolarInfo" style="font-size:10.5px;"></span></label>
                 <label style="font-size:12px;color:var(--text-soft);white-space:nowrap;"><input type="checkbox" id="mercBuscarSoloCon" onchange="renderMercBusqueda()" checked> Solo con vendedores</label>
               </div>
               <div id="mercBuscarEstado" style="font-size:12px;"></div>
@@ -3841,6 +3848,7 @@ function renderMercado(){
   const el = document.getElementById("mercProvImpuestos");
   if(el) el.textContent = "Impuesto "+imp+"% + Percepción "+per+"% (se configuran en Análisis ML)";
   mercSyncPctInputs();
+  mercDolarIniciar();
   const modo = document.getElementById("mercBuscarEnvioModo");
   if(modo && !modo.dataset.ini){ modo.dataset.ini = "1"; let v = "fulfillment"; try{ v = localStorage.getItem("nexo_merc_envio") || v; }catch(e){} modo.value = v; mercEnvioModo(v, true); }
 }
@@ -4313,39 +4321,107 @@ function mercExportarProveedor(){
 
 // ── Buscar productos de catálogo: precio, competencia, comisión y margen ──
 let mercBusq = {q:"", offset:0, total:0, filas:[]};
+// ── Buscar: por título, EAN, marca, SKU de mi catálogo o código ML ──
+function _mercMarca(p){
+  const a = (p && Array.isArray(p.attributes)) ? p.attributes.find(x=>x.id==="BRAND") : null;
+  return a ? (a.value_name || "") : "";
+}
+function _mercNorm(s){ return String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim(); }
+function mercDetectarModo(q){
+  const t = q.trim(), sku = t.toUpperCase();
+  if((productos||[]).some(p=>String(p.sku||"").trim().toUpperCase()===sku)) return "sku";
+  if(/^\d{8,14}$/.test(t.replace(/[\s-]/g,""))) return "ean";
+  if(/^MLA\d{5,}$/i.test(t)) return "codigo";
+  return "titulo";
+}
+// Del Catálogo de NEXO: SKU → producto de catálogo de ML (catalog_product_id, o el de su publicación, o por nombre)
+async function mercResolverSku(q){
+  const t = q.trim().toUpperCase();
+  let prods = (productos||[]).filter(p=>String(p.sku||"").trim().toUpperCase()===t);
+  if(!prods.length) prods = (productos||[]).filter(p=>String(p.sku||"").toUpperCase().includes(t)).slice(0,10);
+  const out = [];
+  for(const pr of prods){
+    let cat = pr.catalog_product_id || null;
+    if(!cat && pr.ml_item_id){
+      const r = await mlGet("/items?ids="+encodeURIComponent(pr.ml_item_id)+"&attributes=id,catalog_product_id");
+      const it = r.ok && Array.isArray(r.data) && r.data[0] && r.data[0].body;
+      cat = (it && it.catalog_product_id) || null;
+    }
+    out.push({prod:pr, catalogo:cat});
+  }
+  return out;
+}
+async function _mercFilaDe(p, extra){
+  let monDef = "ars"; try{ monDef = localStorage.getItem("nexo_merc_moneda")==="usd" ? "usd" : "ars"; }catch(e){}
+  const f = Object.assign({moneda: (extra && extra.costo) ? "ars" : monDef, id:p.id, nombre:p.name||p.id, marca:_mercMarca(p), thumb:_https(p.pictures && p.pictures[0] && (p.pictures[0].secure_url||p.pictures[0].url)),
+    link:"https://www.mercadolibre.com.ar/p/"+p.id, costo:null}, extra||{});
+  const its = await mlGet("/products/"+p.id+"/items?limit=50");
+  const r = (its.ok && its.data && Array.isArray(its.data.results)) ? its.data.results : [];
+  if(!r.length){ f.sinVendedores = true; return f; }
+  const precios = r.map(x=>Number(x.price)).filter(x=>x>0).sort((a,b)=>a-b);
+  f.precioMin = precios[0]; f.precioMax = precios[precios.length-1];
+  f.vendedores = (its.data.paging && its.data.paging.total) || r.length;
+  f.cat = r[0].category_id;
+  const fee = await mercComision(f.cat, f.precioMin);
+  if(fee){ f.comision = fee.monto; f.fijo = fee.fijo; }
+  const modo = mercModoEnvio();
+  if(modo !== "manual") await mercEnvioFila(f, modo);
+  return f;
+}
+const MERC_MODOS = {auto:"Automático", titulo:"Título", ean:"EAN", marca:"Marca", sku:"SKU (mi catálogo)", codigo:"Código ML"};
 async function mercBuscarProductos(mas){
   const q = document.getElementById("mercBuscarProd").value.trim();
   const est = document.getElementById("mercBuscarEstado");
+  const selModo = document.getElementById("mercBuscarModo");
+  let modo = (selModo && selModo.value) || "auto";
   if(q.length < 2){ est.innerHTML = "Escribí al menos 2 letras."; return; }
-  if(!mas) mercBusq = {q, offset:0, total:0, filas:[]};
+  if(mas && mercBusq.modo) modo = mercBusq.modo;
+  else if(modo === "auto") modo = mercDetectarModo(q);
+  if(!mas) mercBusq = {q, modo, offset:0, total:0, filas:[], nota:""};
   const btn = document.getElementById("btnMercBuscarProd"); btn.disabled = true;
   est.innerHTML = "⏳ Buscando en el catálogo de MercadoLibre…";
   try{
-    const res = await mlGet("/products/search?status=active&site_id="+MERC_SITE+"&limit=20&offset="+mercBusq.offset+"&q="+encodeURIComponent(mercBusq.q));
-    if(!res.ok || !res.data || !Array.isArray(res.data.results)){ est.innerHTML = `<span style="color:var(--red);">❌ ${esc(_mlError(res))}</span>`; return; }
-    mercBusq.total = (res.data.paging && res.data.paging.total) || 0;
-    const lista = res.data.results;
+    let lista = [], extras = [], paginado = true;
+    if(modo === "sku"){
+      paginado = false;
+      const rs = await mercResolverSku(q);
+      if(!rs.length){ est.innerHTML = `<span style="color:var(--orange);">No hay ningún producto con el SKU "${esc(q)}" en tu Catálogo.</span>`; mercBusq.total = 0; renderMercBusqueda(); return; }
+      for(const x of rs){
+        if(x.catalogo){
+          const r = await mlGet("/products/"+encodeURIComponent(x.catalogo));
+          if(r.ok && r.data && r.data.id){ lista.push(r.data); extras.push({sku:x.prod.sku, costo:Number(x.prod.costo)||null}); continue; }
+        }
+        // Sin producto de catálogo: buscar por el nombre del producto
+        const r = await mlGet("/products/search?status=active&site_id="+MERC_SITE+"&limit=3&q="+encodeURIComponent(x.prod.nombre||x.prod.sku));
+        (r.ok && r.data && Array.isArray(r.data.results) ? r.data.results : []).forEach(p=>{ lista.push(p); extras.push({sku:x.prod.sku, costo:Number(x.prod.costo)||null, porNombre:true}); });
+      }
+      mercBusq.total = lista.length;
+      mercBusq.nota = `Búsqueda por SKU de tu Catálogo (${rs.map(x=>esc(x.prod.sku)).join(", ")}). Tu costo se completa solo.`;
+    } else {
+      let url = "/products/search?status=active&site_id="+MERC_SITE+"&limit=20&offset="+mercBusq.offset;
+      url += modo==="ean" ? "&product_identifier="+encodeURIComponent(q.replace(/[\s-]/g,"")) : "&q="+encodeURIComponent(q);
+      const res = await mlGet(url);
+      if(!res.ok || !res.data || !Array.isArray(res.data.results)){ est.innerHTML = `<span style="color:var(--red);">❌ ${esc(_mlError(res))}</span>`; return; }
+      mercBusq.total = (res.data.paging && res.data.paging.total) || res.data.results.length || 0;
+      lista = res.data.results;
+      if(modo === "marca"){
+        const m = _mercNorm(q);
+        const conMarca = lista.filter(p=>_mercNorm(_mercMarca(p)).includes(m));
+        mercBusq.nota = conMarca.length ? `Solo productos de la marca "${esc(q)}".` : `ML no tiene productos con la marca exacta "${esc(q)}": se muestran los resultados de la búsqueda.`;
+        if(conMarca.length) lista = conMarca;
+      } else mercBusq.nota = modo==="ean" ? `Búsqueda por EAN ${esc(q)}.` : modo==="codigo" ? `Búsqueda por código ML ${esc(q.toUpperCase())}.` : "";
+      extras = lista.map(()=>null);
+    }
     est.innerHTML = `⏳ Trayendo precios y vendedores de ${lista.length} productos…`;
-    const nuevas = await _pool(lista, 4, async p=>{
-      const f = {id:p.id, nombre:p.name||p.id, thumb:_https(p.pictures && p.pictures[0] && (p.pictures[0].secure_url||p.pictures[0].url)),
-        link:"https://www.mercadolibre.com.ar/p/"+p.id, costo:null};
-      const its = await mlGet("/products/"+p.id+"/items?limit=50");
-      const r = (its.ok && its.data && Array.isArray(its.data.results)) ? its.data.results : [];
-      if(!r.length){ f.sinVendedores = true; return f; }
-      const precios = r.map(x=>Number(x.price)).filter(x=>x>0).sort((a,b)=>a-b);
-      f.precioMin = precios[0]; f.precioMax = precios[precios.length-1];
-      f.vendedores = (its.data.paging && its.data.paging.total) || r.length;
-      f.cat = r[0].category_id;
-      const fee = await mercComision(f.cat, f.precioMin);
-      if(fee){ f.comision = fee.monto; f.fijo = fee.fijo; }
-      const modo = mercModoEnvio();
-      if(modo !== "manual") await mercEnvioFila(f, modo);
-      return f;
-    });
-    mercBusq.filas = mercBusq.filas.concat(nuevas.filter(Boolean));
+    const nuevas = await _pool(lista, 4, (p,i)=>_mercFilaDe(p, extras[i]));
+    mercBusq.filas = mercBusq.filas.concat(nuevas.filter(f=>f && !f.error));
     mercBusq.offset += lista.length;
+    if(!paginado) mercBusq.offset = mercBusq.total;
     const conV = mercBusq.filas.filter(f=>!f.sinVendedores).length;
-    est.innerHTML = `✅ ${mercBusq.filas.length} de ${mercBusq.total} productos del catálogo · ${conV} con vendedores activos. Orden: relevancia de MercadoLibre.`;
+    est.innerHTML = (mercBusq.filas.length
+      ? `✅ ${mercBusq.filas.length}${paginado?` de ${mercBusq.total}`:""} productos del catálogo · ${conV} con vendedores activos. <span style="color:var(--text-soft);">Buscado por: ${MERC_MODOS[modo]||modo}.</span>`
+      : `<span style="color:var(--orange);">No se encontraron productos en el catálogo de ML (buscado por: ${MERC_MODOS[modo]||modo}).</span>`)
+      + (mercBusq.nota ? ` <span style="color:var(--text-soft);">${mercBusq.nota}</span>` : "");
     renderMercBusqueda();
   }finally{ btn.disabled = false; }
 }
@@ -4356,17 +4432,35 @@ function _netoFila(f){
   const envio = env.monto || 0, impuesto = p*imp/100, percepcion = p*per/100;
   return {precio:p, comision:f.comision, envio, env, impuesto, percepcion, imp, per, recibis: p - f.comision - envio - impuesto - percepcion};
 }
+function mercCostoPesos(f){
+  if(!(f.costo > 0)) return null;
+  if(f.moneda !== "usd") return f.costo;
+  const d = mercDolarValor();
+  return d > 0 ? f.costo * d : null;
+}
 function _calcMargenFila(f){
-  const n = _netoFila(f);
-  if(!n || !(f.costo > 0)) return null;
-  const margen = n.recibis - f.costo;
+  const n = _netoFila(f), c = mercCostoPesos(f);
+  if(!n || !(c > 0)) return null;
+  const margen = n.recibis - c;
   return {margen, pct: margen/n.precio*100};
+}
+function mercMonedaFila(i, v){
+  const f = mercBusq.filas[i]; if(!f) return;
+  f.moneda = v === "usd" ? "usd" : "ars";
+  try{ localStorage.setItem("nexo_merc_moneda", f.moneda); }catch(e){}
+  mercCostoFila(i, f.costo || "");
+}
+function _mercEqPesos(f){
+  if(f.moneda !== "usd" || !(f.costo > 0)) return "";
+  const d = mercDolarValor();
+  return d > 0 ? `= $${fmt(f.costo*d)}` : `<span style="color:var(--orange);">falta el dólar</span>`;
 }
 function mercCostoFila(i, v){
   const f = mercBusq.filas[i]; if(!f) return;
   f.costo = _num(v) || null;
   const m = _calcMargenFila(f), rm = _recMargen(m ? m.pct : null);
   const tr = document.getElementById("mercBusqFila"+i); if(!tr) return;
+  const eq = tr.querySelector(".mb-eq"); if(eq) eq.innerHTML = _mercEqPesos(f);
   tr.querySelector(".mb-gan").innerHTML = m ? `<span class="${m.margen>=0?"num-pos":"num-neg"}">$${fmt(m.margen)}</span>` : "—";
   tr.querySelector(".mb-pct").textContent = m ? m.pct.toFixed(1)+"%" : "—";
   tr.querySelector(".mb-rec").innerHTML = m ? `<span class="badge ${rm.cls}">${rm.rec}</span>` : "";
@@ -4385,14 +4479,14 @@ function renderMercBusqueda(){
     return `<tr id="mercBusqFila${i}" ${f.sinVendedores?'style="opacity:.55;"':""}>
       <td style="min-width:260px;"><div style="display:flex;gap:8px;align-items:center;">
         ${f.thumb?`<img src="${esc(f.thumb)}" alt="" style="width:40px;height:40px;object-fit:contain;background:#fff;border-radius:6px;flex:none;">`:""}
-        <div><a href="${esc(f.link)}" target="_blank" rel="noopener">${esc(f.nombre)}</a><div style="font-size:10px;color:var(--text-soft);">${esc(f.id)}</div></div></div></td>
+        <div><a href="${esc(f.link)}" target="_blank" rel="noopener">${esc(f.nombre)}</a><div style="font-size:10px;color:var(--text-soft);">${esc(f.id)}${f.marca?` · ${esc(f.marca)}`:""}${f.sku?` · <strong>SKU ${esc(f.sku)}</strong>`:""}${f.porNombre?` <span title="Tu producto no está vinculado a un producto de catálogo de ML: se buscó por su nombre">(por nombre)</span>`:""}</div></div></div></td>
       <td class="num">${f.precioMin?"$"+fmt(f.precioMin):"—"}${f.precioMax&&f.precioMax>f.precioMin?`<div style="font-size:10px;color:var(--text-soft);">hasta $${fmt(f.precioMax)}</div>`:""}</td>
       <td class="num">${f.sinVendedores?`<span class="badge badge-gray">Sin vendedores</span>`:f.vendedores}</td>
       <td class="num">${f.comision!=null?"$"+fmt(f.comision)+`<div style="font-size:10px;color:var(--text-soft);">${(f.comision/f.precioMin*100).toFixed(1)}%</div>`:"—"}</td>
       <td class="num" style="color:var(--orange);">${envCel}</td>
       <td class="num" style="color:var(--orange);">${impCel}</td>
       <td class="num" style="font-weight:700;" title="${tip}">${recibis!=null?"$"+fmt(recibis):"—"}</td>
-      <td>${f.sinVendedores?"":`<input type="number" min="0" step="100" placeholder="$" value="${f.costo||""}" oninput="mercCostoFila(${i}, this.value)" style="width:90px;padding:5px 7px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;background:transparent;color:inherit;">`}</td>
+      <td style="white-space:nowrap;">${f.sinVendedores?"":`<select onchange="mercMonedaFila(${i}, this.value)" title="Moneda de tu costo" style="padding:5px 2px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;background:transparent;color:inherit;"><option value="ars"${f.moneda!=="usd"?" selected":""}>$</option><option value="usd"${f.moneda==="usd"?" selected":""}>US$</option></select><input type="number" min="0" step="any" placeholder="costo" value="${f.costo||""}" oninput="mercCostoFila(${i}, this.value)" style="width:84px;padding:5px 7px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;background:transparent;color:inherit;margin-left:3px;"><div class="mb-eq" style="font-size:10px;color:var(--text-soft);">${_mercEqPesos(f)}</div>`}</td>
       <td class="num mb-gan">${m?`<span class="${m.margen>=0?"num-pos":"num-neg"}">$${fmt(m.margen)}</span>`:"—"}</td>
       <td class="num mb-pct">${m?m.pct.toFixed(1)+"%":"—"}</td>
       <td class="mb-rec">${m?`<span class="badge ${rm.cls}">${rm.rec}</span>`:""}</td>
@@ -4402,12 +4496,74 @@ function renderMercBusqueda(){
 }
 function mercExportarBusqueda(){
   if(!mercBusq.filas.length){ toast("Primero buscá un producto.","err"); return; }
-  const filas = mercBusq.filas.map(f=>{ const m=_calcMargenFila(f), n=_netoFila(f); return {"Producto":f.nombre, "ID":f.id, "Precio más bajo":f.precioMin||null, "Precio más alto":f.precioMax||null,
+  const filas = mercBusq.filas.map(f=>{ const m=_calcMargenFila(f), n=_netoFila(f); return {"Producto":f.nombre, "ID":f.id, "Marca":f.marca||"", "SKU":f.sku||"", "Precio más bajo":f.precioMin||null, "Precio más alto":f.precioMax||null,
     "Vendedores":f.sinVendedores?0:f.vendedores, "Comisión Clásica":f.comision??null, "Envío":n?Math.round(n.envio):null, "Impuesto":n?Math.round(n.impuesto):null, "Percepción":n?Math.round(n.percepcion):null, "Recibís neto":n?Math.round(n.recibis):null,
-    "Mi costo":f.costo||null, "Ganancia":m?Math.round(m.margen):null, "Margen %":m?Math.round(m.pct*10)/10:null, "Link":f.link}; });
+    "Moneda costo":f.moneda==="usd"?"US$":"$", "Mi costo":f.costo||null, "Dólar usado":f.moneda==="usd"?mercDolarValor()||null:null, "Mi costo en $":mercCostoPesos(f)?Math.round(mercCostoPesos(f)):null, "Ganancia":m?Math.round(m.margen):null, "Margen %":m?Math.round(m.pct*10)/10:null, "Link":f.link}; });
   const ws = XLSX.utils.json_to_sheet(filas); const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Búsqueda");
   XLSX.writeFile(wb, "NEXO_busqueda_"+mercBusq.q.replace(/[^\w]+/g,"_").slice(0,30)+".xlsx");
+}
+function mercModoPlaceholder(){
+  const m = (document.getElementById("mercBuscarModo")||{}).value || "auto";
+  const ph = {auto:"Título, EAN, marca, SKU o código MLA…", titulo:"Ej: reflector led 10w, auriculares bluetooth…", ean:"Ej: 7791234567890", marca:"Ej: Noak, Philips, Samsung…", sku:"SKU de tu Catálogo, ej: PR3", codigo:"Ej: MLA76007460"};
+  const i = document.getElementById("mercBuscarProd"); if(i) i.placeholder = ph[m] || ph.auto;
+}
+
+// ── Dólar del día (dolarapi.com, cotización de venta) para costos en US$ ──
+const MERC_DOLAR_TIPOS = {oficial:"Oficial", blue:"Blue", bolsa:"MEP", contadoconliqui:"CCL", mayorista:"Mayorista", tarjeta:"Tarjeta"};
+let mercDolar = {cotiz:null, at:null, manual:null, cargando:false};
+function mercDolarTipo(){ const t = appConfig && appConfig.dolar_tipo; return MERC_DOLAR_TIPOS[t] ? t : "oficial"; }
+function mercDolarValor(){
+  if(mercDolar.manual > 0) return mercDolar.manual;
+  const c = mercDolar.cotiz && mercDolar.cotiz[mercDolarTipo()];
+  return c ? c.venta : 0;
+}
+let _mercDolarProm = null;
+async function mercDolarCargar(forzar){
+  if(_mercDolarProm){ await _mercDolarProm; if(!forzar) return; }
+  if(mercDolar.cotiz && !forzar && Date.now()-mercDolar.at < 30*60*1000) return;
+  _mercDolarProm = _mercDolarTraer(forzar);
+  try{ await _mercDolarProm; } finally { _mercDolarProm = null; }
+}
+async function _mercDolarTraer(forzar){
+  mercDolar.cargando = true; mercDolarPintar();
+  try{
+    const r = await fetch("https://dolarapi.com/v1/dolares");
+    const d = await r.json();
+    const c = {};
+    (Array.isArray(d)?d:[]).forEach(x=>{ if(x && x.casa && Number(x.venta)>0) c[x.casa] = {venta:Number(x.venta), compra:Number(x.compra)||null, fecha:x.fechaActualizacion}; });
+    if(Object.keys(c).length){ mercDolar.cotiz = c; mercDolar.at = Date.now(); }
+  }catch(e){ /* sin conexión: se puede cargar a mano */ }
+  mercDolar.cargando = false;
+  if(forzar) mercDolar.manual = null;
+  mercDolarPintar(); renderMercBusqueda();
+}
+function mercDolarIniciar(){
+  const sel = document.getElementById("mercDolarTipo");
+  if(sel && !sel.dataset.ini){ sel.dataset.ini = "1"; sel.innerHTML = Object.entries(MERC_DOLAR_TIPOS).map(([k,v])=>`<option value="${k}">${v}</option>`).join(""); }
+  if(sel) sel.value = mercDolarTipo();
+  mercDolarPintar();
+  mercDolarCargar(false);
+}
+function mercDolarPintar(){
+  const inp = document.getElementById("mercDolarValor"), info = document.getElementById("mercDolarInfo");
+  if(inp && document.activeElement!==inp){ const v = mercDolarValor(); inp.value = v ? Math.round(v*100)/100 : ""; }
+  if(!info) return;
+  const c = mercDolar.cotiz && mercDolar.cotiz[mercDolarTipo()];
+  info.innerHTML = mercDolar.cargando ? "⏳" : mercDolar.manual > 0 ? `<span title="Valor cargado a mano. Tocá 🔄 para volver a la cotización del día.">a mano</span>`
+    : c ? `<span title="Cotización de venta · dolarapi.com">venta ${c.fecha ? new Date(c.fecha).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "hoy"}</span>`
+    : `<span style="color:var(--orange);" title="No se pudo traer la cotización. Cargala a mano.">sin cotización</span>`;
+}
+async function mercDolarCambiarTipo(t){
+  if(!MERC_DOLAR_TIPOS[t]) return;
+  appConfig.dolar_tipo = t; mercDolar.manual = null;
+  if(!(typeof esAdmin==="function" && !esAdmin())) await sbGuardar("config", {key:"dolar_tipo", value:t}).catch(()=>{});
+  mercDolarPintar(); renderMercBusqueda();
+}
+function mercDolarManual(v){
+  const n = parseFloat(String(v).replace(",", "."));
+  mercDolar.manual = n > 0 ? n : null;
+  mercDolarPintar(); renderMercBusqueda();
 }
 
 // ================================================================
