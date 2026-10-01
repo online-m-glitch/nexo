@@ -132,6 +132,15 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 }
 .nav-item .icon{font-size:16px;width:20px;text-align:center;}
 a.nav-item{text-decoration:none;}
+.overlay.fml-vacia{display:none!important;}
+.fml-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+.fml-tabs button{padding:9px 16px;border-radius:9px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-weight:600;font-size:13px;cursor:pointer;}
+.fml-tabs button.active{background:var(--brand-primario, var(--ml-blue));border-color:transparent;color:#fff;}
+.fml-pane{display:none;padding:20px;}
+.fml-pane.active{display:block;}
+.fml-embebida{max-width:none!important;width:auto!important;max-height:none!important;overflow:visible!important;box-shadow:none!important;padding:0!important;background:transparent!important;}
+.fml-embebida > .modal-x, .fml-embebida button[onclick^="cerrar"]{display:none!important;}
+.fml-extra summary{cursor:pointer;font-size:13px;color:var(--text-soft);padding:8px 0;}
 .stat-card .sub{font-size:11px;color:var(--text-soft);margin-top:4px;}
 .sidebar-footer{
   margin-top:auto;padding:16px 20px;border-top:1px solid color-mix(in srgb, var(--brand-oscuro-txt) 8%, transparent);
@@ -609,6 +618,9 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
     <a class="nav-item" href="#alertas" data-sec="alertas" onclick="return navClick(event,'alertas')">
       <span class="icon">⚠️</span> Alertas
     </a>
+    <a class="nav-item" href="#fullml" data-sec="fullml" onclick="return navClick(event,'fullml')">
+      <span class="icon">🚀</span> Full ML
+    </a>
     <div class="nav-section">Operaciones</div>
     <a class="nav-item" href="#movimientos" data-sec="movimientos" onclick="return navClick(event,'movimientos')">
       <span class="icon">↕️</span> Movimientos
@@ -813,7 +825,6 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
                 ⬆️ Importar stock CSV / ML
                 <input type="file" id="stockImportInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="importarStockCSV(this)">
               </label>
-              <button class="btn btn-ghost" onclick="abrirEtiquetasFull()" title="Imprimir las etiquetas de producto para mandar a Full">🏷️ Etiquetas Full</button>
             </div>
             <div style="font-size:12px;color:var(--text-soft);">
               CSV propio: <strong>SKU · Stock Depósito · Stock Full ML</strong> &nbsp;|&nbsp; O subí la <strong>planilla Publicaciones de ML</strong> (.xlsx) — importa el stock Full ML y precios automáticamente
@@ -848,10 +859,65 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>SKU</th><th>Producto</th><th>Proveedor</th><th title="Stock físico en tu depósito propio">Stock Depósito</th><th title="Stock disponible en el Full de MercadoLibre">Stock Full</th><th title="Depósito + Full — es la que se compara contra el mínimo">Total</th><th>Mín</th><th>Diferencia</th><th>Costo repo ($)</th><th>Estado</th></tr></thead>
+              <thead><tr><th>SKU</th><th>Producto</th><th>Proveedor</th><th title="Stock físico en tu depósito propio">Stock Depósito</th><th title="Stock disponible en el Full de MercadoLibre">Stock Full</th><th title="Depósito + Full — es la que se compara contra el mínimo">Total</th><th>Mín</th><th>Diferencia</th><th title="Pedido a proveedor y todavía no ingresado (borrador, aprobado o enviado). Pasá el mouse para ver el detalle.">Pedido en camino</th><th title="Lo que falta pedir: mínimo − total − en camino">A pedir</th><th title="Costo de lo que falta pedir">Costo repo ($)</th><th>Estado</th></tr></thead>
               <tbody id="alertasBody"></tbody>
             </table>
             <div class="empty" id="alertasEmpty" style="display:none;"><div class="icon">✅</div><p>Todo el stock está por encima del mínimo.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== FULL ML ========== -->
+    <div id="sec-fullml" class="section">
+      <div class="page-header">
+        <div><h2>Full ML</h2><div class="sub">Todo lo de Full en un lugar: qué mandar, pedidos a proveedores, etiquetas, envíos y stock real en Full</div></div>
+      </div>
+      <div style="padding:24px;">
+        <div class="fml-tabs" id="fmlTabs">
+          <button data-tab="planif" onclick="fullTab('planif')">📊 Planificación</button>
+          <button data-tab="etiquetas" onclick="fullTab('etiquetas')">🏷️ Etiquetas</button>
+          <button data-tab="envios" onclick="fullTab('envios')">🚚 Envíos</button>
+          <button data-tab="stock" onclick="fullTab('stock')">📦 Stock en Full</button>
+        </div>
+        <div class="fml-pane card" id="fmlPane-planif">
+          <div class="fml-slot" id="fmlSlot-planif"></div>
+          <details class="fml-extra" style="margin-top:14px;">
+            <summary>Otra opción: armar el pedido a proveedores desde el PDF de un envío a Full</summary>
+            <div class="fml-slot" id="fmlSlot-pdfpedido"></div>
+          </details>
+        </div>
+        <div class="fml-pane card" id="fmlPane-etiquetas">
+          <div class="fml-slot" id="fmlSlot-etiquetas"></div>
+        </div>
+        <div class="fml-pane card" id="fmlPane-envios">
+          <div class="fml-slot" id="fmlSlot-envios"></div>
+          <h3 style="margin:22px 0 10px;font-size:15px;">Envíos registrados</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Fecha</th><th>Envío</th><th>Productos</th><th>Unidades</th><th>Detalle</th></tr></thead>
+              <tbody id="fmlEnviosBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="fml-pane card" id="fmlPane-stock">
+          <h3 style="margin:0 0 6px;font-size:16px;">📦 Stock en Full</h3>
+          <p style="font-size:13px;color:var(--text-soft);margin:0 0 12px;">
+            Compará lo que NEXO tiene registrado en Full con el stock <strong>real</strong> que informa MercadoLibre para cada código de inventario.
+            "Disponible" es lo que ML puede vender; "No disponible" son unidades en Full que no se pueden vender (dañadas, en revisión, etc.).
+          </p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+            <button class="btn btn-primary" id="btnFmlSync" onclick="fullSyncStock()">🔄 Traer stock real de ML</button>
+            <button class="btn btn-ghost admin-only" id="btnFmlAplicar" onclick="fullAplicarTodo()" disabled>✔ Aplicar las diferencias a NEXO</button>
+            <input class="search-input" type="text" id="fmlStockBuscar" placeholder="Buscar SKU o producto…" oninput="renderFullStock()" style="width:220px;">
+            <label style="font-size:12px;color:var(--text-soft);"><input type="checkbox" id="fmlSoloDif" onchange="renderFullStock()"> Solo con diferencias</label>
+            <span id="fmlStockInfo" style="font-size:12px;color:var(--text-soft);"></span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>SKU</th><th>Producto</th><th>Código Full</th><th>Depósito</th><th>Full en NEXO</th><th>Full real ML (disponible)</th><th>No disponible</th><th>Diferencia</th><th></th></tr></thead>
+              <tbody id="fmlStockBody"></tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -861,9 +927,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
     <div id="sec-movimientos" class="section">
       <div class="page-header">
         <div><h2>Movimientos</h2><div class="sub">Ingresos, ventas, bajas y ajustes</div></div>
-        <button class="btn btn-ghost btn-sm admin-only" onclick="abrirImportadorFullML()" title="Importar PDF de envío a Full ML">
-          📄 Importar envío a Full ML
-        </button>
+
       </div>
       <div style="padding:24px;">
         <div class="card" style="margin-bottom:20px;">
@@ -2520,8 +2584,6 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
       <div class="page-header">
         <div><h2>Pedidos a Proveedores</h2><div class="sub">Órdenes de compra a proveedores</div></div>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-primary admin-only" onclick="abrirPlanifFull()" title="Subí el Reporte de Planificación de Full (Excel): compara lo sugerido con tu depósito y lo pedido, y arma pedidos en borrador por proveedor">📊 Planificación Full</button>
-          <button class="btn btn-ghost admin-only" onclick="abrirImportadorPedidoFullML()" title="Subí el PDF de instrucciones de preparación de un envío a Full ML — compara lo pedido contra tu stock de depósito y arma pedidos por lo que falta">📥 Importar PDF Full ML</button>
           <button class="btn btn-primary admin-only" onclick="generarPedidoReposicion()">📋 Generar pedido de reposición</button>
         </div>
       </div>
@@ -5853,6 +5915,195 @@ async function etqCargarReporte(input){
     else toast(`Cargado desde el reporte: ${n} producto(s)${sinCod?` · ${sinCod} sin "Código ML"`:""}. Revisá las cantidades antes de imprimir.`,"ok",5000);
   }catch(e){ toast("No se pudo leer el archivo: "+e.message,"err",6000); }
 }
+// ================================================================
+// Sección "Full ML": Planificación · Etiquetas · Envíos · Stock en Full
+// Las pantallas que antes eran ventanas (planificación, etiquetas, importador de
+// envíos y pedido desde PDF) se muestran acá adentro, cada una en su pestaña.
+// ================================================================
+const FML_VENTANAS = {planif:"modalPlanifFull", etiquetas:"modalEtiquetas", envios:"modalFullML", pdfpedido:"modalImportPedidoFullML"};
+let _fmlMontado = false, _fmlTab = "planif", _fmlIniciado = {};
+
+function fullMontar(){
+  if(_fmlMontado) return;
+  Object.entries(FML_VENTANAS).forEach(([slot, id])=>{
+    const ov = document.getElementById(id), dest = document.getElementById("fmlSlot-"+slot);
+    const m = ov && ov.querySelector(".modal");
+    if(m && dest){ m.classList.add("fml-embebida"); dest.appendChild(m); ov.classList.add("fml-vacia"); }
+  });
+  _fmlMontado = true;
+}
+function fullTab(tab){
+  fullMontar();
+  _fmlTab = tab;
+  document.querySelectorAll("#fmlTabs button").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
+  document.querySelectorAll("#sec-fullml .fml-pane").forEach(p=>p.classList.toggle("active", p.id==="fmlPane-"+tab));
+  try{ localStorage.setItem("nexo_fml_tab", tab); }catch(e){}
+  if(!_fmlIniciado[tab]){
+    _fmlIniciado[tab] = true;
+    if(tab==="etiquetas" && !etqLineas.length) _abrirEtiquetasOrig();
+    if(tab==="envios") _abrirImportadorFullMLOrig();
+  }
+  if(tab==="planif" && !_fmlIniciado.pdfpedido){ _fmlIniciado.pdfpedido = true; _abrirImportadorPedidoFullMLOrig(); }
+  if(tab==="envios") renderFullEnvios();
+  if(tab==="stock") renderFullStock();
+  ["modalPlanifFull","modalEtiquetas","modalFullML","modalImportPedidoFullML"].forEach(id=>document.getElementById(id)?.classList.remove("show"));
+}
+function irAFull(tab){
+  const sec = document.getElementById("sec-fullml");
+  if(!sec.classList.contains("active")) mostrarSeccion("fullml");
+  fullTab(tab);
+}
+function renderFullML(){
+  let t = _fmlTab; try{ t = localStorage.getItem("nexo_fml_tab") || t; }catch(e){}
+  fullTab(t);
+}
+
+// Las funciones que antes abrían ventanas ahora llevan a la pestaña correspondiente
+const _abrirPlanifOrig = abrirPlanifFull;
+abrirPlanifFull = function(){ _abrirPlanifOrig(); irAFull("planif"); };
+const _abrirEtiquetasOrig = abrirEtiquetasFull;
+abrirEtiquetasFull = async function(lineas){ irAFull("etiquetas"); _fmlIniciado.etiquetas = true; await _abrirEtiquetasOrig(lineas); };
+const _abrirImportadorFullMLOrig = abrirImportadorFullML;
+abrirImportadorFullML = function(){ _abrirImportadorFullMLOrig(); irAFull("envios"); };
+const _abrirImportadorPedidoFullMLOrig = abrirImportadorPedidoFullML;
+abrirImportadorPedidoFullML = function(){ _abrirImportadorPedidoFullMLOrig(); irAFull("planif"); const d=document.querySelector("#fmlPane-planif .fml-extra"); if(d) d.open = true; };
+// Al confirmar un envío, dejar el importador limpio y actualizar la lista
+const _cerrarModalFullMLOrig = cerrarModalFullML;
+cerrarModalFullML = function(){ _cerrarModalFullMLOrig(); try{ _abrirImportadorFullMLOrig(); document.getElementById("modalFullML").classList.remove("show"); }catch(e){} renderFullEnvios(); };
+// Al crear borradores desde la planificación, la pantalla queda en la pestaña (antes se cerraba la ventana)
+const _cerrarPlanifOrig = cerrarPlanifFull;
+cerrarPlanifFull = function(){ _cerrarPlanifOrig(); };
+
+// ── Envíos registrados (movimientos "Envío a Full") ──
+function renderFullEnvios(){
+  const tb = document.getElementById("fmlEnviosBody"); if(!tb) return;
+  const grupos = {};
+  (movimientos||[]).filter(m=>m.tipo==="Envío a Full").forEach(m=>{
+    const nro = ((m.obs||"").match(/Env[ií]o #\s*([\w-]+)/)||[])[1] || "";
+    const k = (m.fecha||"")+"|"+nro;
+    const g = grupos[k] || (grupos[k] = {fecha:m.fecha, nro, items:{}, unidades:0});
+    g.items[m.sku] = (g.items[m.sku]||0) + (Number(m.cantidad)||0);
+    g.unidades += Number(m.cantidad)||0;
+  });
+  const lista = Object.values(grupos).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+  tb.innerHTML = lista.slice(0,100).map(g=>{
+    const det = Object.entries(g.items).map(([s,q])=>`${esc(s)} ×${q}`).join(" · ");
+    return `<tr><td>${fFecha(g.fecha)}</td><td>${g.nro?"#"+esc(g.nro):'<span style="color:var(--text-soft);">—</span>'}</td>
+      <td class="num">${Object.keys(g.items).length}</td><td class="num" style="font-weight:700;">${g.unidades}</td>
+      <td style="font-size:11px;color:var(--text-soft);max-width:520px;">${det}</td></tr>`;
+  }).join("") || `<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--text-soft);">Todavía no hay envíos a Full registrados.</td></tr>`;
+}
+
+// ── Stock real en Full (API de ML: /inventories/{id}/stock/fulfillment) ──
+let fmlStockReal = {};   // SKU (mayúsculas) → {codigos:[], disponible, noDisponible, detalle:[]}
+let fmlStockAt = null;
+async function fullInventariosPorSku(){
+  const pubs = await sbGet("nexo_ml_publicaciones", "select=sku,ml_item_id,variacion_id,logistic_type").catch(()=>[]);
+  const porSku = {}, ids = new Set();
+  (pubs||[]).filter(p=>p.sku && p.logistic_type==="fulfillment").forEach(p=>{
+    const k = p.sku.toUpperCase(); (porSku[k]=porSku[k]||[]).push({item:p.ml_item_id, variacion:p.variacion_id||null}); ids.add(p.ml_item_id);
+  });
+  productos.filter(p=>p.ml_item_id).forEach(p=>{
+    const k = p.sku.toUpperCase();
+    if(!(porSku[k]||[]).some(x=>x.item===p.ml_item_id)){ (porSku[k]=porSku[k]||[]).push({item:p.ml_item_id, variacion:null}); ids.add(p.ml_item_id); }
+  });
+  const items = {}, todos = [...ids];
+  for(let i=0;i<todos.length;i+=20){
+    const r = await mlGet("/items?ids="+todos.slice(i,i+20).join(",")+"&attributes=id,inventory_id,variations,shipping");
+    if(!r.ok) throw new Error(_mlError(r));
+    (Array.isArray(r.data)?r.data:[]).forEach(x=>{ if(x.code===200 && x.body) items[x.body.id]=x.body; });
+  }
+  const res = {};
+  Object.entries(porSku).forEach(([k, lista])=>{
+    const cods = new Set();
+    lista.forEach(c=>{
+      const it = items[c.item]; if(!it) return;
+      if(it.variations && it.variations.length){
+        it.variations.forEach(v=>{ if(v.inventory_id && (!c.variacion || String(v.id)===String(c.variacion))) cods.add(v.inventory_id); });
+      } else if(it.inventory_id) cods.add(it.inventory_id);
+    });
+    if(cods.size) res[k] = [...cods];
+  });
+  return res;
+}
+async function fullSyncStock(){
+  const btn = document.getElementById("btnFmlSync");
+  btn.disabled = true; btn.textContent = "⏳ Consultando ML…";
+  try{
+    const cods = await fullInventariosPorSku();
+    const todos = [...new Set(Object.values(cods).flat())];
+    const stock = {};
+    for(let i=0;i<todos.length;i++){
+      btn.textContent = `⏳ Consultando ML… ${i+1}/${todos.length}`;
+      const r = await mlGet("/inventories/"+encodeURIComponent(todos[i])+"/stock/fulfillment");
+      if(r.ok) stock[todos[i]] = r.data;
+      else if(r.status===401){ throw new Error("La conexión con MercadoLibre venció. Reconectá la cuenta."); }
+    }
+    fmlStockReal = {};
+    Object.entries(cods).forEach(([k, lista])=>{
+      const s = {codigos:lista, disponible:0, noDisponible:0, detalle:[]};
+      lista.forEach(c=>{ const d = stock[c]; if(!d) return;
+        s.disponible += Number(d.available_quantity)||0; s.noDisponible += Number(d.not_available_quantity)||0;
+        (d.not_available_detail||[]).forEach(x=>s.detalle.push((x.status||"")+": "+(x.quantity||0))); });
+      fmlStockReal[k] = s;
+    });
+    fmlStockAt = new Date().toISOString();
+    renderFullStock();
+    toast(`Stock de Full traído de ML: ${Object.keys(fmlStockReal).length} producto(s) ✅`,"ok",4000);
+  }catch(e){ toast("No se pudo traer el stock de Full: "+e.message,"err",7000); }
+  btn.disabled = false; btn.textContent = "🔄 Traer stock real de ML";
+}
+function renderFullStock(){
+  const tb = document.getElementById("fmlStockBody"); if(!tb) return;
+  const q = (document.getElementById("fmlStockBuscar")?.value||"").toLowerCase().trim();
+  const soloDif = document.getElementById("fmlSoloDif")?.checked;
+  const hay = Object.keys(fmlStockReal).length > 0;
+  let difs = 0;
+  const filas = productos.filter(p=>p.ml_item_id || fmlStockReal[p.sku.toUpperCase()]).map(p=>{
+    const k = p.sku.toUpperCase(), real = fmlStockReal[k], nexo = calcularStockFullML(p.sku);
+    const dif = real ? real.disponible - nexo : null;
+    if(dif) difs++;
+    return {p, real, nexo, dif, dep:calcularStockDeposito(p.sku)};
+  }).filter(f=>{
+    if(q && !(f.p.sku+" "+(f.p.nombre||"")).toLowerCase().includes(q)) return false;
+    if(soloDif && !f.dif) return false;
+    return true;
+  }).sort((a,b)=>Math.abs(b.dif||0)-Math.abs(a.dif||0) || a.p.sku.localeCompare(b.p.sku));
+  tb.innerHTML = filas.map(f=>`<tr>
+      <td><span class="sku-tag">${esc(f.p.sku)}</span></td>
+      <td style="font-size:12px;max-width:240px;">${esc(f.p.nombre||"")}</td>
+      <td style="font-family:monospace;font-size:12px;">${f.real?esc(f.real.codigos.join(", ")):'<span style="color:var(--text-soft);">—</span>'}</td>
+      <td class="num">${f.dep}</td>
+      <td class="num" style="color:var(--ml-blue);font-weight:700;">${f.nexo}</td>
+      <td class="num" style="font-weight:700;">${f.real?f.real.disponible:(hay?'<span style="color:var(--text-soft);" title="Sin publicación en Full">—</span>':'<span style="color:var(--text-soft);">?</span>')}</td>
+      <td class="num" title="${f.real?esc(f.real.detalle.join(" · ")):""}" style="${f.real&&f.real.noDisponible?'color:var(--orange);font-weight:700;':'color:var(--text-soft);'}">${f.real?(f.real.noDisponible||"—"):""}</td>
+      <td class="num" style="font-weight:700;color:${f.dif>0?'var(--green)':f.dif<0?'var(--red)':'var(--text-soft)'};">${f.dif==null?"":(f.dif>0?"+":"")+f.dif}</td>
+      <td>${f.dif?`<button class="btn btn-ghost btn-sm admin-only" onclick="fullAplicar('${esc(f.p.sku)}')" title="Poner en NEXO el stock real de ML">Usar ${f.real.disponible}</button>`:""}</td>
+    </tr>`).join("") || `<tr><td colspan="9" style="text-align:center;padding:18px;color:var(--text-soft);">${soloDif?"No hay diferencias.":"Sin productos vinculados a MercadoLibre."}</td></tr>`;
+  document.getElementById("fmlStockInfo").textContent = hay ? `Traído de ML ${fFecha(fmlStockAt)} · ${difs} con diferencias` : "Tocá «Traer stock real de ML» para comparar.";
+  document.getElementById("btnFmlAplicar").disabled = !difs;
+  if(typeof esAdmin==="function" && !esAdmin()) document.querySelectorAll("#fmlPane-stock .admin-only").forEach(el=>el.style.display="none");
+}
+async function fullAplicar(sku, silencioso){
+  if(checkViewer("Ajustar stock Full ML")) return false;
+  const real = fmlStockReal[sku.toUpperCase()]; if(!real) return false;
+  try{
+    stockML[sku.toUpperCase()] = real.disponible;
+    await sbGuardar("stockml", {sku:sku.toUpperCase(), cantidad:real.disponible});
+    if(!silencioso){ renderFullStock(); if(typeof renderStock==="function") renderStock(); toast(`Full ML de ${sku} → ${real.disponible} ✅`,"ok"); }
+    return true;
+  }catch(e){ toast("Error guardando: "+e.message,"err"); return false; }
+}
+async function fullAplicarTodo(){
+  if(checkViewer("Ajustar stock Full ML")) return;
+  const lista = productos.filter(p=>{ const r = fmlStockReal[p.sku.toUpperCase()]; return r && r.disponible !== calcularStockFullML(p.sku); });
+  if(!lista.length) return;
+  mostrarCargando(true);
+  let ok = 0; for(const p of lista){ if(await fullAplicar(p.sku, true)) ok++; }
+  mostrarCargando(false);
+  renderFullStock(); if(typeof renderStock==="function") renderStock();
+  toast(`Stock Full actualizado con el de ML: ${ok} producto(s) ✅`,"ok",5000);
+}
 
 // ================================================================
 // SUPERADMIN NEXO
@@ -7257,8 +7508,9 @@ function renderAlertas(){
     const dep=calcularStockDeposito(p.sku), full=calcularStockFullML(p.sku);
     const total=dep+full, min=p.stockMin||0;
     const dif=total-min, urgente=total<=0;
-    const costoRepo=Math.abs(dif)*(p.costo||0);
-    return `<tr class="${urgente?'alerta-urgente':'alerta-bajo'}">
+    const camino=cantidadPendientePedido(p.sku), aPedir=Math.max(0,min-total-camino), cubierto=aPedir===0;
+    const costoRepo=aPedir*(p.costo||0);
+    return `<tr class="${cubierto?'':(urgente?'alerta-urgente':'alerta-bajo')}">
       <td><span class="sku-tag">${esc(p.sku)}</span></td>
       <td>${esc(p.nombre)}</td>
       <td>${esc(p.proveedor||"")}</td>
@@ -7267,8 +7519,10 @@ function renderAlertas(){
       <td class="num ${total<=0?'num-neg':'num-orange'}" style="font-weight:700;">${total}</td>
       <td class="num">${min}</td>
       <td class="num num-neg">${dif}</td>
-      <td class="num">$${fmt(costoRepo)}</td>
-      <td><span class="badge ${urgente?'badge-red':'badge-orange'}">${urgente?'REPONER URGENTE':'Bajo mínimo'}</span></td>
+      ${celdaPedidoPendiente(p.sku)}
+      <td class="num" style="font-weight:700;${aPedir?'color:var(--red);':'color:var(--text-soft);'}">${aPedir||"—"}</td>
+      <td class="num">${aPedir?"$"+fmt(costoRepo):"—"}</td>
+      <td>${cubierto?'<span class="badge badge-blue" title="Lo que falta ya está pedido al proveedor">🚚 Cubierto con pedido</span>':`<span class="badge ${urgente?'badge-red':'badge-orange'}">${urgente?'REPONER URGENTE':'Bajo mínimo'}</span>`}</td>
     </tr>`;
   }).join("");
 }
@@ -7280,15 +7534,17 @@ function exportarAlertasExcel(){
     const dep=calcularStockDeposito(p.sku), full=calcularStockFullML(p.sku);
     const total=dep+full, min=p.stockMin||0;
     const dif=total-min, urgente=total<=0;
-    const costoRepo=Math.abs(dif)*(p.costo||0);
+    const camino=cantidadPendientePedido(p.sku), aPedir=Math.max(0,min-total-camino);
+    const costoRepo=aPedir*(p.costo||0);
     return {
       "SKU":p.sku, "Producto":p.nombre, "Proveedor":p.proveedor||"",
       "Stock Depósito":dep, "Stock Full":full, "Total":total, "Mín":min, "Diferencia":dif,
-      "Costo repo ($)":costoRepo, "Estado":urgente?"REPONER URGENTE":"Bajo mínimo"
+      "Pedido en camino":camino, "A pedir":aPedir,
+      "Costo repo ($)":costoRepo, "Estado":aPedir===0?"Cubierto con pedido":(urgente?"REPONER URGENTE":"Bajo mínimo")
     };
   });
   const ws=XLSX.utils.json_to_sheet(filas);
-  ws["!cols"]=[{wch:14},{wch:40},{wch:16},{wch:14},{wch:10},{wch:8},{wch:8},{wch:12},{wch:14},{wch:16}];
+  ws["!cols"]=[{wch:14},{wch:40},{wch:16},{wch:14},{wch:10},{wch:8},{wch:8},{wch:12},{wch:14},{wch:10},{wch:14},{wch:20}];
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,"Alertas de Stock");
   XLSX.writeFile(wb,"origo_alertas_stock_"+new Date().toISOString().slice(0,10)+".xlsx");
@@ -8490,6 +8746,7 @@ async function mostrarSeccion(id){
   if(id==="mitienda") renderMiTienda();
   if(id==="stock"){ renderStock(); mostrarUltimaSync("stock","ultimaSyncStock"); }
   if(id==="alertas") renderAlertas();
+  if(id==="fullml") renderFullML();
   if(id==="movimientos") renderMovimientos();
   if(id==="cuentacorriente") renderCC();
   if(id==="compras"){ renderCompras(); actualizarSkuListCompras(); }
