@@ -2216,7 +2216,12 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
               <div class="toolbar" style="flex-wrap:wrap;">
                 <input class="search-input" type="text" id="mercBuscarProd" placeholder="Ej: reflector led 10w, auriculares bluetooth…" style="width:300px;" onkeydown="if(event.key==='Enter')mercBuscarProductos()">
                 <button class="btn btn-primary btn-sm" id="btnMercBuscarProd" onclick="mercBuscarProductos()">🔎 Buscar</button>
-                <label style="font-size:12px;color:var(--text-soft);white-space:nowrap;">Envío estimado $ <input type="number" id="mercBuscarEnvio" value="0" min="0" step="100" oninput="renderMercBusqueda()" style="width:80px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;"></label>
+                <label style="font-size:12px;color:var(--text-soft);white-space:nowrap;" title="Costo del envío gratis que paga el vendedor, calculado por MercadoLibre con las medidas de la categoría">Envío
+                  <select id="mercBuscarEnvioModo" onchange="mercEnvioModo(this.value)" style="padding:5px 6px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;background:transparent;color:inherit;">
+                    <option value="fulfillment">Full (cálculo ML)</option><option value="drop_off">Colecta / Correo (cálculo ML)</option><option value="manual">Manual</option></select>
+                  <input type="number" id="mercBuscarEnvio" value="0" min="0" step="100" oninput="renderMercBusqueda()" style="width:80px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;display:none;" placeholder="$"></label>
+                <label style="font-size:12px;color:var(--text-soft);white-space:nowrap;" title="Impuestos que se cobran por venta (ej. IIBB / retenciones). Es el mismo valor de Análisis ML.">Impuesto % <input type="number" id="mercBuscarImp" min="0" step="0.1" onchange="mercGuardarPct('impuesto_pct', this.value)" style="width:58px;padding:5px 6px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;"></label>
+                <label style="font-size:12px;color:var(--text-soft);white-space:nowrap;" title="Percepciones que ML te cobra al cierre del mes. Es el mismo valor de Análisis ML.">Percepción fin de mes % <input type="number" id="mercBuscarPer" min="0" step="0.1" onchange="mercGuardarPct('percepcion_pct', this.value)" style="width:58px;padding:5px 6px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;"></label>
                 <label style="font-size:12px;color:var(--text-soft);white-space:nowrap;"><input type="checkbox" id="mercBuscarSoloCon" onchange="renderMercBusqueda()" checked> Solo con vendedores</label>
               </div>
               <div id="mercBuscarEstado" style="font-size:12px;"></div>
@@ -2226,13 +2231,13 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
             <div class="card-header"><h3>Resultados</h3><button class="btn btn-ghost btn-sm" onclick="mercExportarBusqueda()">⬇️ Excel</button></div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Producto</th><th>Precio ML</th><th>Vendedores</th><th>Comisión</th><th title="Precio más bajo − comisión. Sin envío ni impuestos">Recibís</th><th>Tu costo</th><th>Ganancia</th><th>Margen %</th><th>Resultado</th></tr></thead>
-                <tbody id="mercBuscarBody"><tr><td colspan="9" style="text-align:center;color:var(--text-soft);padding:20px;">Buscá un producto para empezar</td></tr></tbody>
+                <thead><tr><th>Producto</th><th>Precio ML</th><th>Vendedores</th><th>Comisión</th><th title="Envío gratis a cargo del vendedor">Envío</th><th title="Impuesto + percepción de fin de mes (estimados)">Imp. + Perc.</th><th title="Precio más bajo − comisión − envío − impuesto − percepción">Recibís neto</th><th>Tu costo</th><th>Ganancia</th><th>Margen %</th><th>Resultado</th></tr></thead>
+                <tbody id="mercBuscarBody"><tr><td colspan="11" style="text-align:center;color:var(--text-soft);padding:20px;">Buscá un producto para empezar</td></tr></tbody>
               </table>
             </div>
             <div style="padding:12px 16px;"><button class="btn btn-ghost btn-sm" id="btnMercBuscarMas" style="display:none;" onclick="mercBuscarProductos(true)">Ver 20 más</button></div>
           </div>
-          <div style="font-size:11px;color:var(--text-soft);margin-top:8px;">Ganancia = precio más bajo − comisión − envío − impuesto − percepción − tu costo (impuesto y percepción se configuran en Análisis ML).</div>
+          <div style="font-size:11px;color:var(--text-soft);margin-top:8px;">Recibís neto = precio más bajo − comisión − envío − impuesto − percepción de fin de mes. Ganancia = recibís neto − tu costo. El envío lo calcula MercadoLibre con las medidas típicas de la categoría (puede variar con las medidas reales de tu producto). Impuesto y percepción son los mismos de Análisis ML: si los cambiás acá, cambian allá también.</div>
         </div>
 
         <!-- Más vendidos -->
@@ -3835,7 +3840,78 @@ function renderMercado(){
   const imp = Number(appConfig.impuesto_pct||0), per = Number(appConfig.percepcion_pct||0);
   const el = document.getElementById("mercProvImpuestos");
   if(el) el.textContent = "Impuesto "+imp+"% + Percepción "+per+"% (se configuran en Análisis ML)";
+  mercSyncPctInputs();
+  const modo = document.getElementById("mercBuscarEnvioModo");
+  if(modo && !modo.dataset.ini){ modo.dataset.ini = "1"; let v = "fulfillment"; try{ v = localStorage.getItem("nexo_merc_envio") || v; }catch(e){} modo.value = v; mercEnvioModo(v, true); }
 }
+function mercSyncPctInputs(){
+  const a = document.getElementById("mercBuscarImp"), b = document.getElementById("mercBuscarPer");
+  if(a && document.activeElement!==a) a.value = Number(appConfig.impuesto_pct||0);
+  if(b && document.activeElement!==b) b.value = Number(appConfig.percepcion_pct||0);
+}
+async function mercGuardarPct(clave, v){
+  if(checkViewer("Configurar impuestos")){ mercSyncPctInputs(); return; }
+  const val = Math.max(0, parseFloat(String(v).replace(",", "."))||0);
+  appConfig[clave] = val;
+  await sbGuardar("config", {key:clave, value:val}).catch(()=>{});
+  mercSyncPctInputs(); renderMercBusqueda();
+  try{ if(typeof renderAnalisis==="function" && document.getElementById("sec-analisis")?.classList.contains("active")) renderAnalisis(); }catch(e){}
+  toast((clave==="impuesto_pct"?"Impuesto":"Percepción")+" actualizado a "+val+"%","ok");
+}
+// ── Envío gratis a cargo del vendedor (calculado por ML con las medidas típicas de la categoría) ──
+let _mercUserId = null;
+const _mercDimCache = {}, _mercEnvioCache = {};
+async function mercUserId(){
+  if(_mercUserId) return _mercUserId;
+  const r = await mlGet("/users/me");
+  _mercUserId = (r.ok && r.data && r.data.id) ? String(r.data.id) : null;
+  return _mercUserId;
+}
+async function mercDimensiones(cat){
+  if(!cat) return null;
+  if(_mercDimCache[cat] !== undefined) return _mercDimCache[cat];
+  const r = await mlGet("/categories/"+cat+"/shipping_preferences");
+  const d = r.ok && r.data && r.data.dimensions;
+  _mercDimCache[cat] = (d && d.height && d.width && d.length && d.weight) ? `${d.length}x${d.width}x${d.height},${d.weight}` : null;
+  return _mercDimCache[cat];
+}
+async function mercCostoEnvio(cat, precio, logistica){
+  if(!cat || !(precio > 0)) return null;
+  const k = cat+"|"+Math.round(precio)+"|"+logistica;
+  if(_mercEnvioCache[k] !== undefined) return _mercEnvioCache[k];
+  const [uid, dims] = await Promise.all([mercUserId(), mercDimensiones(cat)]);
+  if(!uid || !dims){ _mercEnvioCache[k] = null; return null; }
+  const qs = new URLSearchParams({dimensions:dims, item_price:Math.round(precio), listing_type_id:"gold_special", mode:"me2", condition:"new", logistic_type:logistica});
+  const r = await mlGet("/users/"+uid+"/shipping_options/free?"+qs.toString());
+  const cov = r.ok && r.data && r.data.coverage && r.data.coverage.all_country;
+  _mercEnvioCache[k] = cov ? {costo:Number(cov.list_cost)||0, sinDesc:Number(cov.discount && cov.discount.promoted_amount)||0, desc:Number(cov.discount && cov.discount.rate)||0} : null;
+  return _mercEnvioCache[k];
+}
+function mercModoEnvio(){ const s = document.getElementById("mercBuscarEnvioModo"); return s ? s.value : "manual"; }
+async function mercEnvioModo(v, sinGuardar){
+  const inp = document.getElementById("mercBuscarEnvio"); if(inp) inp.style.display = v==="manual" ? "" : "none";
+  if(!sinGuardar){ try{ localStorage.setItem("nexo_merc_envio", v); }catch(e){} }
+  if(v!=="manual" && mercBusq && mercBusq.filas && mercBusq.filas.length){
+    const est = document.getElementById("mercBuscarEstado"); const ant = est ? est.innerHTML : "";
+    if(est) est.innerHTML = "⏳ Calculando el envío con MercadoLibre…";
+    await _pool(mercBusq.filas.filter(f=>!f.sinVendedores), 4, f=>mercEnvioFila(f, v));
+    if(est) est.innerHTML = ant;
+  }
+  renderMercBusqueda();
+}
+async function mercEnvioFila(f, logistica){
+  f.envios = f.envios || {};
+  if(f.envios[logistica] === undefined) f.envios[logistica] = await mercCostoEnvio(f.cat, f.precioMin, logistica);
+}
+function mercEnvioDe(f){
+  const m = mercModoEnvio();
+  if(m === "manual") return {monto:_num(document.getElementById("mercBuscarEnvio").value), fuente:"manual"};
+  const e = f.envios && f.envios[m];
+  if(e === undefined) return {monto:null, fuente:"pendiente"};
+  if(e === null) return {monto:null, fuente:"error"};
+  return {monto:e.costo, fuente:"ml", sinDesc:e.sinDesc, desc:e.desc};
+}
+
 
 // ── Categorías ──
 async function mercCargarRaiz(){
@@ -4262,6 +4338,8 @@ async function mercBuscarProductos(mas){
       f.cat = r[0].category_id;
       const fee = await mercComision(f.cat, f.precioMin);
       if(fee){ f.comision = fee.monto; f.fijo = fee.fijo; }
+      const modo = mercModoEnvio();
+      if(modo !== "manual") await mercEnvioFila(f, modo);
       return f;
     });
     mercBusq.filas = mercBusq.filas.concat(nuevas.filter(Boolean));
@@ -4271,14 +4349,18 @@ async function mercBuscarProductos(mas){
     renderMercBusqueda();
   }finally{ btn.disabled = false; }
 }
-function _calcMargenFila(f){
-  if(!(f.precioMin > 0) || f.comision == null || !(f.costo > 0)) return null;
+function _netoFila(f){
+  if(!(f.precioMin > 0) || f.comision == null) return null;
   const imp = Number(appConfig.impuesto_pct||0), per = Number(appConfig.percepcion_pct||0);
-  const envio = _num(document.getElementById("mercBuscarEnvio").value);
-  const p = f.precioMin;
-  const recibis = p - f.comision - envio - p*(imp+per)/100;
-  const margen = recibis - f.costo;
-  return {margen, pct: margen/p*100};
+  const p = f.precioMin, env = mercEnvioDe(f);
+  const envio = env.monto || 0, impuesto = p*imp/100, percepcion = p*per/100;
+  return {precio:p, comision:f.comision, envio, env, impuesto, percepcion, imp, per, recibis: p - f.comision - envio - impuesto - percepcion};
+}
+function _calcMargenFila(f){
+  const n = _netoFila(f);
+  if(!n || !(f.costo > 0)) return null;
+  const margen = n.recibis - f.costo;
+  return {margen, pct: margen/n.precio*100};
 }
 function mercCostoFila(i, v){
   const f = mercBusq.filas[i]; if(!f) return;
@@ -4294,8 +4376,12 @@ function renderMercBusqueda(){
   const body = document.getElementById("mercBuscarBody");
   body.innerHTML = mercBusq.filas.map((f,i)=>{
     if(soloCon && f.sinVendedores) return "";
-    const recibis = (f.precioMin>0 && f.comision!=null) ? f.precioMin - f.comision : null;
+    const n = _netoFila(f), recibis = n ? n.recibis : null;
     const m = _calcMargenFila(f), rm = _recMargen(m ? m.pct : null);
+    const envCel = !n ? "—" : n.env.fuente==="pendiente" ? `<span style="color:var(--text-soft);">…</span>` : n.env.fuente==="error" ? `<span style="color:var(--text-soft);" title="ML no devolvió el costo de envío para esta categoría">s/d</span>`
+      : `$${fmt(n.envio)}${n.env.fuente==="ml"&&n.env.desc?`<div style="font-size:10px;color:var(--text-soft);" title="Precio de lista $${fmt(n.env.sinDesc)}">${Math.round(n.env.desc*100)}% OFF</div>`:n.env.fuente==="manual"?`<div style="font-size:10px;color:var(--text-soft);">manual</div>`:""}`;
+    const impCel = !n ? "—" : `$${fmt(n.impuesto+n.percepcion)}<div style="font-size:10px;color:var(--text-soft);">${n.imp}% + ${n.per}%</div>`;
+    const tip = n ? `Precio $${fmt(n.precio)} − comisión $${fmt(n.comision)} − envío $${fmt(n.envio)} − impuesto $${fmt(n.impuesto)} − percepción $${fmt(n.percepcion)}` : "";
     return `<tr id="mercBusqFila${i}" ${f.sinVendedores?'style="opacity:.55;"':""}>
       <td style="min-width:260px;"><div style="display:flex;gap:8px;align-items:center;">
         ${f.thumb?`<img src="${esc(f.thumb)}" alt="" style="width:40px;height:40px;object-fit:contain;background:#fff;border-radius:6px;flex:none;">`:""}
@@ -4303,19 +4389,21 @@ function renderMercBusqueda(){
       <td class="num">${f.precioMin?"$"+fmt(f.precioMin):"—"}${f.precioMax&&f.precioMax>f.precioMin?`<div style="font-size:10px;color:var(--text-soft);">hasta $${fmt(f.precioMax)}</div>`:""}</td>
       <td class="num">${f.sinVendedores?`<span class="badge badge-gray">Sin vendedores</span>`:f.vendedores}</td>
       <td class="num">${f.comision!=null?"$"+fmt(f.comision)+`<div style="font-size:10px;color:var(--text-soft);">${(f.comision/f.precioMin*100).toFixed(1)}%</div>`:"—"}</td>
-      <td class="num">${recibis!=null?"$"+fmt(recibis):"—"}</td>
+      <td class="num" style="color:var(--orange);">${envCel}</td>
+      <td class="num" style="color:var(--orange);">${impCel}</td>
+      <td class="num" style="font-weight:700;" title="${tip}">${recibis!=null?"$"+fmt(recibis):"—"}</td>
       <td>${f.sinVendedores?"":`<input type="number" min="0" step="100" placeholder="$" value="${f.costo||""}" oninput="mercCostoFila(${i}, this.value)" style="width:90px;padding:5px 7px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;background:transparent;color:inherit;">`}</td>
       <td class="num mb-gan">${m?`<span class="${m.margen>=0?"num-pos":"num-neg"}">$${fmt(m.margen)}</span>`:"—"}</td>
       <td class="num mb-pct">${m?m.pct.toFixed(1)+"%":"—"}</td>
       <td class="mb-rec">${m?`<span class="badge ${rm.cls}">${rm.rec}</span>`:""}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="9" style="text-align:center;color:var(--text-soft);padding:20px;">Sin resultados</td></tr>`;
+  }).join("") || `<tr><td colspan="11" style="text-align:center;color:var(--text-soft);padding:20px;">Sin resultados</td></tr>`;
   document.getElementById("btnMercBuscarMas").style.display = mercBusq.offset < mercBusq.total && mercBusq.filas.length ? "" : "none";
 }
 function mercExportarBusqueda(){
   if(!mercBusq.filas.length){ toast("Primero buscá un producto.","err"); return; }
-  const filas = mercBusq.filas.map(f=>{ const m=_calcMargenFila(f); return {"Producto":f.nombre, "ID":f.id, "Precio más bajo":f.precioMin||null, "Precio más alto":f.precioMax||null,
-    "Vendedores":f.sinVendedores?0:f.vendedores, "Comisión Clásica":f.comision??null, "Recibís":(f.precioMin>0&&f.comision!=null)?Math.round(f.precioMin-f.comision):null,
+  const filas = mercBusq.filas.map(f=>{ const m=_calcMargenFila(f), n=_netoFila(f); return {"Producto":f.nombre, "ID":f.id, "Precio más bajo":f.precioMin||null, "Precio más alto":f.precioMax||null,
+    "Vendedores":f.sinVendedores?0:f.vendedores, "Comisión Clásica":f.comision??null, "Envío":n?Math.round(n.envio):null, "Impuesto":n?Math.round(n.impuesto):null, "Percepción":n?Math.round(n.percepcion):null, "Recibís neto":n?Math.round(n.recibis):null,
     "Mi costo":f.costo||null, "Ganancia":m?Math.round(m.margen):null, "Margen %":m?Math.round(m.pct*10)/10:null, "Link":f.link}; });
   const ws = XLSX.utils.json_to_sheet(filas); const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Búsqueda");
