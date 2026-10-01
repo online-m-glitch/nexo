@@ -894,7 +894,10 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
         </div>
         <div class="fml-pane card" id="fmlPane-envios">
           <div class="fml-slot" id="fmlSlot-envios"></div>
-          <h3 style="margin:22px 0 10px;font-size:15px;">Envíos registrados</h3>
+          <div style="display:flex;align-items:center;gap:12px;margin:22px 0 10px;flex-wrap:wrap;">
+            <h3 style="margin:0;font-size:15px;">Envíos registrados</h3>
+            <label id="fmlOcultosLbl" style="display:none;font-size:12px;color:var(--text-soft);"><input type="checkbox" id="fmlVerOcultos" onchange="renderFullEnvios()"> <span></span></label>
+          </div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Fecha</th><th>Envío</th><th>Productos</th><th>Unidades</th><th>Detalle</th><th></th></tr></thead>
@@ -6051,24 +6054,57 @@ function renderFullEnvios(){
   const tb = document.getElementById("fmlEnviosBody"); if(!tb) return;
   const grupos = {};
   (movimientos||[]).filter(m=>m.tipo==="Envío a Full").forEach(m=>{
-    const nro = ((m.obs||"").match(/Env[ií]o #\s*([\w-]+)/)||[])[1] || "";
+    // Nro. de envío: "Envío #123…" (importador) o un número suelto de 6+ dígitos cargado a mano en Movimientos
+    const obs = m.obs||"";
+    const nro = (obs.match(/Env[ií]o\s*#?\s*(\d[\w-]*)/i)||obs.match(/(?:^|[^\d])#?(\d{6,12})(?!\d)/)||[])[1] || "";
     const k = (m.fecha||"")+"|"+nro;
     const g = grupos[k] || (grupos[k] = {fecha:m.fecha, nro, items:{}, unidades:0});
     g.items[m.sku] = (g.items[m.sku]||0) + (Number(m.cantidad)||0);
     g.unidades += Number(m.cantidad)||0;
   });
-  const lista = Object.values(grupos).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+  const ocultos = new Set(fmlEnviosOcultos());
+  const chkOc = document.getElementById("fmlVerOcultos");
+  if(chkOc && !ocultos.size) chkOc.checked = false;
+  const verOcultos = chkOc?.checked;
+  const todos = Object.values(grupos).map(g=>Object.assign(g,{clave:(g.fecha||"")+"|"+g.nro, oculto:ocultos.has((g.fecha||"")+"|"+g.nro)}));
+  const nOcultos = todos.filter(g=>g.oculto).length;
+  const lblOc = document.getElementById("fmlOcultosLbl");
+  if(lblOc){ lblOc.style.display = nOcultos ? "" : "none"; lblOc.querySelector("span").textContent = `Mostrar quitados del listado (${nOcultos})`; }
+  const lista = todos.filter(g=>verOcultos || !g.oculto).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
   _fmlEnvios = lista;
   tb.innerHTML = lista.slice(0,100).map((g,i)=>{
     const det = Object.entries(g.items).map(([s,q])=>`${esc(s)} ×${q}`).join(" · ");
-    return `<tr style="cursor:pointer;" onclick="verEnvioFull(${i})" title="Ver el detalle completo">
+    return `<tr style="cursor:pointer;${g.oculto?'opacity:.5;':''}" onclick="verEnvioFull(${i})" title="${g.oculto?'Quitado del listado — ':''}Ver el detalle completo">
       <td>${fFecha(g.fecha)}</td><td>${g.nro?"#"+esc(g.nro):'<span style="color:var(--text-soft);">—</span>'}</td>
       <td class="num">${Object.keys(g.items).length}</td><td class="num" style="font-weight:700;">${g.unidades}</td>
       <td style="font-size:11px;color:var(--text-soft);max-width:480px;">${det}</td>
-      <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();verEnvioFull(${i})">👁️ Ver</button></td></tr>`;
+      <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();verEnvioFull(${i})">👁️ Ver</button>
+        ${g.oculto?`<button class="btn btn-ghost btn-sm admin-only" onclick="event.stopPropagation();fmlMostrarEnvio(${i})" title="Volver a mostrarlo en el listado">↩️ Mostrar</button>`:`<button class="btn btn-ghost btn-sm admin-only" onclick="event.stopPropagation();fmlOcultarEnvio(${i})" title="Quitar del listado (no cambia el stock)">🗑️</button>`}</td></tr>`;
   }).join("") || `<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--text-soft);">Todavía no hay envíos a Full registrados.</td></tr>`;
+  if(typeof esAdmin==="function" && !esAdmin()) tb.querySelectorAll(".admin-only").forEach(el=>el.style.display="none");
 }
 let _fmlEnvios = [];
+// Quitar un envío del listado: solo lo oculta (se guarda en la configuración del cliente).
+// No borra ni cambia los movimientos, así que el stock queda igual.
+function fmlEnviosOcultos(){ const v = appConfig && appConfig.fml_envios_ocultos; return Array.isArray(v) ? v : []; }
+async function fmlGuardarOcultos(lista){
+  appConfig.fml_envios_ocultos = lista;
+  try{ await sbUpsert("app_config", {key:"fml_envios_ocultos", value:lista, updated_at:new Date().toISOString()}); }
+  catch(e){ toast("No se pudo guardar: "+e.message,"err"); }
+  renderFullEnvios();
+}
+function fmlOcultarEnvio(i){
+  if(checkViewer("Quitar envíos del listado")) return;
+  const g = _fmlEnvios[i]; if(!g) return;
+  confirmCb = async()=>{ await fmlGuardarOcultos([...new Set(fmlEnviosOcultos().concat(g.clave))]); toast("Envío quitado del listado. El stock no cambió.","ok",4000); };
+  document.getElementById("confirmMsg").innerHTML = `¿Quitar del listado el envío del <strong>${fFecha(g.fecha)}</strong>${g.nro?" #"+esc(g.nro):""} (${g.unidades} u.)?<br><span style="font-size:12px;color:var(--text-soft);">Solo deja de mostrarse acá: no se borran los movimientos y el stock no cambia. Lo podés volver a mostrar cuando quieras.</span>`;
+  document.getElementById("modalConfirm").classList.add("show");
+}
+async function fmlMostrarEnvio(i){
+  if(checkViewer("Mostrar envíos")) return;
+  const g = _fmlEnvios[i]; if(!g) return;
+  await fmlGuardarOcultos(fmlEnviosOcultos().filter(k=>k!==g.clave));
+}
 // Detalle de un envío (solo lectura)
 function verEnvioFull(i){
   const g = _fmlEnvios[i]; if(!g) return;
