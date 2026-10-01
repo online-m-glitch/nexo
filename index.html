@@ -3243,6 +3243,13 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
       <input class="search-input" type="text" id="etqSku" list="skuList" placeholder="SKU…" style="width:180px;" onkeydown="if(event.key==='Enter') etqAgregar()">
       <input type="number" id="etqCant" min="1" value="1" style="width:80px;padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;">
       <button class="btn btn-ghost" onclick="etqAgregar()">➕ Agregar</button>
+      <label class="btn btn-ghost" style="cursor:pointer;" title="Subí el Reporte de Planificación de Full (Excel): toma el Código ML y las unidades sugeridas de cada producto">📊 Cargar reporte de Full
+        <input type="file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="etqCargarReporte(this)">
+      </label>
+      <select id="etqCantModo" title="Qué cantidad poner al cargar el reporte" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;">
+        <option value="deposito">Sugerido, hasta lo que hay en depósito</option>
+        <option value="sugerido">Todo lo sugerido por ML</option>
+      </select>
       <span style="flex:1;"></span>
       <label style="font-size:12px;color:var(--text-soft);">Tamaño:
         <select id="etqTam" onchange="etqRender()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;">
@@ -5080,6 +5087,8 @@ function pfParsearFilas(filas){
       hi=i;
       col={sku:iSku, sug:iSug,
         prod:f.findIndex(x=>x==="producto"),
+        cod:f.findIndex(x=>x==="codigo ml"),
+        vari:f.findIndex(x=>x==="variante"),
         vend:f.findIndex(x=>x.startsWith("unidades vendidas")),
         aptas:f.findIndex(x=>x.startsWith("aptas")),
         pendFull:f.findIndex(x=>x.startsWith("unidades pendientes de ingreso")),
@@ -5096,9 +5105,13 @@ function pfParsearFilas(filas){
     const sku=String(r[col.sku]??"").trim();
     if(!sku) continue;
     const k=sku.toUpperCase();
-    const g=porSku[k]||(porSku[k]={sku, nombreML:"", vend:0, aptas:0, pendFull:0, sug:0, lim:"", urg:"", urgOrden:9, filas:0});
+    const g=porSku[k]||(porSku[k]={sku, nombreML:"", codigos:[], vend:0, aptas:0, pendFull:0, sug:0, lim:"", urg:"", urgOrden:9, filas:0});
     g.filas++;
     if(!g.nombreML && col.prod>=0) g.nombreML=String(r[col.prod]||"");
+    if(col.cod>=0 && String(r[col.cod]||"").trim()){
+      const vv=col.vari>=0?String(r[col.vari]||"").trim():"";
+      g.codigos.push({cod:String(r[col.cod]).trim(), nombre:col.prod>=0?String(r[col.prod]||""):"", variante:(vv&&vv!=="N/A")?vv:"", sug:_pfNum(r[col.sug])});
+    }
     g.vend+=col.vend>=0?_pfNum(r[col.vend]):0;
     g.aptas+=col.aptas>=0?_pfNum(r[col.aptas]):0;
     g.pendFull+=col.pendFull>=0?_pfNum(r[col.pendFull]):0;
@@ -5749,6 +5762,38 @@ function pfEtiquetasEnviarYa(){
   if(!l.length){ toast("No hay nada para enviar ya desde el depósito.","err"); return; }
   cerrarPlanifFull();
   abrirEtiquetasFull(l);
+}
+
+// Cargar directo el Reporte de Planificación de Full: usa el "Código ML" de cada fila
+// (no hace falta consultar ML) y propone como cantidad lo sugerido, hasta lo que hay en depósito.
+async function etqCargarReporte(input){
+  const file=input.files[0]; input.value=""; if(!file) return;
+  try{
+    if(typeof XLSX==="undefined") throw new Error("No se pudo cargar el lector de Excel. Recargá la página.");
+    const wb=XLSX.read(new Uint8Array(await file.arrayBuffer()),{type:"array"});
+    const filas=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:""});
+    const grupos=pfParsearFilas(filas);
+    const usar=document.getElementById("etqCantModo").value; // "deposito" | "sugerido"
+    let n=0, sinCod=0;
+    grupos.forEach(g=>{
+      const p=productos.find(x=>(x.sku||"").toUpperCase().trim()===g.sku.toUpperCase());
+      let disp = p ? Math.max(0, calcularStockDeposito(p.sku)) : 0;
+      if(!g.codigos.length){ if(g.sug>0) sinCod++; return; }
+      g.codigos.forEach(c=>{
+        if(c.sug<=0) return;
+        let cant = c.sug;
+        if(usar==="deposito"){ cant=Math.min(c.sug, disp); disp-=cant; }
+        if(cant<=0) return;
+        const ya=etqLineas.find(l=>l.inventory_id===c.cod);
+        if(ya) ya.cantidad+=cant;
+        else etqLineas.push({sku:p?p.sku:g.sku, nombre:p?p.nombre:"", titulo:c.nombre, variacion:c.variante, inventory_id:c.cod, cantidad:cant, estado:"ok"});
+        n++;
+      });
+    });
+    etqRender();
+    if(!n) toast(usar==="deposito"?"No hay nada sugerido que tengas en depósito.":"El reporte no tiene unidades sugeridas.","err",5000);
+    else toast(`Cargado desde el reporte: ${n} producto(s)${sinCod?` · ${sinCod} sin "Código ML"`:""}. Revisá las cantidades antes de imprimir.`,"ok",5000);
+  }catch(e){ toast("No se pudo leer el archivo: "+e.message,"err",6000); }
 }
 
 // ================================================================
