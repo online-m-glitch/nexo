@@ -804,6 +804,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
         <div><h2>Stock Actual</h2><div class="sub">Depósito propio + Full ML — editá Full ML manualmente o importá por CSV</div></div>
       </div>
       <div style="padding:24px;">
+        <div class="stats-grid" id="stockStats" style="margin-bottom:16px;" title="Se calcula sobre los productos que muestran los filtros de abajo"></div>
         <div class="card">
           <div class="card-header">
             <div class="toolbar">
@@ -847,6 +848,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
         <button class="btn btn-primary admin-only" onclick="generarPedidoReposicion()">📋 Generar pedido de reposición</button>
       </div>
       <div style="padding:24px;">
+        <div id="alertasStats"></div>
         <div class="card">
           <div class="card-header">
             <div class="toolbar">
@@ -5373,6 +5375,76 @@ function stockUbicContar(base){
   sel.innerHTML=STOCK_UBIC_OPC.map(([v,t,fn])=>`<option value="${v}">${t}${fn?` (${base.filter(fn).length})`:""}</option>`).join("");
   sel.value=actual;
 }
+
+// ================================================================
+// Stock Actual: cuadros de valorización (según los filtros activos)
+// Costo = costo del Catálogo · Venta = precio de ML vigente (si está sincronizado) o el del Catálogo
+// Los combos no se suman (su stock es "virtual", sale de los componentes).
+// ================================================================
+function renderStockStats(filas){
+  const box = document.getElementById("stockStats"); if(!box) return;
+  let uDep=0, uFull=0, uRev=0, uCam=0, cDep=0, cFull=0, vVenta=0, vRecibis=0, sinPrecio=0, sinCosto=0, sinStock=0, conML=0;
+  filas.forEach(f=>{
+    const p = f.p;
+    if(f.total<=0) sinStock++;
+    if(p.tipo==="combo") return;
+    const dep = Math.max(0,f.dep), full = Math.max(0,f.full), u = dep+full, costo = Number(p.costo)||0;
+    uDep += dep; uFull += full; uRev += Math.max(0,f.revision||0); uCam += cantidadPendientePedido(p.sku);
+    cDep += dep*costo; cFull += full*costo;
+    if(u>0 && !costo) sinCosto++;
+    if(u<=0) return;
+    const a = (typeof calcAnaliML==="function") ? calcAnaliML(p) : {precio:Number(p.precio)||0, recibis:0, precioMLReal:false};
+    if(!a.precio){ sinPrecio++; return; }
+    if(a.precioMLReal) conML++;
+    vVenta += u*a.precio; vRecibis += u*Math.max(0,a.recibis||0);
+  });
+  const cTot = cDep+cFull, margen = vRecibis - cTot;
+  const card = (lbl, val, sub, color) => `<div class="stat-card"><div class="label">${lbl}</div><div class="value"${color?` style="color:${color};"`:""}>${val}</div><div class="sub">${sub}</div></div>`;
+  box.innerHTML =
+    card("Unidades en stock", fmtN(uDep+uFull), `🏠 ${fmtN(uDep)} depósito · 📦 ${fmtN(uFull)} Full${uRev?` · 🔧 ${fmtN(uRev)} en revisión`:""}`) +
+    card("Valor a costo", "$"+fmt(cTot), `🏠 $${fmt(cDep)} · 📦 $${fmt(cFull)}${sinCosto?` · ${sinCosto} sin costo`:""}`) +
+    card("Valor a precio de venta", "$"+fmt(vVenta), `precios de ML de hoy${sinPrecio?` · ${sinPrecio} sin precio`:""}`, "var(--ml-blue)") +
+    card("Recibirías (aprox.)", "$"+fmt(vRecibis), `neto de comisión, envío e impuestos est.`) +
+    card("Ganancia potencial", "$"+fmt(margen), cTot>0?`${(margen/cTot*100).toFixed(0)}% sobre el costo`:"—", margen>=0?"var(--green)":"var(--red)") +
+    card("En camino", fmtN(uCam)+" u.", `${sinStock} producto(s) sin stock`);
+}
+
+// ================================================================
+// Alertas: cuadros con el costo estimado de reposición (total y por proveedor)
+// "A pedir" = mínimo − (depósito + Full) − pedido en camino · costo del Catálogo
+// ================================================================
+function renderAlertasStats(alertas){
+  const box = document.getElementById("alertasStats"); if(!box) return;
+  let aPedirU=0, costo=0, cubiertos=0, urgentes=0, sinCosto=0;
+  const porProv = {};
+  alertas.forEach(p=>{
+    const total = calcularStockDeposito(p.sku)+calcularStockFullML(p.sku), min = p.stockMin||0;
+    const aPedir = Math.max(0, min-total-cantidadPendientePedido(p.sku));
+    if(!aPedir){ cubiertos++; return; }
+    if(total<=0) urgentes++;
+    const c = aPedir*(Number(p.costo)||0); if(!p.costo) sinCosto++;
+    aPedirU += aPedir; costo += c;
+    const k = (p.proveedor||"SIN PROVEEDOR").toUpperCase();
+    const g = porProv[k] || (porProv[k] = {u:0, c:0, n:0}); g.u += aPedir; g.c += c; g.n++;
+  });
+  const card = (lbl, val, sub, color, extra) => `<div class="stat-card"${extra||""}><div class="label">${lbl}</div><div class="value"${color?` style="color:${color};"`:""}>${val}</div><div class="sub">${sub}</div></div>`;
+  const provs = Object.entries(porProv).sort((a,b)=>b[1].c-a[1].c);
+  box.innerHTML =
+    `<div class="stats-grid" style="margin-bottom:12px;">`+
+      card("Costo de reposición estimado", "$"+fmt(costo), `${fmtN(aPedirU)} u. a pedir${sinCosto?` · ${sinCosto} sin costo cargado`:""}`, "var(--red)") +
+      card("Productos a pedir", alertas.length-cubiertos, `${urgentes} sin stock (urgente)`) +
+      card("Cubiertos con pedido", cubiertos, "ya pedidos, no hace falta pedir", "var(--ml-blue)") +
+      card("Proveedores", provs.length, provs.length?"con algo para pedir":"nada para pedir") +
+    `</div>`+
+    (provs.length ? `<div style="font-size:12px;color:var(--text-soft);margin:0 0 6px;">Por proveedor (clic para filtrar):</div>
+      <div class="stats-grid" style="margin-bottom:16px;">${provs.map(([pv,g])=>card(esc(pv), "$"+fmt(g.c), `${g.n} producto(s) · ${fmtN(g.u)} u.`, "", ` style="cursor:pointer;" onclick="alertasFiltrarProv('${esc(pv).replace(/'/g,"\\'")}')" title="Ver solo ${esc(pv)}"`)).join("")}</div>` : "");
+}
+function alertasFiltrarProv(pv){
+  const sel = document.getElementById("alertasProveedorFiltro"); if(!sel) return;
+  const op = [...sel.options].find(o=>o.value.toUpperCase()===pv.toUpperCase());
+  sel.value = (op && sel.value!==op.value) ? op.value : "";
+  renderAlertas();
+}
 // ================================================================
 // Competencia en MercadoLibre (Análisis ML → vista Por producto)
 // Fuente: /products/{catalog_product_id}/items (vendedores que ofrecen el mismo
@@ -7417,6 +7489,7 @@ function renderStock(){
   }).filter(f=>!estadoFiltro || f.estado===estadoFiltro);
   stockUbicContar(filas);
   const _filasUbic = filas.filter(stockUbicPasa); filas.length = 0; filas.push(..._filasUbic);
+  renderStockStats(filas);
 
   const rows = filas.map(f=>{
     const {p, dep, revision, full, total, vend, ultimaVenta, estado, cls}=f;
@@ -7500,6 +7573,7 @@ function renderAlertas(){
   }
 
   const alertas = getAlertasFiltradas();
+  renderAlertasStats(alertas);
   const cuerpo=document.getElementById("alertasBody");
   const empty=document.getElementById("alertasEmpty");
   if(!alertas.length){ cuerpo.innerHTML=""; empty.style.display="block"; return; }
