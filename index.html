@@ -813,6 +813,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
                 ⬆️ Importar stock CSV / ML
                 <input type="file" id="stockImportInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="importarStockCSV(this)">
               </label>
+              <button class="btn btn-ghost" onclick="abrirEtiquetasFull()" title="Imprimir las etiquetas de producto para mandar a Full">🏷️ Etiquetas Full</button>
             </div>
             <div style="font-size:12px;color:var(--text-soft);">
               CSV propio: <strong>SKU · Stock Depósito · Stock Full ML</strong> &nbsp;|&nbsp; O subí la <strong>planilla Publicaciones de ML</strong> (.xlsx) — importa el stock Full ML y precios automáticamente
@@ -3204,6 +3205,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
       <div style="font-size:11px;color:var(--text-soft);">Si volvés a subir el reporte, lo que ya está en borrador cuenta como "en camino", así no se pide dos veces.</div>
     </div>
     <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="pfEtiquetasEnviarYa()" title="Etiquetas de producto de lo que podés mandar ya desde el depósito">🏷️ Etiquetas de lo que enviás ya</button>
       <button class="btn btn-ghost" onclick="cerrarPlanifFull()">Cerrar</button>
       <button class="btn btn-primary" id="btnPfGenerar" style="display:none;" onclick="pfGenerar()">📝 Crear pedidos en borrador</button>
     </div>
@@ -3225,6 +3227,53 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
     <div id="compCuerpo"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="cerrarCompetencia()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modalEtiquetas">
+  <div class="modal" style="max-width:900px;width:96vw;">
+    <h3>🏷️ Etiquetas de producto para Full</h3>
+    <p style="font-size:13px;color:var(--text-soft);margin-bottom:12px;">
+      Imprimí la etiqueta que va pegada en cada unidad que mandás a Full. El código de barras es el <strong>código de inventario de Full</strong>
+      de tu publicación (el mismo "Código ML" del reporte de planificación, ej. EQIA36411), que NEXO lee de MercadoLibre.
+      El envío (fecha, colecta y etiqueta de la caja) se sigue armando en MercadoLibre.
+    </p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+      <input class="search-input" type="text" id="etqSku" list="skuList" placeholder="SKU…" style="width:180px;" onkeydown="if(event.key==='Enter') etqAgregar()">
+      <input type="number" id="etqCant" min="1" value="1" style="width:80px;padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;">
+      <button class="btn btn-ghost" onclick="etqAgregar()">➕ Agregar</button>
+      <span style="flex:1;"></span>
+      <label style="font-size:12px;color:var(--text-soft);">Tamaño:
+        <select id="etqTam" onchange="etqRender()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;">
+          <option value="50x25">50 × 25 mm</option>
+          <option value="40x30">40 × 30 mm</option>
+          <option value="60x40">60 × 40 mm</option>
+          <option value="100x50">100 × 50 mm</option>
+        </select>
+      </label>
+      <label style="font-size:12px;color:var(--text-soft);"><input type="checkbox" id="etqConSku" checked onchange="etqRender()"> Mostrar SKU</label>
+    </div>
+    <div class="table-wrap" style="max-height:38vh;overflow:auto;margin-bottom:10px;">
+      <table>
+        <thead><tr><th>SKU</th><th>Publicación</th><th>Código Full</th><th>Etiquetas</th><th></th><th></th></tr></thead>
+        <tbody id="etqBody"></tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11px;color:var(--text-soft);margin-bottom:4px;">Vista previa</div>
+        <div id="etqMuestra" style="display:inline-block;border:1px dashed #999;background:#fff;"></div>
+      </div>
+      <div style="font-size:12px;color:var(--text-soft);flex:1;min-width:220px;">
+        En la ventana de impresión elegí tu impresora térmica, <strong>márgenes: ninguno</strong> y <strong>escala 100%</strong>.
+        Antes de imprimir todo, probá una etiqueta y verificá que el lector la lea.
+      </div>
+    </div>
+    <div class="modal-actions">
+      <span id="etqTotal" style="font-size:13px;margin-right:auto;"></span>
+      <button class="btn btn-ghost" onclick="cerrarEtiquetasFull()">Cerrar</button>
+      <button class="btn btn-primary" id="btnEtqImprimir" onclick="etqImprimir()" disabled>🖨️ Imprimir</button>
     </div>
   </div>
 </div>
@@ -5531,6 +5580,175 @@ async function compVincularA(catId, nombre){
   if(!r.ok){ toast("No se pudo vincular.","err"); return; }
   competencia[p.sku.toUpperCase()] = fila;
   await compActualizarActual();
+}
+// ================================================================
+// Etiquetas de producto para Full (impresora térmica de rollo)
+// El código de la etiqueta es el "inventory_id" de la publicación en Full
+// (el mismo "Código ML" del Reporte de Planificación, ej. EQIA36411).
+// Se lee de la API de ML (/items de tus propias publicaciones).
+// ================================================================
+
+// ── Code 128 (set B) en SVG, sin librerías externas ──
+const C128 = ["212222","222122","222221","121223","121322","131222","122213","122312","132212","221213","221312","231212","112232","122132","122231","113222","123122","123221","223211","221132","221231","213212","223112","312131","311222","321122","321221","312212","322112","322211","212123","212321","232121","111323","131123","131321","112313","132113","132311","211313","231113","231311","112133","112331","132131","113123","113321","133121","313121","211331","231131","213113","213311","213131","311123","311321","331121","312113","312311","332111","314111","221411","431111","111224","111422","121124","121421","141122","141221","112214","112412","122114","122411","142112","142211","241211","221114","413111","241112","134111","111242","121142","121241","114212","124112","124211","411212","421112","421211","212141","214121","412121","111143","111341","131141","114113","114311","411113","411311","113141","114131","311141","411131","211412","211214","211232","2331112"];
+function code128B(texto){
+  const cods = [104];
+  for(const ch of String(texto)){
+    const c = ch.charCodeAt(0);
+    if(c < 32 || c > 126) throw new Error("Carácter no válido para el código de barras: "+ch);
+    cods.push(c - 32);
+  }
+  let suma = cods[0];
+  for(let i=1;i<cods.length;i++) suma += cods[i]*i;
+  cods.push(suma % 103, 106);
+  return cods.map(c=>C128[c]).join(""); // anchos alternando barra/espacio (en módulos)
+}
+function svgCode128(texto, altoMm, anchoMm){
+  const anchos = code128B(texto);
+  const modulos = [...anchos].reduce((a,d)=>a+Number(d),0) + 20; // + zona silenciosa 10 módulos por lado
+  let x = 10, rects = "";
+  [...anchos].forEach((d,i)=>{ const w = Number(d); if(i%2===0) rects += `<rect x="${x}" y="0" width="${w}" height="100"/>`; x += w; });
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${modulos} 100" preserveAspectRatio="none" style="width:${anchoMm}mm;height:${altoMm}mm;display:block;">${rects}</svg>`;
+}
+
+// ── Datos de ML: inventory_id por SKU ──
+let etqLineas = [];   // {sku, nombre, titulo, inventory_id, variacion, cantidad, estado}
+async function etqBuscarCodigos(skus){
+  const pubs = {};
+  try{
+    const filas = await sbGet("nexo_ml_publicaciones", "select=sku,ml_item_id,variacion_id,logistic_type");
+    (filas||[]).forEach(f=>{ const k=(f.sku||"").toUpperCase(); (pubs[k]=pubs[k]||[]).push(f); });
+  }catch(e){}
+  // Publicaciones candidatas por SKU (primero las de Full)
+  const cand = {}, ids = new Set();
+  skus.forEach(sku=>{
+    const k = sku.toUpperCase(), p = productos.find(x=>(x.sku||"").toUpperCase()===k);
+    const l = (pubs[k]||[]).slice().sort((a,b)=>(b.logistic_type==="fulfillment")-(a.logistic_type==="fulfillment"));
+    const lista = l.map(x=>({item:x.ml_item_id, variacion:x.variacion_id||null}));
+    if(p && p.ml_item_id && !lista.some(x=>x.item===p.ml_item_id)) lista.push({item:p.ml_item_id, variacion:null});
+    cand[k] = lista; lista.forEach(x=>ids.add(x.item));
+  });
+  const items = {}, todos = [...ids];
+  for(let i=0;i<todos.length;i+=20){
+    const r = await mlGet("/items?ids="+todos.slice(i,i+20).join(",")+"&attributes=id,title,inventory_id,variations,shipping");
+    if(!r.ok) throw new Error(_mlError(r));
+    (Array.isArray(r.data)?r.data:[]).forEach(x=>{ if(x.code===200 && x.body) items[x.body.id]=x.body; });
+  }
+  const res = {};
+  skus.forEach(sku=>{
+    const k = sku.toUpperCase();
+    for(const c of (cand[k]||[])){
+      const it = items[c.item]; if(!it) continue;
+      if(it.variations && it.variations.length){
+        const v = c.variacion ? it.variations.find(v=>String(v.id)===String(c.variacion)) : (it.variations.length===1 ? it.variations[0] : null);
+        if(v && v.inventory_id){ res[k] = {inventory_id:v.inventory_id, titulo:it.title, variacion:(v.attribute_combinations||[]).map(a=>a.value_name).join(" · "), item:it.id}; break; }
+        continue;
+      }
+      if(it.inventory_id){ res[k] = {inventory_id:it.inventory_id, titulo:it.title, variacion:"", item:it.id}; break; }
+    }
+  });
+  return res;
+}
+
+// ── Modal ──
+const ETQ_TAM = {"50x25":[50,25], "40x30":[40,30], "60x40":[60,40], "100x50":[100,50]};
+function etqCfg(){
+  let t = "50x25"; try{ t = localStorage.getItem("nexo_etq_tam") || t; }catch(e){}
+  return t;
+}
+async function abrirEtiquetasFull(lineasIniciales){
+  document.getElementById("modalEtiquetas").classList.add("show");
+  document.getElementById("etqTam").value = etqCfg();
+  document.getElementById("etqSku").value = "";
+  document.getElementById("etqCant").value = "1";
+  etqLineas = [];
+  if(Array.isArray(lineasIniciales) && lineasIniciales.length){
+    etqLineas = lineasIniciales.filter(l=>l.cantidad>0).map(l=>({sku:l.sku, nombre:l.nombre||"", cantidad:l.cantidad, estado:"buscando"}));
+    etqRender();
+    await etqCompletarCodigos();
+  }
+  etqRender();
+}
+function cerrarEtiquetasFull(){ document.getElementById("modalEtiquetas").classList.remove("show"); }
+async function etqCompletarCodigos(){
+  const faltan = etqLineas.filter(l=>!l.inventory_id);
+  if(!faltan.length) return;
+  faltan.forEach(l=>l.estado="buscando"); etqRender();
+  try{
+    const r = await etqBuscarCodigos([...new Set(faltan.map(l=>l.sku))]);
+    faltan.forEach(l=>{ const x = r[l.sku.toUpperCase()]; if(x){ Object.assign(l, x); l.estado="ok"; } else l.estado="sin_codigo"; });
+  }catch(e){
+    faltan.forEach(l=>l.estado="error"); toast("No se pudieron leer los códigos de ML: "+e.message,"err",6000);
+  }
+  etqRender();
+}
+async function etqAgregar(){
+  const sku = document.getElementById("etqSku").value.trim();
+  const cant = parseInt(document.getElementById("etqCant").value)||0;
+  if(!sku || cant<=0){ toast("Elegí un SKU y una cantidad.","err"); return; }
+  const p = productos.find(x=>(x.sku||"").toUpperCase()===sku.toUpperCase());
+  if(!p){ toast("Ese SKU no está en el Catálogo.","err"); return; }
+  const ya = etqLineas.find(l=>l.sku.toUpperCase()===p.sku.toUpperCase());
+  if(ya) ya.cantidad += cant; else etqLineas.push({sku:p.sku, nombre:p.nombre, cantidad:cant, estado:"buscando"});
+  document.getElementById("etqSku").value = ""; document.getElementById("etqCant").value = "1";
+  etqRender(); await etqCompletarCodigos();
+}
+function etqCantidad(i,v){ etqLineas[i].cantidad = Math.max(0, parseInt(v)||0); etqRender(); }
+function etqQuitar(i){ etqLineas.splice(i,1); etqRender(); }
+function etqRender(){
+  const est = {buscando:'<span style="color:var(--text-soft);">⏳ buscando…</span>', ok:'<span style="color:var(--green);">✓</span>',
+    sin_codigo:'<span style="color:var(--red);" title="No encontré una publicación en Full con código de inventario para este SKU">⚠️ sin código de Full</span>', error:'<span style="color:var(--red);">⚠️ error</span>'};
+  document.getElementById("etqBody").innerHTML = etqLineas.map((l,i)=>`<tr>
+      <td><span class="sku-tag">${esc(l.sku)}</span></td>
+      <td style="font-size:12px;max-width:260px;">${esc(l.titulo||l.nombre||"")}${l.variacion?`<div style="font-size:11px;color:var(--text-soft);">${esc(l.variacion)}</div>`:""}</td>
+      <td style="font-family:monospace;font-weight:700;">${l.inventory_id?esc(l.inventory_id):"—"}</td>
+      <td><input type="number" min="0" value="${l.cantidad}" style="width:70px;padding:3px 5px;border:1.5px solid var(--border);border-radius:5px;text-align:right;" onchange="etqCantidad(${i},this.value)"></td>
+      <td style="font-size:12px;">${est[l.estado]||""}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="etqQuitar(${i})" title="Quitar">✕</button></td>
+    </tr>`).join("") || `<tr><td colspan="6" style="text-align:center;padding:16px;color:var(--text-soft);">Agregá productos con el SKU y la cantidad.</td></tr>`;
+  const listas = etqLineas.filter(l=>l.inventory_id && l.cantidad>0);
+  const total = listas.reduce((a,l)=>a+l.cantidad,0);
+  document.getElementById("etqTotal").textContent = total ? `${total} etiqueta(s) de ${listas.length} producto(s)` : "";
+  document.getElementById("btnEtqImprimir").disabled = !total;
+  const primera = listas[0];
+  document.getElementById("etqMuestra").innerHTML = primera ? etqHtmlEtiqueta(primera, ETQ_TAM[document.getElementById("etqTam").value]||ETQ_TAM["50x25"], document.getElementById("etqConSku").checked) : "";
+}
+function etqHtmlEtiqueta(l, tam, conSku){
+  const [w,h] = tam;
+  const barH = Math.round(h*0.46), barW = w-4;
+  const titulo = (l.titulo||l.nombre||"");
+  const fs = h<=25 ? 1.9 : h<=30 ? 2.2 : 2.8;
+  return `<div class="etq" style="width:${w}mm;height:${h}mm;box-sizing:border-box;padding:1mm 2mm;overflow:hidden;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:space-between;">
+    ${svgCode128(l.inventory_id, barH, barW)}
+    <div style="font-size:${fs+0.8}mm;font-weight:700;letter-spacing:.3mm;line-height:1;">${esc(l.inventory_id)}</div>
+    <div style="font-size:${fs}mm;line-height:1.1;text-align:center;max-height:${(fs*1.1*2).toFixed(1)}mm;overflow:hidden;width:100%;">${esc(titulo)}${l.variacion?" · "+esc(l.variacion):""}</div>
+    <div style="font-size:${fs-0.2}mm;line-height:1;width:100%;display:flex;justify-content:space-between;"><span>Nuevo</span>${conSku?`<span>SKU ${esc(l.sku)}</span>`:"<span></span>"}</div>
+  </div>`;
+}
+function etqImprimir(){
+  const tamKey = document.getElementById("etqTam").value;
+  try{ localStorage.setItem("nexo_etq_tam", tamKey); }catch(e){}
+  const tam = ETQ_TAM[tamKey]||ETQ_TAM["50x25"], conSku = document.getElementById("etqConSku").checked;
+  const listas = etqLineas.filter(l=>l.inventory_id && l.cantidad>0);
+  if(!listas.length) return;
+  let cuerpo = "";
+  listas.forEach(l=>{ const e = etqHtmlEtiqueta(l, tam, conSku); for(let i=0;i<l.cantidad;i++) cuerpo += `<div class="pag">${e}</div>`; });
+  const w = window.open("", "_blank");
+  if(!w){ toast("El navegador bloqueó la ventana de impresión. Permití las ventanas emergentes para NEXO.","err",6000); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etiquetas Full</title><style>
+    @page{size:${tam[0]}mm ${tam[1]}mm;margin:0;}
+    html,body{margin:0;padding:0;background:#fff;}
+    .pag{width:${tam[0]}mm;height:${tam[1]}mm;page-break-after:always;break-after:page;overflow:hidden;}
+    .pag:last-child{page-break-after:auto;break-after:auto;}
+    svg rect{fill:#000;}
+  </style></head><body>${cuerpo}<script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script></body></html>`);
+  w.document.close();
+}
+// Desde la Planificación Full: etiquetas de lo que se puede mandar ya desde el depósito
+function pfEtiquetasEnviarYa(){
+  const l = pfLineas.filter(x=>x.enCatalogo && x.enviarYa>0).map(x=>({sku:x.sku, nombre:x.nombre, cantidad:x.enviarYa}));
+  if(!l.length){ toast("No hay nada para enviar ya desde el depósito.","err"); return; }
+  cerrarPlanifFull();
+  abrirEtiquetasFull(l);
 }
 
 // ================================================================
