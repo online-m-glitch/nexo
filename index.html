@@ -3253,10 +3253,16 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
       <span style="flex:1;"></span>
       <label style="font-size:12px;color:var(--text-soft);">Tamaño:
         <select id="etqTam" onchange="etqRender()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;">
-          <option value="50x25">50 × 25 mm</option>
+          <option value="50x25">5 × 2,5 cm (el de ML)</option>
           <option value="40x30">40 × 30 mm</option>
           <option value="60x40">60 × 40 mm</option>
           <option value="100x50">100 × 50 mm</option>
+        </select>
+      </label>
+      <label style="font-size:12px;color:var(--text-soft);">Imprimir en:
+        <select id="etqFormato" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;">
+          <option value="rollo">Térmica de rollo (una por etiqueta)</option>
+          <option value="a4">Hoja A4 de 3 × 10 (como el PDF de ML)</option>
         </select>
       </label>
       <label style="font-size:12px;color:var(--text-soft);"><input type="checkbox" id="etqConSku" checked onchange="etqRender()"> Mostrar SKU</label>
@@ -3273,14 +3279,15 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
         <div id="etqMuestra" style="display:inline-block;border:1px dashed #999;background:#fff;"></div>
       </div>
       <div style="font-size:12px;color:var(--text-soft);flex:1;min-width:220px;">
-        En la ventana de impresión elegí tu impresora térmica, <strong>márgenes: ninguno</strong> y <strong>escala 100%</strong>.
+        Para PDF, en la ventana de impresión elegí <strong>«Guardar como PDF»</strong>. Para la térmica: <strong>márgenes: ninguno</strong> y <strong>escala 100%</strong>, o usá el <strong>ZPL</strong> como con MercadoLibre.
         Antes de imprimir todo, probá una etiqueta y verificá que el lector la lea.
       </div>
     </div>
     <div class="modal-actions">
       <span id="etqTotal" style="font-size:13px;margin-right:auto;"></span>
       <button class="btn btn-ghost" onclick="cerrarEtiquetasFull()">Cerrar</button>
-      <button class="btn btn-primary" id="btnEtqImprimir" onclick="etqImprimir()" disabled>🖨️ Imprimir</button>
+      <button class="btn btn-ghost" id="btnEtqZPL" onclick="etqDescargarZPL()" disabled title="Archivo .txt con comandos ZPL, igual al que descarga MercadoLibre (Zebra y compatibles, 5 × 2,5 cm)">⬇️ Descargar ZPL (.txt)</button>
+      <button class="btn btn-primary" id="btnEtqImprimir" onclick="etqImprimir()" disabled title="Abre la impresión. Para PDF elegí «Guardar como PDF» como impresora.">🖨️ Imprimir / PDF</button>
     </div>
   </div>
 </div>
@@ -5671,6 +5678,7 @@ function etqCfg(){
 async function abrirEtiquetasFull(lineasIniciales){
   document.getElementById("modalEtiquetas").classList.add("show");
   document.getElementById("etqTam").value = etqCfg();
+  try{ document.getElementById("etqFormato").value = localStorage.getItem("nexo_etq_formato") || "rollo"; }catch(e){}
   document.getElementById("etqSku").value = "";
   document.getElementById("etqCant").value = "1";
   etqLineas = [];
@@ -5722,40 +5730,90 @@ function etqRender(){
   const total = listas.reduce((a,l)=>a+l.cantidad,0);
   document.getElementById("etqTotal").textContent = total ? `${total} etiqueta(s) de ${listas.length} producto(s)` : "";
   document.getElementById("btnEtqImprimir").disabled = !total;
+  document.getElementById("btnEtqZPL").disabled = !total;
   const primera = listas[0];
   document.getElementById("etqMuestra").innerHTML = primera ? etqHtmlEtiqueta(primera, ETQ_TAM[document.getElementById("etqTam").value]||ETQ_TAM["50x25"], document.getElementById("etqConSku").checked) : "";
 }
 function etqHtmlEtiqueta(l, tam, conSku){
-  const [w,h] = tam;
-  const barH = Math.round(h*0.46), barW = w-4;
-  const titulo = (l.titulo||l.nombre||"");
-  const fs = h<=25 ? 1.9 : h<=30 ? 2.2 : 2.8;
-  return `<div class="etq" style="width:${w}mm;height:${h}mm;box-sizing:border-box;padding:1mm 2mm;overflow:hidden;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:space-between;">
-    ${svgCode128(l.inventory_id, barH, barW)}
-    <div style="font-size:${fs+0.8}mm;font-weight:700;letter-spacing:.3mm;line-height:1;">${esc(l.inventory_id)}</div>
-    <div style="font-size:${fs}mm;line-height:1.1;text-align:center;max-height:${(fs*1.1*2).toFixed(1)}mm;overflow:hidden;width:100%;">${esc(titulo)}${l.variacion?" · "+esc(l.variacion):""}</div>
-    <div style="font-size:${fs-0.2}mm;line-height:1;width:100%;display:flex;justify-content:space-between;"><span>Nuevo</span>${conSku?`<span>SKU ${esc(l.sku)}</span>`:"<span></span>"}</div>
+  // Mismo diseño que la etiqueta de MercadoLibre: código de barras, código en negrita centrado,
+  // título (hasta 2 renglones) y "SKU: …" abajo a la izquierda.
+  const [w,h] = tam, k = h/25;               // escala respecto de 50×25 mm
+  const titulo = (l.titulo||l.nombre||"") + (l.variacion?" "+l.variacion:"");
+  const fs = (2.25*k).toFixed(2), fc = (2.75*k).toFixed(2);
+  return `<div class="etq" style="width:${w}mm;height:${h}mm;box-sizing:border-box;padding:${(2.2*k).toFixed(2)}mm ${(2.7*k).toFixed(2)}mm 0;overflow:hidden;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;">
+    <div style="display:flex;justify-content:center;">${svgCode128(l.inventory_id, (6.8*k).toFixed(2), Math.min(w-6, 40*k).toFixed(2))}</div>
+    <div style="font-size:${fc}mm;font-weight:700;text-align:center;line-height:1.05;margin-top:${(0.4*k).toFixed(2)}mm;">${esc(l.inventory_id)}</div>
+    <div style="font-size:${fs}mm;line-height:1.12;max-height:${(fs*1.12*2).toFixed(2)}mm;overflow:hidden;margin-top:${(0.6*k).toFixed(2)}mm;">${esc(titulo)}</div>
+    ${conSku?`<div style="font-size:${fs}mm;line-height:1.1;">SKU: ${esc(l.sku)}</div>`:""}
   </div>`;
 }
+function etqListas(){ return etqLineas.filter(l=>l.inventory_id && l.cantidad>0); }
 function etqImprimir(){
-  const tamKey = document.getElementById("etqTam").value;
-  try{ localStorage.setItem("nexo_etq_tam", tamKey); }catch(e){}
+  const tamKey = document.getElementById("etqTam").value, formato = document.getElementById("etqFormato").value;
+  try{ localStorage.setItem("nexo_etq_tam", tamKey); localStorage.setItem("nexo_etq_formato", formato); }catch(e){}
   const tam = ETQ_TAM[tamKey]||ETQ_TAM["50x25"], conSku = document.getElementById("etqConSku").checked;
-  const listas = etqLineas.filter(l=>l.inventory_id && l.cantidad>0);
-  if(!listas.length) return;
-  let cuerpo = "";
-  listas.forEach(l=>{ const e = etqHtmlEtiqueta(l, tam, conSku); for(let i=0;i<l.cantidad;i++) cuerpo += `<div class="pag">${e}</div>`; });
+  const listas = etqListas(); if(!listas.length) return;
+  const todas = []; listas.forEach(l=>{ const e = etqHtmlEtiqueta(l, tam, conSku); for(let i=0;i<l.cantidad;i++) todas.push(e); });
+  let css, cuerpo;
+  if(formato==="a4"){
+    // Hoja A4 como el PDF de ML: 3 columnas × 10 filas de 50×25 mm, con borde de corte
+    css = `@page{size:A4;margin:0;} html,body{margin:0;padding:0;background:#fff;}
+      .hoja{width:210mm;height:297mm;box-sizing:border-box;padding:3.8mm 0 0 12.7mm;display:grid;grid-template-columns:repeat(3,${tam[0]}mm);column-gap:5.2mm;grid-auto-rows:${tam[1]}mm;row-gap:4.7mm;page-break-after:always;break-after:page;overflow:hidden;}
+      .hoja:last-child{page-break-after:auto;break-after:auto;} .hoja .etq{outline:0.2mm solid #888;} svg rect{fill:#000;}`;
+    const porHoja = 3*Math.max(1, Math.floor((297-3.8+4.7)/(tam[1]+4.7)));
+    cuerpo = "";
+    for(let i=0;i<todas.length;i+=porHoja) cuerpo += `<div class="hoja">${todas.slice(i,i+porHoja).join("")}</div>`;
+  } else {
+    css = `@page{size:${tam[0]}mm ${tam[1]}mm;margin:0;} html,body{margin:0;padding:0;background:#fff;}
+      .pag{width:${tam[0]}mm;height:${tam[1]}mm;page-break-after:always;break-after:page;overflow:hidden;}
+      .pag:last-child{page-break-after:auto;break-after:auto;} svg rect{fill:#000;}`;
+    cuerpo = todas.map(e=>`<div class="pag">${e}</div>`).join("");
+  }
   const w = window.open("", "_blank");
   if(!w){ toast("El navegador bloqueó la ventana de impresión. Permití las ventanas emergentes para NEXO.","err",6000); return; }
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etiquetas Full</title><style>
-    @page{size:${tam[0]}mm ${tam[1]}mm;margin:0;}
-    html,body{margin:0;padding:0;background:#fff;}
-    .pag{width:${tam[0]}mm;height:${tam[1]}mm;page-break-after:always;break-after:page;overflow:hidden;}
-    .pag:last-child{page-break-after:auto;break-after:auto;}
-    svg rect{fill:#000;}
-  </style></head><body>${cuerpo}<script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script></body></html>`);
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etiquetas Full</title><style>${css}</style></head><body>${cuerpo}<script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script></body></html>`);
   w.document.close();
 }
+
+// ── ZPL (.txt) igual al que descarga MercadoLibre (impresoras Zebra y compatibles, 203 dpi, 5×2,5 cm) ──
+function zplTexto(t){
+  // ^FH con "_" + hex de cada byte UTF-8 para lo que no es letra/número/espacio (igual que ML: ó → _C3_B3, . → _2E)
+  const enc = new TextEncoder();
+  let out = "";
+  for(const ch of String(t||"")){
+    if(/[A-Za-z0-9 +\-\/,:()&%#*=?!]/.test(ch)) out += ch;
+    else enc.encode(ch).forEach(b=>{ out += "_"+b.toString(16).toUpperCase().padStart(2,"0"); });
+  }
+  return out;
+}
+function etqZPL(listas, conSku){
+  return listas.map(l=>{
+    const cod = zplTexto(l.inventory_id);
+    const titulo = zplTexto((l.titulo||l.nombre||"")+(l.variacion?" "+l.variacion:""));
+    return ["^XA","^CI28","^LH0,0",
+      `^FO65,18^BY2^BCN,54,N,N^FD${cod}^FS`,
+      `^FT150,98^A0N,22,22^FH^FD${cod}^FS`,
+      `^FT149,98^A0N,22,22^FH^FD${cod}^FS`,
+      `^FO22,115^A0N,18,18^FB370,2,0,L^FH^FD${titulo}^FS`,
+      `^FO22,150^A0N,18,18^FB370,1,0,L^FH^FD^FS`,
+      `^FO21,150^A0N,18,18^FB370,1,0,L^FH^FD^FS`,
+      `^FO22,170^A0N,18,18^FH^FD${conSku?"SKU: "+zplTexto(l.sku):""}^FS`,
+      `^FO22,170^A0N,18,18^FH^FD^FS`,
+      `^PQ${l.cantidad},0,1,Y^XZ`].join("\n");
+  }).join("\n")+"\n";
+}
+function etqDescargarZPL(){
+  const listas = etqListas(); if(!listas.length) return;
+  if(document.getElementById("etqTam").value!=="50x25"){ toast("El archivo ZPL está armado para 5 × 2,5 cm (el mismo de MercadoLibre). Elegí ese tamaño.","err",6000); return; }
+  const blob = new Blob([etqZPL(listas, document.getElementById("etqConSku").checked)], {type:"text/plain"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "NEXO-Etiquetas-de-productos-"+new Date().toISOString().slice(0,10)+".txt";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+  toast("Archivo ZPL descargado: mandalo a la impresora térmica como lo hacés con el de MercadoLibre.","ok",5000);
+}
+
 // Desde la Planificación Full: etiquetas de lo que se puede mandar ya desde el depósito
 function pfEtiquetasEnviarYa(){
   const l = pfLineas.filter(x=>x.enCatalogo && x.enviarYa>0).map(x=>({sku:x.sku, nombre:x.nombre, cantidad:x.enviarYa}));
