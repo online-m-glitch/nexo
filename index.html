@@ -896,6 +896,8 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
           <div class="fml-slot" id="fmlSlot-envios"></div>
           <div style="display:flex;align-items:center;gap:12px;margin:22px 0 10px;flex-wrap:wrap;">
             <h3 style="margin:0;font-size:15px;">Envíos registrados</h3>
+            <label class="btn btn-ghost btn-sm admin-only" style="cursor:pointer;" title="Reportes 'Inbound-XXXX-detail_report.csv' que bajás de ML. Solo quedan como historial: no cambian el stock y no se duplican.">📄 Subir reportes de ML (CSV)<input type="file" accept=".csv,text/csv" multiple style="display:none;" onchange="fmlSubirReportes(this)"></label>
+            <span id="fmlRepInfo" style="font-size:12px;color:var(--text-soft);"></span>
             <label id="fmlOcultosLbl" style="display:none;font-size:12px;color:var(--text-soft);"><input type="checkbox" id="fmlVerOcultos" onchange="renderFullEnvios()"> <span></span></label>
           </div>
           <div class="table-wrap">
@@ -6049,9 +6051,52 @@ cerrarModalFullML = function(){ _cerrarModalFullMLOrig(); try{ _abrirImportadorF
 const _cerrarPlanifOrig = cerrarPlanifFull;
 cerrarPlanifFull = function(){ _cerrarPlanifOrig(); };
 
-// ── Envíos registrados (movimientos "Envío a Full") ──
+// ── Envíos registrados: movimientos "Envío a Full" + reportes de recepción de ML ──
+// Los reportes de ML (Inbound-XXXX-detail_report.csv) son SOLO historial: se guardan en
+// nexo_full_envios y nunca crean ni cambian movimientos, así que no tocan el stock.
+let fmlReportes = [], _fmlRepCargado = false;
+async function fmlCargarReportes(){
+  try{ fmlReportes = await sbGet("nexo_full_envios", "select=envio_id,estado,fecha_recepcion,lineas,archivo&order=fecha_recepcion.desc"); }
+  catch(e){ fmlReportes = []; }
+  _fmlRepCargado = true;
+  renderFullEnvios();
+}
+function fmlFechaLocal(ts){
+  if(!ts) return "";
+  try{ return new Date(ts).toLocaleDateString("sv-SE",{timeZone:"America/Argentina/Buenos_Aires"}); }catch(e){ return String(ts).slice(0,10); }
+}
+function fmlRepItems(r){ const it = {}; (r.lineas||[]).forEach(l=>{ const k=(l.sku||l.codigo||"").trim(); if(k) it[k]=(it[k]||0)+(Number(l.declaradas)||0); }); return it; }
+function fmlMismoContenido(a, b){
+  const na = {}, nb = {};
+  Object.entries(a).forEach(([k,v])=>{ if(v) na[k.toUpperCase()] = (na[k.toUpperCase()]||0)+v; });
+  Object.entries(b).forEach(([k,v])=>{ if(v) nb[k.toUpperCase()] = (nb[k.toUpperCase()]||0)+v; });
+  const ka = Object.keys(na), kb = Object.keys(nb);
+  return ka.length>0 && ka.length===kb.length && ka.every(k=>na[k]===nb[k]);
+}
+// Une los grupos de movimientos con los reportes de ML, sin duplicar el mismo envío.
+// 1) mismo número de envío  2) mismo contenido (SKU y cantidades) con la fecha más cercana (±45 días)
+function fmlUnirReportes(grupos, reportes){
+  const filas = grupos.slice(), ids = new Set((reportes||[]).map(r=>String(r.envio_id))), pend = [];
+  // 1) mismo número de envío
+  (reportes||[]).forEach(r=>{
+    const id = String(r.envio_id), g = filas.find(x=>!x.rep && x.nro===id);
+    if(g) g.rep = r; else pend.push(r);
+  });
+  // 2) mismo contenido y fecha más cercana (solo grupos sin número o con un número que no es de otro reporte)
+  pend.forEach(r=>{
+    const id = String(r.envio_id), f = fmlFechaLocal(r.fecha_recepcion), items = fmlRepItems(r), t = Date.parse(f)||0;
+    const cand = filas.filter(x=>!x.rep && !x.soloReporte && !(x.nro && ids.has(x.nro)) && fmlMismoContenido(x.items, items)
+      && Math.abs((Date.parse(x.fecha)||0)-t) <= 45*864e5);
+    cand.sort((x,y)=>(x.oculto-y.oculto) || Math.abs((Date.parse(x.fecha)||0)-t)-Math.abs((Date.parse(y.fecha)||0)-t));
+    const g = cand[0];
+    if(g){ g.rep = r; if(g.nro) g.nroNexo = g.nro; g.nro = id; }
+    else filas.push({fecha:f, nro:id, items, unidades:Object.values(items).reduce((a,b)=>a+b,0), soloReporte:true, rep:r, clave:"rep|"+id});
+  });
+  return filas;
+}
 function renderFullEnvios(){
   const tb = document.getElementById("fmlEnviosBody"); if(!tb) return;
+  if(!_fmlRepCargado && typeof sbGet==="function" && !renderFullEnvios._cargando){ renderFullEnvios._cargando = true; fmlCargarReportes().finally(()=>renderFullEnvios._cargando=false); }
   const grupos = {};
   (movimientos||[]).filter(m=>m.tipo==="Envío a Full").forEach(m=>{
     // Nro. de envío: "Envío #123…" (importador) o un número suelto de 6+ dígitos cargado a mano en Movimientos
@@ -6066,22 +6111,91 @@ function renderFullEnvios(){
   const chkOc = document.getElementById("fmlVerOcultos");
   if(chkOc && !ocultos.size) chkOc.checked = false;
   const verOcultos = chkOc?.checked;
-  const todos = Object.values(grupos).map(g=>Object.assign(g,{clave:(g.fecha||"")+"|"+g.nro, oculto:ocultos.has((g.fecha||"")+"|"+g.nro)}));
+  const movs = Object.values(grupos).map(g=>Object.assign(g,{clave:(g.fecha||"")+"|"+g.nro, oculto:ocultos.has((g.fecha||"")+"|"+g.nro)}));
+  const todos = fmlUnirReportes(movs, fmlReportes);
+  todos.forEach(g=>{ if(g.soloReporte) g.oculto = ocultos.has(g.clave); });
   const nOcultos = todos.filter(g=>g.oculto).length;
   const lblOc = document.getElementById("fmlOcultosLbl");
   if(lblOc){ lblOc.style.display = nOcultos ? "" : "none"; lblOc.querySelector("span").textContent = `Mostrar quitados del listado (${nOcultos})`; }
+  const nRep = document.getElementById("fmlRepInfo");
+  if(nRep) nRep.textContent = fmlReportes.length ? `${fmlReportes.length} reporte${fmlReportes.length===1?"":"s"} de ML cargado${fmlReportes.length===1?"":"s"}` : "";
   const lista = todos.filter(g=>verOcultos || !g.oculto).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
   _fmlEnvios = lista;
-  tb.innerHTML = lista.slice(0,100).map((g,i)=>{
+  tb.innerHTML = lista.slice(0,200).map((g,i)=>{
     const det = Object.entries(g.items).map(([s,q])=>`${esc(s)} ×${q}`).join(" · ");
+    const r = g.rep, conDif = r && /diferencia/i.test(r.estado||"");
+    const tagML = r ? `<div style="font-size:10.5px;margin-top:2px;color:${conDif?'var(--orange)':'var(--green)'};" title="${esc(r.estado)}">${conDif?"⚠️ ML: con diferencias":"✓ ML: recibido OK"}</div>` : "";
+    const tagRep = g.soloReporte ? `<div style="font-size:10.5px;color:var(--text-soft);" title="Cargado desde el reporte de ML. No movió stock en NEXO.">📄 Reporte ML (no movió stock)</div>` : "";
+    const tagNro = g.nroNexo ? `<div style="font-size:10.5px;color:var(--text-soft);">cargado en NEXO como #${esc(g.nroNexo)}</div>` : "";
     return `<tr style="cursor:pointer;${g.oculto?'opacity:.5;':''}" onclick="verEnvioFull(${i})" title="${g.oculto?'Quitado del listado — ':''}Ver el detalle completo">
-      <td>${fFecha(g.fecha)}</td><td>${g.nro?"#"+esc(g.nro):'<span style="color:var(--text-soft);">—</span>'}</td>
+      <td>${fFecha(g.fecha)}</td><td>${g.nro?"#"+esc(g.nro):'<span style="color:var(--text-soft);">—</span>'}${tagNro}${tagML}${tagRep}</td>
       <td class="num">${Object.keys(g.items).length}</td><td class="num" style="font-weight:700;">${g.unidades}</td>
       <td style="font-size:11px;color:var(--text-soft);max-width:480px;">${det}</td>
       <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();verEnvioFull(${i})">👁️ Ver</button>
         ${g.oculto?`<button class="btn btn-ghost btn-sm admin-only" onclick="event.stopPropagation();fmlMostrarEnvio(${i})" title="Volver a mostrarlo en el listado">↩️ Mostrar</button>`:`<button class="btn btn-ghost btn-sm admin-only" onclick="event.stopPropagation();fmlOcultarEnvio(${i})" title="Quitar del listado (no cambia el stock)">🗑️</button>`}</td></tr>`;
   }).join("") || `<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--text-soft);">Todavía no hay envíos a Full registrados.</td></tr>`;
   if(typeof esAdmin==="function" && !esAdmin()) tb.querySelectorAll(".admin-only").forEach(el=>el.style.display="none");
+}
+// ── Subir reportes de recepción de ML (CSV "Inbound-XXXX-detail_report.csv") ──
+// Solo guarda el historial: NO crea movimientos ni cambia stock. Si el envío ya estaba cargado no se duplica.
+function fmlNormCol(s){ return String(s||"").replace(/^﻿/,"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim(); }
+function fmlParsearReporteML(texto, archivo){
+  const lineas = String(texto||"").replace(/^﻿/,"").split(/\r?\n/).filter(l=>l.trim());
+  if(lineas.length<2) return [];
+  const sep = lineas[0].includes(";") ? ";" : ",";
+  const cab = lineas[0].split(sep).map(fmlNormCol);
+  const col = n=>cab.indexOf(n);
+  const c = {id:col("id de envio"), est:col("estado del envio"), f:col("fecha de recepcion"), cod:col("codigo ml"), sku:col("sku"),
+    dec:col("unidades declaradas"), pro:col("unidades procesadas"), apt:col("unidades aptas para vender"), noa:col("unidades no aptas para vender"), ide:col("unidades para identificar")};
+  if(c.id<0 || c.dec<0 || (c.sku<0 && c.cod<0)) return null;
+  const envios = {};
+  lineas.slice(1).forEach(l=>{
+    const v = l.split(sep), id = (v[c.id]||"").trim(); if(!/^\d+$/.test(id)) return;
+    const e = envios[id] || (envios[id] = {envio_id:id, estado:(v[c.est]||"").trim(), fecha:(v[c.f]||"").trim(), lineas:[], archivo});
+    const n = i=>i<0?0:(Number(String(v[i]||"").trim())||0);
+    e.lineas.push({sku:(v[c.sku]||"").trim(), codigo:(v[c.cod]||"").trim(), declaradas:n(c.dec), procesadas:n(c.pro), aptas:n(c.apt), no_aptas:n(c.noa), identificar:n(c.ide)});
+  });
+  return Object.values(envios);
+}
+function fmlFechaARaISO(f){
+  // "2026-05-23 13:18:24" (hora de Argentina, UTC-3)
+  const m = String(f||"").match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)/);
+  return m ? `${m[1]}T${m[2].length===5?m[2]+":00":m[2]}-03:00` : (f||null);
+}
+async function fmlSubirReportes(input){
+  if(checkViewer("Subir reportes de ML")){ input.value=""; return; }
+  const files = Array.from(input.files||[]); input.value = "";
+  if(!files.length) return;
+  const leidos = {}, malos = [];
+  for(const f of files){
+    const txt = await f.text();
+    const r = fmlParsearReporteML(txt, f.name);
+    if(!r || !r.length){ malos.push(f.name); continue; }
+    r.forEach(e=>{ leidos[e.envio_id] = e; });
+  }
+  const ya = new Map(fmlReportes.map(r=>[String(r.envio_id), r]));
+  const filas = [], nuevos = [], actualizados = [], iguales = [];
+  Object.values(leidos).forEach(e=>{
+    const fila = {envio_id:e.envio_id, estado:e.estado, fecha_recepcion:fmlFechaARaISO(e.fecha), lineas:e.lineas, archivo:e.archivo};
+    if(clienteId) fila.cliente_id = clienteId;
+    const prev = ya.get(e.envio_id);
+    if(!prev) nuevos.push(e.envio_id);
+    else if(prev.estado===e.estado && JSON.stringify(prev.lineas)===JSON.stringify(e.lineas)){ iguales.push(e.envio_id); return; }
+    else actualizados.push(e.envio_id);
+    filas.push(fila);
+  });
+  if(filas.length){
+    try{ await sbUpsert("nexo_full_envios", filas); }
+    catch(e){ toast("No se pudieron guardar los reportes: "+e.message,"err",6000); return; }
+  }
+  await fmlCargarReportes();
+  const partes = [];
+  if(nuevos.length) partes.push(`${nuevos.length} nuevo${nuevos.length===1?"":"s"}`);
+  if(actualizados.length) partes.push(`${actualizados.length} actualizado${actualizados.length===1?"":"s"}`);
+  if(iguales.length) partes.push(`${iguales.length} ya estaba${iguales.length===1?"":"n"} cargado${iguales.length===1?"":"s"} (no se duplicó)`);
+  if(malos.length) partes.push(`${malos.length} archivo${malos.length===1?"":"s"} no reconocido${malos.length===1?"":"s"}`);
+  toast(`Reportes de ML: ${partes.join(" · ")||"nada para cargar"}. El stock no cambió.`, malos.length&&!filas.length?"err":"ok", 6000);
+  return {nuevos, actualizados, iguales, malos};
 }
 let _fmlEnvios = [];
 // Quitar un envío del listado: solo lo oculta (se guarda en la configuración del cliente).
@@ -6116,24 +6230,38 @@ function verEnvioFull(i){
     ov.addEventListener("click", e=>{ if(e.target===ov) ov.classList.remove("show"); });
     document.body.appendChild(ov);
   }
+  const r = g.rep, repPorSku = {};
+  ov.querySelector(".modal").style.maxWidth = r ? "1040px" : "820px";
+  if(r) (r.lineas||[]).forEach(l=>{ const k=(l.sku||l.codigo||"").toUpperCase(); const a=repPorSku[k]||(repPorSku[k]={codigo:l.codigo,declaradas:0,procesadas:0,aptas:0,no_aptas:0,identificar:0}); ["declaradas","procesadas","aptas","no_aptas","identificar"].forEach(c=>a[c]+=Number(l[c])||0); });
   const filas = Object.entries(g.items).map(([sku,q])=>{
     const p = productos.find(x=>(x.sku||"").toUpperCase()===sku.toUpperCase()) || {};
-    const costo = Number(p.costo)||0;
-    return {sku, nombre:p.nombre||"", prov:p.proveedor||"", q, costo, total:q*costo};
+    const costo = Number(p.costo)||0, ml = repPorSku[sku.toUpperCase()]||null;
+    return {sku, nombre:p.nombre||"", prov:p.proveedor||"", q, costo, total:q*costo, ml};
   }).sort((a,b)=>b.q-a.q || a.sku.localeCompare(b.sku));
   const tot = filas.reduce((a,f)=>a+f.total,0);
+  const sum = c=>filas.reduce((a,f)=>a+(f.ml?f.ml[c]:0),0);
+  const conDif = r && /diferencia/i.test(r.estado||"");
+  const colsML = r ? `<th>Recibidas ML</th><th>Aptas</th><th>No aptas</th><th>Dif.</th>` : "";
+  const celML = f=>{ if(!r) return ""; if(!f.ml) return `<td colspan="4" style="font-size:11px;color:var(--text-soft);">no figura en el reporte</td>`;
+    const d = f.ml.procesadas - f.ml.declaradas;
+    return `<td class="num">${f.ml.procesadas}</td><td class="num">${f.ml.aptas}</td><td class="num" style="${f.ml.no_aptas?'color:var(--red);font-weight:700;':''}">${f.ml.no_aptas||""}</td><td class="num" style="${d?'color:var(--orange);font-weight:700;':''}">${d?(d>0?"+":"")+d:""}</td>`; };
+  const aviso = g.soloReporte
+    ? `<div style="background:var(--bg-soft,#f4f6fa);border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:12px;">📄 Envío cargado desde el reporte de recepción de ML. <strong>No movió stock en NEXO</strong> — es solo historial.</div>`
+    : (r ? `<div style="background:var(--bg-soft,#f4f6fa);border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:12px;">📄 Con datos del reporte de recepción de ML${g.nroNexo?` (en NEXO se cargó como #${esc(g.nroNexo)})`:""}. El reporte es solo informativo: no cambia el stock.</div>` : "");
   document.getElementById("envioFullCont").innerHTML = `
     <h3>🚚 Envío a Full ${g.nro?"#"+esc(g.nro):""}</h3>
+    ${aviso}
     <div class="stats-grid" style="margin-bottom:14px;">
       <div class="stat-card"><div class="label">Fecha</div><div class="value" style="font-size:20px;">${fFecha(g.fecha)}</div><div class="sub">${g.nro?"Envío #"+esc(g.nro):"sin número de envío"}</div></div>
       <div class="stat-card"><div class="label">Productos</div><div class="value">${filas.length}</div><div class="sub">SKU distintos</div></div>
-      <div class="stat-card"><div class="label">Unidades</div><div class="value">${fmtN(g.unidades)}</div><div class="sub">enviadas a Full</div></div>
+      <div class="stat-card"><div class="label">Unidades</div><div class="value">${fmtN(g.unidades)}</div><div class="sub">${g.soloReporte?"declaradas a ML":"enviadas a Full"}</div></div>
+      ${r?`<div class="stat-card"><div class="label">Recepción ML</div><div class="value" style="font-size:20px;color:${conDif?'var(--orange)':'var(--green)'};">${fmtN(sum("procesadas"))}</div><div class="sub">${esc(r.estado)}${sum("no_aptas")?` · ${sum("no_aptas")} no aptas`:""}</div></div>`:""}
       <div class="stat-card"><div class="label">Valor a costo</div><div class="value">$${fmt(tot)}</div><div class="sub">con el costo actual del Catálogo</div></div>
     </div>
     <div class="table-wrap" style="max-height:52vh;overflow:auto;"><table>
-      <thead><tr><th>#</th><th>SKU</th><th>Producto</th><th>Proveedor</th><th>Unidades</th><th>Costo unit.</th><th>Costo total</th></tr></thead>
-      <tbody>${filas.map((f,j)=>`<tr><td class="num">${j+1}</td><td><span class="sku-tag">${esc(f.sku)}</span></td><td style="font-size:12px;">${esc(f.nombre)||'<span style="color:var(--orange);">No está en el Catálogo</span>'}</td><td style="font-size:12px;">${esc(f.prov)}</td><td class="num" style="font-weight:700;">${f.q}</td><td class="num">$${fmt(f.costo)}</td><td class="num">$${fmt(f.total)}</td></tr>`).join("")}</tbody>
-      <tfoot><tr><td></td><td colspan="3" style="font-weight:700;">Total</td><td class="num" style="font-weight:700;">${fmtN(g.unidades)}</td><td></td><td class="num" style="font-weight:700;">$${fmt(tot)}</td></tr></tfoot>
+      <thead><tr><th>#</th><th>SKU</th><th>Producto</th><th>Proveedor</th><th>Unidades</th>${colsML}<th>Costo unit.</th><th>Costo total</th></tr></thead>
+      <tbody>${filas.map((f,j)=>`<tr><td class="num">${j+1}</td><td><span class="sku-tag">${esc(f.sku)}</span>${f.ml&&f.ml.codigo?`<div style="font-size:10px;color:var(--text-soft);font-family:monospace;">${esc(f.ml.codigo)}</div>`:""}</td><td style="font-size:12px;">${esc(f.nombre)||'<span style="color:var(--orange);">No está en el Catálogo</span>'}</td><td style="font-size:12px;">${esc(f.prov)}</td><td class="num" style="font-weight:700;">${f.q}</td>${celML(f)}<td class="num">$${fmt(f.costo)}</td><td class="num">$${fmt(f.total)}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td></td><td colspan="3" style="font-weight:700;">Total</td><td class="num" style="font-weight:700;">${fmtN(g.unidades)}</td>${r?`<td class="num" style="font-weight:700;">${fmtN(sum("procesadas"))}</td><td class="num">${fmtN(sum("aptas"))}</td><td class="num">${sum("no_aptas")||""}</td><td></td>`:""}<td></td><td class="num" style="font-weight:700;">$${fmt(tot)}</td></tr></tfoot>
     </table></div>`;
   ov.classList.add("show");
 }
