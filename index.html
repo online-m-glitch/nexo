@@ -3103,6 +3103,11 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
 
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#f0f4ff;border-radius:8px;margin-bottom:16px;">
       <span style="font-weight:700;color:var(--brand-oscuro);">Total estimado: <span id="ppTotalDisplay" style="color:var(--ml-blue);font-size:16px;">$0</span></span>
+      <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--text-soft);">
+        <span id="ppSubtotalTxt"></span>
+        <label title="Redondeo, descuento o recargo del proveedor. Puede ser negativo.">Ajuste $ <input type="number" id="ppAjuste" step="any" value="0" oninput="ppSetAjuste(this.value)" style="width:90px;padding:5px 7px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;"></label>
+        <label title="Escribí el total que te cobra el proveedor y el ajuste se calcula solo">Total final $ <input type="number" id="ppTotalFinal" step="any" oninput="ppSetTotalFinal(this.value)" style="width:110px;padding:5px 7px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-weight:700;"></label>
+      </span>
     </div>
 
     <div class="modal-actions">
@@ -6628,6 +6633,125 @@ async function fullAplicarTodo(){
   mostrarCargando(false);
   renderFullStock(); if(typeof renderStock==="function") renderStock();
   toast(`Stock Full actualizado con el de ML: ${ok} producto(s) ✅`,"ok",5000);
+}
+// ================================================================
+// Pago anticipado de pedidos a proveedores
+// Algunos proveedores cobran ANTES de entregar. El pago se registra en la Cuenta Corriente
+// del proveedor como "Pago" con la referencia "Pedido #id" (queda saldo a favor), y opcionalmente
+// sale de la Caja. Al marcar el pedido como recibido se genera la Compra con la misma referencia,
+// así la deuda se compensa con lo ya pagado y la Compra aparece como pagada.
+// No toca stock: el stock entra recién cuando se marca "Recibido".
+// ================================================================
+function ppRef(id){ return "Pedido #"+id; }
+function ppPagosDe(p){
+  if(!p) return [];
+  const ref = ppRef(p.id), prov = String(p.proveedor||"").toUpperCase();
+  return (cuentaCorriente||[]).filter(m=>m.tipo==="Pago" && String(m.proveedor||"").toUpperCase()===prov && m.factura===ref);
+}
+function ppPagado(p){ return ppPagosDe(p).reduce((a,m)=>a+(Number(m.importe)||0),0); }
+function ppBadgePago(p){
+  const pag = ppPagado(p), tot = Number(p.total)||0;
+  if(!(pag > 0)) return "";
+  const det = ppPagosDe(p).map(m=>`${fFecha(m.fecha)} $${fmt(m.importe)} ${m.formaPago||""}`).join(" · ");
+  if(tot > 0 && pag >= tot - 0.5) return `<div><span class="badge badge-green" title="${esc(det)}">💳 Pagado</span></div>`;
+  return `<div><span class="badge badge-blue" title="${esc(det)}">💳 Pagado $${fmt(pag)} de $${fmt(tot)}</span></div>`;
+}
+function abrirPagoPP(id){
+  if(checkViewer("Registrar pagos")) return;
+  const p = pedidosProv.find(x=>x.id===id); if(!p) return;
+  let ov = document.getElementById("modalPagoPP");
+  if(!ov){
+    ov = document.createElement("div"); ov.className = "overlay"; ov.id = "modalPagoPP";
+    ov.innerHTML = `<div class="modal" style="max-width:520px;"><button type="button" class="modal-x" aria-label="Cerrar" onclick="document.getElementById('modalPagoPP').classList.remove('show')">✕</button>
+      <h3>💳 Pago anticipado del pedido</h3><div id="ppPagoInfo" style="font-size:13px;margin-bottom:12px;"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Fecha del pago</label><input type="date" id="ppPagoFecha"></div>
+        <div class="form-group"><label>Monto</label><input type="number" id="ppPagoMonto" min="0" step="any"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Forma de pago</label><select id="ppPagoForma">
+          <option value="Transferencia">🏦 Transferencia</option><option value="MercadoPago">💳 Mercado Pago</option><option value="Efectivo">💵 Efectivo</option><option value="Cheque">📄 Cheque</option></select></div>
+        <div class="form-group"><label>Comprobante / nota (opcional)</label><input type="text" id="ppPagoNota" placeholder="Ej: transf. 1234"></div>
+      </div>
+      <label id="ppPagoCajaLbl" style="font-size:12px;display:flex;gap:6px;align-items:center;margin-top:4px;"><input type="checkbox" id="ppPagoCaja" checked> <span></span></label>
+      <div style="font-size:11.5px;color:var(--text-soft);margin-top:10px;line-height:1.5;">Se registra como <strong>Pago</strong> en la Cuenta Corriente del proveedor (queda a favor tuyo hasta que llegue la mercadería). Cuando marques el pedido como <strong>Recibido</strong>, la compra se compensa con este pago y queda como pagada. El stock no cambia hasta la recepción.</div>
+      <div class="modal-actions"><button class="btn btn-ghost" onclick="document.getElementById('modalPagoPP').classList.remove('show')">Cancelar</button><button class="btn btn-success" id="ppPagoOk">💳 Registrar pago</button></div></div>`;
+    ov.addEventListener("click", e=>{ if(e.target===ov) ov.classList.remove("show"); });
+    document.body.appendChild(ov);
+    document.getElementById("ppPagoForma").addEventListener("change", ppPagoCajaTexto);
+  }
+  const pag = ppPagado(p), tot = Number(p.total)||0, resta = Math.max(0, tot - pag);
+  document.getElementById("ppPagoInfo").innerHTML = `<strong>${esc(p.proveedor)}</strong> · ${esc(ppRef(p.id))} · ${fFecha(p.fecha)}<br>
+    Total del pedido: <strong>$${fmt(tot)}</strong>${pag>0?` · Ya pagado: <strong>$${fmt(pag)}</strong> · Falta: <strong>$${fmt(resta)}</strong>`:""}`;
+  document.getElementById("ppPagoFecha").value = new Date().toISOString().split("T")[0];
+  document.getElementById("ppPagoMonto").value = Math.round((resta || tot)*100)/100;
+  document.getElementById("ppPagoNota").value = "";
+  ppPagoCajaTexto();
+  document.getElementById("ppPagoOk").onclick = ()=>registrarPagoPP(id);
+  ov.classList.add("show");
+}
+function ppPagoCajaTexto(){
+  const caja = cajaDeMetodoPago(document.getElementById("ppPagoForma").value);
+  const lbl = document.getElementById("ppPagoCajaLbl");
+  lbl.style.display = caja ? "flex" : "none";
+  lbl.querySelector("span").textContent = caja ? `Descontar de Caja ${caja}` : "";
+}
+async function registrarPagoPP(id){
+  if(checkViewer("Registrar pagos")) return;
+  const p = pedidosProv.find(x=>x.id===id); if(!p) return;
+  const fecha = document.getElementById("ppPagoFecha").value;
+  const monto = parseFloat(document.getElementById("ppPagoMonto").value)||0;
+  const forma = document.getElementById("ppPagoForma").value;
+  const nota = document.getElementById("ppPagoNota").value.trim();
+  if(!fecha || !(monto > 0)){ toast("Completá la fecha y el monto.","err"); return; }
+  const btn = document.getElementById("ppPagoOk"); btn.disabled = true;
+  try{
+    const cc = {fecha, tipo:"Pago", proveedor:p.proveedor, factura:ppRef(p.id),
+      descripcion:"Pago anticipado"+(nota?" · "+nota:""), importe:monto, formaPago:forma};
+    const saved = await sbGuardar("cc", cc);
+    cuentaCorriente.unshift(Object.assign({}, cc, saved||{}));
+    const caja = cajaDeMetodoPago(forma);
+    if(caja && document.getElementById("ppPagoCaja").checked){
+      const mov = {fecha, caja, tipo:"Egreso", monto, concepto:"Pago anticipado a "+cc.proveedor+" — "+ppRef(p.id), origen:"pago_proveedor", referencia:saved&&saved.id?String(saved.id):""};
+      const s2 = await sbGuardar("cajamov", mov);
+      cajaMovimientos.unshift(Object.assign({}, mov, s2||{}));
+    }
+    document.getElementById("modalPagoPP").classList.remove("show");
+    renderPedidosProv();
+    try{ renderCC(); renderPanel(); if(typeof renderCaja==="function") renderCaja(); }catch(e){}
+    const pag = ppPagado(p);
+    toast(`Pago de $${fmt(monto)} registrado ✅ ${pag >= (Number(p.total)||0)-0.5 ? "Pedido pagado." : "Falta $"+fmt((Number(p.total)||0)-pag)+"."} El stock no cambia hasta que lo recibas.`,"ok",6000);
+  }catch(e){ toast("No se pudo registrar el pago: "+e.message,"err",6000); }
+  finally{ btn.disabled = false; }
+}
+
+// ── Ajuste / redondeo del total del pedido (total = suma de líneas + ajuste) ──
+let ppAjuste = 0;
+function ppAjusteDe(p){
+  const sub = (p && p.lineas || []).reduce((a,l)=>a+(Number(l.costo)||0)*(Number(l.cantidad)||0),0);
+  const aj = Math.round(((Number(p && p.total)||0) - sub)*100)/100;
+  return Math.abs(aj) >= 0.01 ? aj : 0;
+}
+function ppPintarTotales(subtotal){
+  const aj = Number(ppAjuste)||0, fin = Math.round((subtotal + aj)*100)/100;
+  const el = document.getElementById("ppTotalDisplay"); if(el) el.textContent = "$"+fmt(fin);
+  const st = document.getElementById("ppSubtotalTxt"); if(st) st.textContent = aj ? `Productos $${fmt(subtotal)} ${aj>0?"+":"−"} ajuste $${fmt(Math.abs(aj))}` : "";
+  const ia = document.getElementById("ppAjuste"); if(ia && document.activeElement!==ia) ia.value = aj;
+  const it = document.getElementById("ppTotalFinal"); if(it && document.activeElement!==it) it.value = fin;
+}
+function _ppSubtotal(){ return ppLineas.reduce((a,l)=>a+(l.costo||0)*(l.cantidad||0),0); }
+function ppSetAjuste(v){ ppAjuste = parseFloat(String(v).replace(",", "."))||0; ppPintarTotales(_ppSubtotal()); }
+function ppSetTotalFinal(v){
+  const n = parseFloat(String(v).replace(",", "."));
+  if(!(n >= 0)) return;
+  ppAjuste = Math.round((n - _ppSubtotal())*100)/100;
+  ppPintarTotales(_ppSubtotal());
+}
+function ppBotonesEdicion(estado){
+  const b = document.getElementById("btnPPBorrador"), a = document.getElementById("btnPPAprobar");
+  if(!b || !a) return;
+  if(estado === "enviado"){ b.style.display = "none"; a.textContent = "💾 Guardar cambios"; }
+  else { b.style.display = ""; a.textContent = "✅ Aprobar pedido"; }
 }
 
 // ================================================================
@@ -13372,12 +13496,13 @@ function renderPedidosProv(){
       <td><strong>${esc(p.proveedor||"")}</strong></td>
       <td style="max-width:200px;font-size:12px;color:var(--text-soft);" title="${esc(resumen)}">${esc(resumen.length>60?resumen.slice(0,60)+"…":resumen)}</td>
       <td class="num" style="font-weight:700;">$${fmt(p.total||0)}</td>
-      <td><span class="badge ${cls}">${icon} ${p.estado}</span></td>
+      <td><span class="badge ${cls}">${icon} ${p.estado}</span>${ppBadgePago(p)}</td>
       <td style="font-size:12px;color:var(--text-soft);">${esc(p.obs||"")}</td>
       <td>
         <div class="btn-group">
           ${p.estado!=="recibido"&&p.estado!=="cancelado"?`<button class="btn btn-ghost btn-sm admin-only" onclick="editarPedidoProv(${p.id})" title="Editar">✏️</button>`:""}
           ${p.estado==="aprobado"||p.estado==="borrador"?`<button class="btn btn-success btn-sm admin-only" onclick="abrirEnviarPP(${p.id})" title="Enviar al proveedor">📤</button>`:""}
+          ${(p.estado==="aprobado"||p.estado==="enviado") && ppPagado(p) < (Number(p.total)||0)-0.5 ?`<button class="btn btn-success btn-sm admin-only" onclick="abrirPagoPP(${p.id})" title="Registrar un pago antes de recibir la mercadería (no cambia el stock)">💳 Pagar</button>`:""}
           ${p.estado==="enviado"?`<button class="btn btn-primary btn-sm admin-only" onclick="marcarRecibidoPP(${p.id})" title="Marcar como recibido">📦 Recibido</button>`:""}
           ${p.estado==="borrador"?`<button class="btn btn-danger btn-sm admin-only" onclick="cancelarPedidoProv(${p.id})" title="Cancelar">✕</button>`:""}
           <button class="btn btn-danger btn-sm admin-only" onclick="eliminarPedidoProv(${p.id})" title="Eliminar permanentemente" style="opacity:.7;">🗑️</button>
@@ -13512,6 +13637,7 @@ function abrirNuevoPedidoProv(proveedor, lineasSugeridas){
   document.getElementById("ppLinCosto").value = "";
   document.getElementById("ppLinSkuNombre").textContent = "";
   document.getElementById("ppModalTitle").textContent = "📋 Nuevo pedido — "+proveedor;
+  ppAjuste = 0; ppBotonesEdicion(null);
   renderLineasPP();
   document.getElementById("modalPedidoProv").classList.add("show");
   const conPendiente = lineasSugeridas.filter(l=>l.cantPendiente>0);
@@ -13533,6 +13659,8 @@ function editarPedidoProv(id){
   document.getElementById("ppLinCosto").value = "";
   document.getElementById("ppLinSkuNombre").textContent = "";
   document.getElementById("ppModalTitle").textContent = "✏️ Editar pedido — "+p.proveedor;
+  ppAjuste = Math.round(((Number(p.total)||0) - (p.lineas||[]).reduce((a,l)=>a+(l.costo||0)*(l.cantidad||0),0))*100)/100;
+  ppBotonesEdicion(p.estado);
   renderLineasPP();
   document.getElementById("modalPedidoProv").classList.add("show");
 }
@@ -13584,8 +13712,7 @@ function eliminarLineaPP(i){
 
 function renderLineasPP(){
   const total = ppLineas.reduce((a,l)=>a+(l.costo||0)*(l.cantidad||0),0);
-  const el = document.getElementById("ppTotalDisplay");
-  if(el) el.textContent = "$"+fmt(total);
+  ppPintarTotales(total);
 
   const tbody = document.getElementById("ppLineasBody");
   if(!tbody) return;
@@ -13619,7 +13746,9 @@ async function guardarPedidoProv(estado){
   if(!proveedor){ toast("Ingresá el proveedor.","err"); return; }
   if(!fecha){ toast("Ingresá la fecha.","err"); return; }
 
-  const total = ppLineas.reduce((a,l)=>a+(l.costo||0)*(l.cantidad||0),0);
+  const total = Math.round((ppLineas.reduce((a,l)=>a+(l.costo||0)*(l.cantidad||0),0) + (Number(ppAjuste)||0))*100)/100;
+  const _prevPP = ppId ? pedidosProv.find(x=>x.id===ppId) : null;
+  if(_prevPP && _prevPP.estado==="enviado") estado = "enviado";   // editar un pedido ya enviado no lo vuelve atrás
   const data = {proveedor, fecha, obs, estado, lineas:ppLineas, total};
 
   mostrarCargando(true);
@@ -13640,8 +13769,8 @@ async function guardarPedidoProv(estado){
     }
     cerrarModalPP();
     renderPedidosProv();
-    toast("Pedido "+(estado==="aprobado"?"aprobado ✅":"guardado como borrador"),"ok",3000);
-    if(estado==="aprobado") setTimeout(()=>abrirEnviarPP(ppId||pedidosProv[0].id),500);
+    toast("Pedido "+(estado==="enviado"?"actualizado ✅":estado==="aprobado"?"aprobado ✅":"guardado como borrador"),"ok",3000);
+    if(estado==="aprobado" && !(_prevPP && _prevPP.estado==="enviado")) setTimeout(()=>abrirEnviarPP(ppId||pedidosProv[0].id),500);
   }catch(e){ toast("Error: "+e.message,"err"); }
   mostrarCargando(false);
 }
@@ -13731,8 +13860,9 @@ async function marcarRecibidoPP(id){
         const prod = productos.find(x=>x.sku.toUpperCase()===l.sku.toUpperCase());
         return {sku:l.sku.toUpperCase(), producto:l.nombre||l.sku, cantidad:l.cantidad, costo:l.costo||0};
       });
-      const total = lineasCompraGen.reduce((a,l)=>a+l.cantidad*l.costo,0);
-      const compra = {id:Date.now(), fecha, proveedor:p.proveedor, factura:"Pedido #"+id, obs:"Generado desde pedido a proveedor", formaPago:"A pagar", total, lineas:lineasCompraGen};
+      const ajusteP = ppAjusteDe(p);
+      const total = Math.round((lineasCompraGen.reduce((a,l)=>a+l.cantidad*l.costo,0) + ajusteP)*100)/100;
+      const compra = {id:Date.now(), fecha, proveedor:p.proveedor, factura:"Pedido #"+id, obs:"Generado desde pedido a proveedor"+(ajusteP?" · Ajuste/redondeo $"+fmt(ajusteP):""), formaPago:"A pagar", total, lineas:lineasCompraGen};
 
       paso = "guardando la Compra";
       await sbGuardar("compra", compra);
@@ -13783,6 +13913,7 @@ async function marcarRecibidoPP(id){
     `<strong>¿Confirmar recepción del pedido de ${esc(p.proveedor)}?</strong><br><br>`+
     `<span style="font-size:13px;color:var(--text-soft);">`+(p.lineas||[]).map(l=>esc(l.sku)+" x"+l.cantidad).join(" · ")+`</span><br><br>`+
     `<span style="font-size:12px;">Se generará automáticamente:<br>✅ Compra en el historial<br>✅ Movimientos de ingreso de stock<br>✅ Deuda en Cuenta Corriente</span><br><br>`+
+    (ppPagado(p)>0 ? `<span style="font-size:12px;color:#166534;background:#f0fdf4;padding:6px 10px;border-radius:6px;display:inline-block;margin-bottom:8px;">💳 Ya pagaste $${fmt(ppPagado(p))} por adelantado: la deuda se compensa con ese pago y la compra queda ${ppPagado(p) >= (Number(p.total)||0)-0.5 ? "pagada" : "con pago parcial"}.</span><br>` : "")+
     `<span style="font-size:12px;color:#9a3412;background:#fff7ed;padding:6px 10px;border-radius:6px;display:inline-block;">⚠️ No hace falta que cargues la compra de nuevo a mano en "Compras" — ya queda registrada sola con este paso.</span>`;
   document.getElementById("modalConfirm").classList.add("show");
 }
