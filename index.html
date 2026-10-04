@@ -184,6 +184,9 @@ html[data-theme="dark"] .atn-mia{background:rgba(56,189,248,.15);}
 .seg-tabla td{vertical-align:middle;}
 .ml-sitio{padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:transparent;color:inherit;}
 #btnConectarML[style*="none"] + .ml-sitio{display:none;}
+.prm-masivo{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;margin-bottom:8px;border:1px dashed var(--border);border-radius:8px;font-size:12.5px;}
+.prm-masivo-n{min-width:120px;}
+.prm-masivo-precio select,.prm-masivo-precio input{padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;background:transparent;color:inherit;}
 #sec-seguimiento input.form-control{padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:transparent;color:inherit;box-sizing:border-box;width:100%;}
 .fml-tabs button{padding:9px 16px;border-radius:9px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-weight:600;font-size:13px;cursor:pointer;}
 .fml-tabs button.active{background:var(--brand-primario, var(--ml-blue));border-color:transparent;color:#fff;}
@@ -7542,8 +7545,9 @@ async function prmTabla(cid){
   const its = (prm.items[cid]||[]).slice().sort((a,b)=>(a.status==="candidate"?1:0)-(b.status==="candidate"?1:0));
   const t = PRM_TIPOS[c.type] || {};
   if(!its.length){ box.innerHTML = `<div class="atn-vacio">No hay productos tuyos en esta campaña.</div>`; return; }
-  box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Producto</th><th>Stock</th><th>Precio actual</th><th>Precio promo</th><th>Cobrás</th><th>Comisión + envío + imp.</th><th>Costo</th><th>Ganancia</th><th>Margen</th><th>Estado</th><th></th></tr></thead>
-    <tbody>${its.map((x,i)=>`<tr id="prmR_${esc(cid)}_${i}"><td colspan="11" class="atn-sub">⏳ Calculando ${esc((prm.info[x.id]||{}).title||x.id)}…</td></tr>`).join("")}</tbody></table></div>
+  const masivo = t.unir && its.some(x=>x.status==="candidate"||x.status==="started"||x.status==="pending");
+  box.innerHTML = (masivo ? prmBarraMasiva(c, its) : "") + `<div class="table-wrap"><table><thead><tr>${t.unir?`<th class="admin-only" style="width:28px;"><input type="checkbox" title="Seleccionar todos" onchange="prmSelTodos('${esc(cid)}',this.checked)"></th>`:""}<th>Producto</th><th>Stock</th><th>Precio actual</th><th>Precio promo</th><th>Cobrás</th><th>Comisión + envío + imp.</th><th>Costo</th><th>Ganancia</th><th>Margen</th><th>Estado</th><th></th></tr></thead>
+    <tbody>${its.map((x,i)=>`<tr id="prmR_${esc(cid)}_${i}"><td colspan="${t.unir?12:11}" class="atn-sub">⏳ Calculando ${esc((prm.info[x.id]||{}).title||x.id)}…</td></tr>`).join("")}</tbody></table></div>
     ${!t.unir?`<div class="atn-sub" style="margin-top:6px;">Este tipo de campaña se gestiona desde MercadoLibre (Publicidad › Promociones). Acá ves cuánto ganás.</div>`:""}`;
   await _pool(its.map((x,i)=>({x,i})), 4, async ({x,i})=>{ await prmFila(c, x, i); });
   if(typeof esAdmin==="function" && !esAdmin()) box.querySelectorAll(".admin-only").forEach(e=>e.style.display="none");
@@ -7560,7 +7564,9 @@ async function prmFila(c, x, i, precioElegido){
   const editable = t.precio && x.status==="candidate";
   const img = it.secure_thumbnail || it.thumbnail;
   const cargos = calc.comision!=null ? calc.comision + calc.envio + calc.impuestos : null;
-  tr.innerHTML = `
+  const selec = t.unir && (x.status==="candidate"||x.status==="started"||x.status==="pending");
+  const yaMarcado = !!(prm.sel[c.id]||{})[x.id];
+  tr.innerHTML = `${t.unir?`<td class="admin-only">${selec?`<input type="checkbox" class="prmChk" data-cid="${esc(c.id)}" data-item="${esc(x.id)}" ${yaMarcado?"checked":""} onchange="prmSelUno('${esc(c.id)}','${esc(x.id)}',this.checked)">`:""}</td>`:""}
     <td style="min-width:220px;"><div class="atn-item" style="margin:0;">${img?`<img src="${esc(_https(img))}" alt="">`:""}<div><a href="${esc(it.permalink||"#")}" target="_blank" rel="noopener">${esc(it.title||x.id)}</a>
       <div class="atn-sub">${esc(x.id)}${p?` · <strong>SKU ${esc(p.sku)}</strong>`:` · <span style="color:var(--orange);">sin SKU en el Catálogo</span>`}</div></div></div></td>
     <td class="num">${it.available_quantity!=null?it.available_quantity:"—"}${x.stock?`<div class="atn-sub">pide ${x.stock.min}–${x.stock.max}</div>`:""}</td>
@@ -7623,6 +7629,120 @@ function prmQuitar(cid, i){
   };
   document.getElementById("confirmMsg").innerHTML = `<strong>¿Quitar de "${esc(c.name||c.id)}"?</strong><br><br>${esc(it.title||x.id)}<br><span style="font-size:13px;">Vuelve a su precio normal de $${fmt(x.original_price||it.price||0)} en MercadoLibre.</span>`;
   document.getElementById("confirmBtn").textContent = "Quitar";
+  document.getElementById("modalConfirm").classList.add("show");
+}
+
+// ── Selección masiva: sumar o quitar varios productos de una campaña ──
+prm.sel = prm.sel || {};
+function prmBarraMasiva(c, its){
+  const t = PRM_TIPOS[c.type] || {}, cid = esc(c.id);
+  return `<div class="prm-masivo admin-only" id="prmM_${cid}">
+    <span class="prm-masivo-n" id="prmMN_${cid}">${prmSelTxt(c.id)}</span>
+    <button class="btn btn-ghost btn-sm" onclick="prmSelEstado('${cid}','candidate')">Marcar invitados</button>
+    <button class="btn btn-ghost btn-sm" onclick="prmSelRentables('${cid}')" title="Invitados que dejan ganancia al precio de la promo (necesitan costo cargado)">Marcar rentables</button>
+    <button class="btn btn-ghost btn-sm" onclick="prmSelTodos('${cid}',false)">Limpiar</button>
+    ${t.precio?`<label class="prm-masivo-precio">Precio: <select id="prmMModo_${cid}" onchange="document.getElementById('prmMPct_${cid}').style.display=this.value==='pct'?'':'none'">
+        <option value="fila">el de cada fila (sugerido si no lo cambiaste)</option>
+        <option value="sugerido">el sugerido por ML</option>
+        <option value="minimo">el más alto permitido (menos descuento)</option>
+        <option value="pct">un % de descuento</option>
+      </select> <input type="number" id="prmMPct_${cid}" min="1" max="90" step="0.5" value="10" style="display:none;width:64px;"> </label>`:""}
+    <button class="btn btn-primary btn-sm" onclick="prmMasivo('${cid}','sumar')">➕ Sumar seleccionados</button>
+    <button class="btn btn-ghost btn-sm" onclick="prmMasivo('${cid}','quitar')">Quitar seleccionados</button>
+  </div>`;
+}
+function prmSelTxt(cid){ const n = Object.keys(prm.sel[cid]||{}).length; return n ? `<strong>${n}</strong> seleccionado${n===1?"":"s"}` : "Ninguno seleccionado"; }
+function prmSelPintar(cid){
+  const el = document.getElementById("prmMN_"+cid); if(el) el.innerHTML = prmSelTxt(cid);
+  document.querySelectorAll(`#prmT_${CSS.escape(cid)} .prmChk`).forEach(ch=>{ ch.checked = !!(prm.sel[cid]||{})[ch.dataset.item]; });
+}
+function prmSelUno(cid, item, on){ prm.sel[cid] = prm.sel[cid]||{}; if(on) prm.sel[cid][item] = true; else delete prm.sel[cid][item]; prmSelPintar(cid); }
+function prmSelTodos(cid, on){
+  prm.sel[cid] = {};
+  if(on) (prm.items[cid]||[]).forEach(x=>{ if(x.status==="candidate"||x.status==="started"||x.status==="pending") prm.sel[cid][x.id] = true; });
+  prmSelPintar(cid);
+}
+function prmSelEstado(cid, est){ prm.sel[cid] = {}; (prm.items[cid]||[]).forEach(x=>{ if(x.status===est) prm.sel[cid][x.id] = true; }); prmSelPintar(cid); }
+function prmSelRentables(cid){
+  prm.sel[cid] = {}; let sinCosto = 0;
+  (prm.items[cid]||[]).forEach(x=>{ if(x.status!=="candidate") return; const k = prm.calc[cid+"|"+x.id]; if(!k || k.calc.ganancia==null){ sinCosto++; return; } if(k.calc.ganancia>0) prm.sel[cid][x.id] = true; });
+  prmSelPintar(cid);
+  if(sinCosto) toast(`${sinCosto} invitado${sinCosto===1?"":"s"} sin costo cargado: no se pueden evaluar.`,"ok",5000);
+}
+// Precio de promo para un producto según el modo elegido (solo campañas donde vos elegís el precio)
+function prmPrecioMasivo(c, x, modo, pct){
+  const min = Number(x.min_discounted_price)||0, max = Number(x.max_discounted_price)||Infinity, orig = Number(x.original_price)||0;
+  let p;
+  if(modo==="sugerido") p = Number(x.suggested_discounted_price)||null;
+  else if(modo==="minimo") p = isFinite(max) ? max : null;
+  else if(modo==="pct") p = orig*(1-(Number(pct)||0)/100);
+  else p = x._precio || Number(x.suggested_discounted_price)||null;
+  if(!p) return null;
+  p = Math.round(Math.min(max, Math.max(min, p))*100)/100;
+  return p;
+}
+async function prmMasivo(cid, accion){
+  if(checkViewer(accion==="sumar"?"Sumar productos a promociones":"Quitar productos de promociones")) return;
+  const c = prm.camps.find(x=>x.id===cid); if(!c) return;
+  const t = PRM_TIPOS[c.type] || {};
+  const elegidos = (prm.items[cid]||[]).filter(x=>(prm.sel[cid]||{})[x.id]);
+  const lista = elegidos.filter(x=> accion==="sumar" ? x.status==="candidate" : (x.status==="started"||x.status==="pending"));
+  const omitidos = elegidos.length - lista.length;
+  if(!lista.length){ toast(accion==="sumar" ? "Marcá productos invitados para sumar." : "Marcá productos que estén participando para quitar.","err",5000); return; }
+  const modo = (document.getElementById("prmMModo_"+cid)||{}).value || "fila", pct = (document.getElementById("prmMPct_"+cid)||{}).value;
+  // Armar el detalle con precio y ganancia de cada uno
+  const filas = [];
+  for(const x of lista){
+    const it = prm.info[x.id] || {};
+    if(accion==="quitar"){ filas.push({x, it}); continue; }
+    const precio = t.precio ? prmPrecioMasivo(c, x, modo, pct) : null;
+    const pr = prmPrecios(c, x, precio);
+    const calc = await prmCalcular(x.id, pr.comprador, pr.vendedor);
+    filas.push({x, it, precio, pr, calc});
+  }
+  const sinPrecio = filas.filter(f=>accion==="sumar" && t.precio && !f.precio);
+  const perdida = filas.filter(f=>f.calc && f.calc.ganancia!=null && f.calc.ganancia<0);
+  const gan = filas.reduce((a,f)=>a+((f.calc&&f.calc.ganancia)||0),0), conCosto = filas.filter(f=>f.calc && f.calc.ganancia!=null).length;
+  const det = filas.slice(0,12).map(f=>`<tr><td>${esc((f.it.title||f.x.id).slice(0,48))}</td>${accion==="sumar"?`<td class="num">$${fmt(f.pr.comprador)}</td><td class="num">${f.calc.ganancia!=null?`<span style="color:${f.calc.ganancia>=0?"var(--green)":"var(--red)"};">$${fmt(f.calc.ganancia)}</span>`:"—"}</td>`:""}</tr>`).join("");
+  confirmCb = async()=>{
+    let bien = 0; const errores = [];
+    const aplicar = filas.filter(f=>!(accion==="sumar" && t.precio && !f.precio));
+    for(let k=0; k<aplicar.length; k++){
+      const f = aplicar[k], x = f.x;
+      toast(`${accion==="sumar"?"Sumando":"Quitando"} ${k+1} de ${aplicar.length}…`,"ok",60000);
+      let r;
+      if(accion==="sumar"){
+        const body = c.type==="DEAL" ? {promotion_id:c.id, promotion_type:"DEAL", deal_price:f.pr.comprador}
+          : {promotion_id:c.id, promotion_type:c.type, offer_id:x.offer_id || x.ref_id};
+        r = await mlReq("POST", `/seller-promotions/items/${x.id}?app_version=v2`, body);
+      } else {
+        let q = `/seller-promotions/items/${x.id}?promotion_type=${c.type}&promotion_id=${encodeURIComponent(c.id)}&app_version=v2`;
+        if(x.offer_id) q += `&offer_id=${encodeURIComponent(x.offer_id)}`;
+        r = await mlReq("DELETE", q);
+      }
+      if(r.ok) bien++; else errores.push({t:(f.it.title||x.id), e:_mlError(r)});
+      // Si ML rechaza por permisos, no tiene sentido seguir
+      if(!r.ok && r.status===403){ errores.push({t:`(se frenó: quedaban ${aplicar.length-k-1})`, e:""}); break; }
+    }
+    prm.sel[cid] = {};
+    if(errores.length){ toast(`${bien} de ${aplicar.length} ${accion==='sumar'?'sumado':'quitado'}${bien===1?'':'s'}`, bien?'ok':'err', 4000); prmMostrarErrores(accion, bien, errores); }
+    else toast(`✅ ${bien} producto${bien===1?"":"s"} ${accion==="sumar"?"sumado":"quitado"}${bien===1?"":"s"}`,"ok",6000);
+    prm.items[cid] = null; await prmCargar(false);
+  };
+  document.getElementById("confirmMsg").innerHTML = `<strong>¿${accion==="sumar"?"Sumar":"Quitar"} ${filas.length} producto${filas.length===1?"":"s"} ${accion==="sumar"?"a":"de"} "${esc(c.name||c.id)}"?</strong>
+    ${omitidos?`<div style="font-size:12px;color:var(--text-soft);margin-top:4px;">${omitidos} seleccionado${omitidos===1?"":"s"} no aplica${omitidos===1?"":"n"} (ya ${accion==="sumar"?"participan":"no participan"}).</div>`:""}
+    <div class="table-wrap" style="max-height:260px;overflow:auto;margin-top:10px;"><table style="font-size:12px;"><thead><tr><th>Producto</th>${accion==="sumar"?"<th>Precio promo</th><th>Ganancia/u.</th>":""}</tr></thead><tbody>${det}${filas.length>12?`<tr><td colspan="3" style="color:var(--text-soft);">… y ${filas.length-12} más</td></tr>`:""}</tbody></table></div>
+    ${accion==="sumar"&&conCosto?`<div style="font-size:13px;margin-top:8px;">Ganancia estimada (1 unidad de cada uno): <strong style="color:${gan>=0?"var(--green)":"var(--red)"};">$${fmt(gan)}</strong>${conCosto<filas.length?` · ${filas.length-conCosto} sin costo cargado`:""}</div>`:""}
+    ${perdida.length?`<div class="atn-alerta" style="margin-top:8px;">⚠️ ${perdida.length} producto${perdida.length===1?"":"s"} quedaría${perdida.length===1?"":"n"} con pérdida a ese precio.</div>`:""}
+    ${sinPrecio.length?`<div class="atn-alerta" style="margin-top:8px;">${sinPrecio.length} producto${sinPrecio.length===1?"":"s"} sin precio válido: se saltea${sinPrecio.length===1?"":"n"}.</div>`:""}`;
+  document.getElementById("confirmBtn").textContent = accion==="sumar" ? `➕ Sumar ${filas.length-sinPrecio.length}` : `Quitar ${filas.length}`;
+  document.getElementById("modalConfirm").classList.add("show");
+}
+function prmMostrarErrores(accion, bien, errores){
+  document.getElementById("confirmMsg").innerHTML = `<strong>${bien} ${accion==="sumar"?"sumado":"quitado"}${bien===1?"":"s"}, ${errores.filter(e=>e.e).length} con error</strong>
+    <div class="table-wrap" style="max-height:260px;overflow:auto;margin-top:10px;"><table style="font-size:12px;"><tbody>${errores.map(e=>`<tr><td>${esc(e.t)}</td><td style="color:var(--red);">${esc(e.e)}</td></tr>`).join("")}</tbody></table></div>`;
+  document.getElementById("confirmBtn").textContent = "Entendido";
+  confirmCb = async()=>{};
   document.getElementById("modalConfirm").classList.add("show");
 }
 // ================================================================
