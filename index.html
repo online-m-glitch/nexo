@@ -134,6 +134,29 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 a.nav-item{text-decoration:none;}
 .overlay.fml-vacia{display:none!important;}
 .fml-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+.atn-pane{display:none;padding:18px 20px;}.atn-pane.active{display:block;}
+.atn-cnt,.atn-nav-cnt{display:inline-block;min-width:18px;padding:1px 6px;border-radius:999px;background:var(--red,#dc2626);color:#fff;font-size:11px;font-weight:700;line-height:16px;text-align:center;margin-left:4px;}
+.atn-nav-cnt{margin-left:auto;}
+.atn-card{border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px;background:var(--surface);}
+.atn-card-sm{padding:10px 12px;}
+.atn-click{cursor:pointer;}.atn-click:hover{border-color:var(--brand-primario, var(--ml-blue));}
+.atn-item{display:flex;gap:10px;align-items:center;margin-bottom:8px;}
+.atn-item img{width:46px;height:46px;object-fit:contain;background:#fff;border-radius:6px;flex:none;}
+.atn-item a{font-weight:600;color:#1d4ed8;}
+html[data-theme="dark"] .atn-item a{color:#93c5fd;}
+.atn-sub{font-size:11.5px;color:var(--text-soft);}
+.atn-burbuja{background:var(--bg-soft,#f1f5f9);border-radius:10px;padding:8px 12px;margin:6px 0;white-space:pre-wrap;font-size:13px;max-width:92%;}
+html[data-theme="dark"] .atn-burbuja{background:rgba(255,255,255,.06);}
+.atn-mia{background:#e0f2fe;margin-left:auto;}
+html[data-theme="dark"] .atn-mia{background:rgba(56,189,248,.15);}
+.atn-hilo{display:flex;flex-direction:column;max-height:46vh;overflow:auto;padding:4px;}
+.atn-hace{font-size:12px;font-weight:600;}
+.atn-rapidas{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0;}
+#sec-atencion textarea,#modalAtnConv textarea,#modalAtnRapidas textarea,#modalAtnRapidas input{width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:transparent;color:inherit;box-sizing:border-box;}
+#modalAtnRapidas input{width:120px;}
+.atn-vacio{padding:18px;text-align:center;color:var(--text-soft);}
+#sec-atencion a.btn,#modalAtnConv a.btn{text-decoration:none;}
+.atn-alerta{background:#fef2f2;color:#991b1b;border-radius:8px;padding:8px 12px;font-size:12.5px;margin-bottom:8px;}
 .fml-tabs button{padding:9px 16px;border-radius:9px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-weight:600;font-size:13px;cursor:pointer;}
 .fml-tabs button.active{background:var(--brand-primario, var(--ml-blue));border-color:transparent;color:#fff;}
 .fml-pane{display:none;padding:20px;}
@@ -621,6 +644,12 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
     <a class="nav-item" href="#fullml" data-sec="fullml" onclick="return navClick(event,'fullml')">
       <span class="icon">🚀</span> Full ML
     </a>
+    <a class="nav-item" href="#atencion" data-sec="atencion" onclick="return navClick(event,'atencion')">
+      <span class="icon">🛎️</span> Atención ML <span class="atn-nav-cnt" id="atnNavCnt" style="display:none;"></span>
+    </a>
+    <a class="nav-item" href="#promos" data-sec="promos" onclick="return navClick(event,'promos')">
+      <span class="icon">🏷️</span> Promociones
+    </a>
     <div class="nav-section">Operaciones</div>
     <a class="nav-item" href="#movimientos" data-sec="movimientos" onclick="return navClick(event,'movimientos')">
       <span class="icon">↕️</span> Movimientos
@@ -927,6 +956,68 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
             </table>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ========== ATENCIÓN ML ========== -->
+    <div id="sec-atencion" class="section">
+      <div class="page-header">
+        <div><h2>Atención ML</h2><div class="sub">Preguntas, mensajes de ventas y reclamos de MercadoLibre en un solo lugar</div></div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span id="atnActualizado" style="font-size:11px;color:var(--text-soft);"></span>
+          <button class="btn btn-ghost btn-sm" onclick="atnRefrescar(true)" title="Volver a consultar MercadoLibre">🔄 Actualizar</button>
+        </div>
+      </div>
+      <div style="padding:24px;">
+        <div class="fml-tabs" id="atnTabs">
+          <button data-tab="preguntas" onclick="atnTab('preguntas')">💬 Preguntas <span class="atn-cnt" id="atnCntPreg"></span></button>
+          <button data-tab="mensajes" onclick="atnTab('mensajes')">✉️ Mensajes <span class="atn-cnt" id="atnCntMsg"></span></button>
+          <button data-tab="reclamos" onclick="atnTab('reclamos')">⚠️ Reclamos <span class="atn-cnt" id="atnCntRec"></span></button>
+        </div>
+
+        <!-- Preguntas -->
+        <div class="atn-pane card" id="atnPane-preguntas">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+            <h3 style="margin:0;font-size:16px;">Preguntas sin responder</h3>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-ghost btn-sm admin-only" onclick="atnEditarRapidas()">⚡ Respuestas rápidas</button>
+              <button class="btn btn-ghost btn-sm" onclick="atnVerRespondidas()" id="atnBtnRespondidas">🕘 Ver últimas respondidas</button>
+            </div>
+          </div>
+          <div class="stats-grid" id="atnTiempos" style="margin-bottom:14px;"></div>
+          <div id="atnPregLista"></div>
+          <div id="atnRespondidas" style="margin-top:18px;"></div>
+        </div>
+
+        <!-- Mensajes -->
+        <div class="atn-pane card" id="atnPane-mensajes">
+          <h3 style="margin:0 0 6px;font-size:16px;">Mensajes de ventas sin leer</h3>
+          <p style="font-size:12px;color:var(--text-soft);margin:0 0 12px;">Ver los mensajes acá <strong>no los marca como leídos</strong> en ML. El vendedor no puede iniciar una conversación, y en ventas por <strong>Full</strong> ML no deja escribir hasta que el paquete se entrega. Máximo 350 caracteres por mensaje.</p>
+          <div id="atnMsgLista"></div>
+        </div>
+
+        <!-- Reclamos -->
+        <div class="atn-pane card" id="atnPane-reclamos">
+          <h3 style="margin:0 0 6px;font-size:16px;">Reclamos abiertos</h3>
+          <p style="font-size:12px;color:var(--text-soft);margin:0 0 12px;">Solo lectura: para responder, devolver dinero o abrir una mediación usá el botón <strong>Abrir en ML</strong>. Ordenados por fecha límite.</p>
+          <div id="atnRecLista"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== PROMOCIONES ML ========== -->
+    <div id="sec-promos" class="section">
+      <div class="page-header">
+        <div><h2>Promociones</h2><div class="sub">Campañas de descuento de MercadoLibre: a qué te invitan y cuánto ganás si entrás</div></div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span id="prmActualizado" style="font-size:11px;color:var(--text-soft);"></span>
+          <button class="btn btn-ghost btn-sm" onclick="prmCargar(true)">🔄 Actualizar</button>
+        </div>
+      </div>
+      <div style="padding:24px;">
+        <div class="stats-grid" id="prmStats" style="margin-bottom:16px;"></div>
+        <p style="font-size:12px;color:var(--text-soft);margin:0 0 14px;">La ganancia se calcula con la comisión y el envío de ML <strong>al precio de la promoción</strong>, más el impuesto y la percepción que tenés configurados y el costo del Catálogo. En las campañas <strong>compartidas</strong>, ML pone parte del descuento: el cálculo usa lo que realmente cobrás. Sumarte o quitarte siempre pide confirmación.</p>
+        <div id="prmLista"><div class="atn-vacio">Abrí la sección para consultar MercadoLibre…</div></div>
       </div>
     </div>
 
@@ -1283,6 +1374,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
       </div>
       <div style="padding:24px;">
 
+        <div id="ventasSyncResumen" style="font-size:12.5px;margin-bottom:10px;"></div>
         <!-- Stats rápidos -->
         <div style="font-size:11px;color:var(--text-soft);margin-bottom:6px;">📌 Totales históricos generales (todo el tiempo, todos los canales) — no cambian con los filtros de fecha de las pestañas de abajo.</div>
         <div class="stats-grid" id="ventasStats" style="margin-bottom:20px;"></div>
@@ -2535,40 +2627,8 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
         <div id="mlAccionesWrap" style="display:none;">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;" class="panel-grid">
 
-            <!-- Sincronizar ventas -->
-            <div class="card">
-              <div class="card-header"><h3>💸 Sincronizar ventas <span class="badge badge-red" style="font-size:10px;">FUERA DE SERVICIO</span></h3></div>
-              <div style="padding:16px;">
-                <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#7f1d1d;">
-                  ⚠️ <strong>Deshabilitado temporalmente.</strong> Se detectó que esta sincronización estaba generando ventas con números de orden incorrectos (no reales). Mientras se investiga el origen del problema, usá el <strong>"📂 Subir reporte ML"</strong> (importador de archivo, más abajo) para cargar tus ventas — ese método ya fue validado a fondo.
-                </div>
-                <p style="font-size:13px;color:var(--text-soft);margin-bottom:12px;">
-                  Trae las ventas recientes de ML y las importa automáticamente.
-                </p>
-                <div class="form-group" style="margin-bottom:12px;">
-                  <label>Días a traer</label>
-                  <select id="mlDiasVentas" style="padding:9px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%;" disabled>
-                    <option value="7">Últimos 7 días</option>
-                    <option value="15">Últimos 15 días</option>
-                    <option value="30">Últimos 30 días</option>
-                    <option value="60">Últimos 60 días</option>
-                    <option value="90">Últimos 90 días</option>
-                    <option value="180">Últimos 180 días</option>
-                  </select>
-                </div>
-                <div class="form-group" style="margin-bottom:12px;">
-                  <label>Margen de estabilización <span style="font-weight:400;color:var(--text-soft);">— no trae ventas más recientes que esto, por si todavía pueden cancelarse</span></label>
-                  <select id="mlBufferHoras" style="padding:9px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%;" disabled>
-                    <option value="0">Sin espera (traer todo, incluidas las de ahora)</option>
-                    <option value="24">24 horas</option>
-                    <option value="48" selected>48 horas (recomendado)</option>
-                    <option value="72">72 horas</option>
-                  </select>
-                </div>
-                <button class="btn btn-ghost" disabled title="Deshabilitado hasta resolver el bug de números de venta incorrectos" style="opacity:0.5;cursor:not-allowed;">⬇️ Importar ventas (deshabilitado)</button>
-                <div id="mlVentasStatus" style="margin-top:10px;font-size:12px;color:var(--text-soft);"></div>
-              </div>
-            </div>
+            <!-- Ventas ML automáticas (nexo-sync) -->
+            <div class="card" id="syncAutoCard"></div>
 
             <!-- Sincronizar stock -->
             <div class="card">
@@ -6753,6 +6813,764 @@ function ppBotonesEdicion(estado){
   if(estado === "enviado"){ b.style.display = "none"; a.textContent = "💾 Guardar cambios"; }
   else { b.style.display = ""; a.textContent = "✅ Aprobar pedido"; }
 }
+// ================================================================
+// Atención ML — preguntas, mensajes de ventas y reclamos (MercadoLibre)
+// Todo pasa por ml-api (proxy) con la cuenta del cliente. Responder es solo para administradores.
+// Ver mensajes NO los marca como leídos en ML (mark_as_read=false), salvo que se toque "Marcar como leído".
+// Reclamos: solo lectura (las acciones con dinero se hacen en ML).
+// ================================================================
+const ATN_AGENTE_MLA = "3037674934";   // agente de mensajería de ML (nueva arquitectura); hoy solo MLB/MLC
+let atn = {tab:"preguntas", preg:[], pregTotal:0, items:{}, tiempos:null, convs:[], recs:[], reasons:{}, cargado:{}, at:null, cnt:{preg:null,msg:null,rec:null}};
+
+async function atnPost(path, data){
+  let r;
+  try{
+    r = await fetch(SB_URL+"/functions/v1/ml-api", {method:"POST",
+      headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+sbAuth()},
+      body: JSON.stringify({grant_type:"proxy", path, method:"POST", data})});
+  }catch(e){ return {ok:false, status:0, data:{message:"Sin conexión"}}; }
+  const d = await r.json().catch(()=>({}));
+  return {ok: r.ok && !(d && d.error && !Array.isArray(d)), status:r.status, data:d};
+}
+function atnMinTxt(m){
+  m = Math.max(0, Math.round(Number(m)||0));
+  if(m < 60) return m+" min";
+  const h = Math.floor(m/60), r = m%60;
+  if(h < 48) return h+" h"+(r?" "+r+" min":"");
+  return Math.round(h/24)+" días";
+}
+function atnHace(iso){ const t = Date.parse(iso); return t ? atnMinTxt((Date.now()-t)/60000) : ""; }
+function atnFechaHora(iso){ const t = Date.parse(iso); return t ? new Date(t).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : ""; }
+function atnSoloAdmin(el){ if(typeof esAdmin==="function" && !esAdmin()) (el||document).querySelectorAll(".admin-only").forEach(x=>x.style.display="none"); }
+function atnVenta(orderId){ return "https://www.mercadolibre.com.ar/ventas/"+encodeURIComponent(orderId)+"/detalle"; }
+
+// ── Navegación ──
+function renderAtencion(){
+  let t = atn.tab; try{ t = localStorage.getItem("nexo_atn_tab") || t; }catch(e){}
+  atnTab(t);
+}
+function atnTab(tab){
+  if(!["preguntas","mensajes","reclamos"].includes(tab)) tab = "preguntas";
+  atn.tab = tab; try{ localStorage.setItem("nexo_atn_tab", tab); }catch(e){}
+  document.querySelectorAll("#atnTabs button").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
+  document.querySelectorAll("#sec-atencion .atn-pane").forEach(p=>p.classList.toggle("active", p.id==="atnPane-"+tab));
+  if(!atn.cargado[tab] || Date.now()-atn.cargado[tab] > 3*60*1000) atnCargar(tab);
+}
+async function atnRefrescar(){ atn.cargado = {}; await atnCargar(atn.tab); atnContar(); }
+async function atnCargar(tab){
+  const cont = {preguntas:"atnPregLista", mensajes:"atnMsgLista", reclamos:"atnRecLista"}[tab];
+  const el = document.getElementById(cont); if(el) el.innerHTML = `<div class="atn-vacio">⏳ Consultando MercadoLibre…</div>`;
+  try{
+    if(tab==="preguntas") await atnCargarPreguntas();
+    if(tab==="mensajes") await atnCargarMensajes();
+    if(tab==="reclamos") await atnCargarReclamos();
+    atn.cargado[tab] = Date.now(); atn.at = new Date();
+    const a = document.getElementById("atnActualizado"); if(a) a.textContent = "Actualizado "+atn.at.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+  }catch(e){ if(el) el.innerHTML = `<div class="atn-vacio" style="color:var(--red);">❌ ${esc(e.message||String(e))}</div>`; }
+}
+async function atnUid(){
+  const u = (typeof mercUserId==="function") ? await mercUserId() : null;
+  if(!u) throw new Error("No se pudo conectar con MercadoLibre. Revisá la conexión en la sección MercadoLibre.");
+  return u;
+}
+
+// ── Contadores (menú y pestañas) ──
+async function atnContar(){
+  let uid; try{ uid = await atnUid(); }catch(e){ return; }
+  const [q, m, c] = await Promise.all([
+    mlGet(`/questions/search?seller_id=${uid}&status=UNANSWERED&api_version=4&limit=1`),
+    mlGet(`/messages/unread?role=seller&tag=post_sale`),
+    mlGet(`/post-purchase/v1/claims/search?players.user_id=${uid}&players.role=respondent&status=opened&limit=1`)
+  ]);
+  atn.cnt.preg = q.ok && q.data ? (Number(q.data.total)||0) : atn.cnt.preg;
+  atn.cnt.msg = m.ok && m.data && Array.isArray(m.data.results) ? m.data.results.length : atn.cnt.msg;
+  atn.cnt.rec = c.ok && c.data && c.data.paging ? (Number(c.data.paging.total)||0) : atn.cnt.rec;
+  atnPintarContadores();
+}
+function atnPintarContadores(){
+  const set = (id, n)=>{ const e = document.getElementById(id); if(e){ e.textContent = n ? n : ""; e.style.display = n ? "" : "none"; } };
+  set("atnCntPreg", atn.cnt.preg); set("atnCntMsg", atn.cnt.msg); set("atnCntRec", atn.cnt.rec);
+  set("atnNavCnt", (atn.cnt.preg||0)+(atn.cnt.msg||0)+(atn.cnt.rec||0));
+}
+
+// ── Publicaciones (título, foto, precio, stock) ──
+async function atnCargarItems(ids){
+  const faltan = [...new Set(ids.filter(id=>id && !atn.items[id]))];
+  for(let i=0;i<faltan.length;i+=20){
+    const r = await mlGet("/items?ids="+faltan.slice(i,i+20).join(",")+"&attributes=id,title,thumbnail,secure_thumbnail,price,available_quantity,permalink,seller_custom_field,status");
+    (r.ok && Array.isArray(r.data) ? r.data : []).forEach(x=>{ if(x && x.body && x.body.id) atn.items[x.body.id] = x.body; });
+  }
+}
+function atnSkuDe(itemId){
+  const p = (productos||[]).find(x=>String(x.ml_item_id||"").toUpperCase()===String(itemId||"").toUpperCase());
+  const it = atn.items[itemId];
+  return (p && p.sku) || (it && it.seller_custom_field) || "";
+}
+function atnItemHtml(itemId, extra){
+  const it = atn.items[itemId] || {}, sku = atnSkuDe(itemId);
+  const img = it.secure_thumbnail || it.thumbnail;
+  return `<div class="atn-item">${img?`<img src="${esc(_https(img))}" alt="">`:""}<div>
+    <a href="${esc(it.permalink||("https://articulo.mercadolibre.com.ar/"+String(itemId).replace(/^MLA/,"MLA-")))}" target="_blank" rel="noopener">${esc(it.title||itemId)}</a>
+    <div class="atn-sub">${esc(itemId)}${sku?` · <strong>SKU ${esc(sku)}</strong>`:""}${it.price?` · $${fmt(it.price)}`:""}${it.available_quantity!=null?` · Stock ML: <strong style="color:${it.available_quantity>0?"var(--green)":"var(--red)"};">${it.available_quantity}</strong>`:""}${it.status&&it.status!=="active"?` · <span style="color:var(--orange);">${esc(it.status)}</span>`:""}${extra||""}</div></div></div>`;
+}
+
+// ── Preguntas ──
+const ATN_RAPIDAS_DEF = [
+  {t:"Hay stock", x:"¡Hola! Sí, tenemos stock disponible. Podés comprar con tranquilidad, despachamos rápido. ¡Saludos!"},
+  {t:"Sin stock", x:"¡Hola! Por el momento no tenemos stock de ese modelo. ¡Gracias por consultar! Saludos."},
+  {t:"Envío", x:"¡Hola! El costo y la fecha de entrega los ves en la publicación ingresando tu código postal. ¡Saludos!"},
+  {t:"Factura", x:"¡Hola! Sí, emitimos factura A o B. Una vez realizada la compra la cargamos en la venta. ¡Saludos!"},
+  {t:"Garantía", x:"¡Hola! El producto tiene garantía de fábrica. Ante cualquier inconveniente nos escribís por la mensajería de la compra. ¡Saludos!"}
+];
+function atnRapidas(){ const v = appConfig && appConfig.atn_rapidas; return Array.isArray(v) && v.length ? v : ATN_RAPIDAS_DEF; }
+async function atnCargarPreguntas(){
+  const uid = await atnUid();
+  const [r, t] = await Promise.all([
+    mlGet(`/questions/search?seller_id=${uid}&status=UNANSWERED&api_version=4&limit=50&sort_fields=date_created&sort_types=ASC`),
+    atn.tiempos ? Promise.resolve(null) : mlGet(`/users/${uid}/questions/response_time`)
+  ]);
+  if(!r.ok || !r.data || !Array.isArray(r.data.questions)) throw new Error(_mlError(r));
+  if(t && t.ok) atn.tiempos = t.data;
+  atn.preg = r.data.questions.filter(q=>q.status==="UNANSWERED");
+  atn.pregTotal = Number(r.data.total)||atn.preg.length;
+  atn.cnt.preg = atn.pregTotal; atnPintarContadores();
+  await atnCargarItems(atn.preg.map(q=>q.item_id));
+  renderAtnPreguntas();
+}
+function renderAtnTiempos(){
+  const el = document.getElementById("atnTiempos"); if(!el) return;
+  const t = atn.tiempos;
+  if(!t || !t.total){ el.innerHTML = ""; return; }
+  const card = (lbl, o, sub)=>`<div class="stat-card"><div class="label">${lbl}</div><div class="value" style="font-size:20px;color:${o&&o.response_time>60?"var(--orange)":"var(--green)"};">${o&&o.response_time!=null?atnMinTxt(o.response_time):"—"}</div><div class="sub">${sub}${o&&o.sales_percent_increase?` · <strong>+${o.sales_percent_increase}% ventas</strong> si bajás de 1 h`:""}</div></div>`;
+  el.innerHTML = card("Tiempo de respuesta", t.total, "promedio últimos 14 días") + card("Días hábiles 9 a 18 h", t.weekdays_working_hours, "horario laboral")
+    + card("Días hábiles 18 a 24 h", t.weekdays_extra_hours, "fuera de horario") + card("Fin de semana", t.weekend, "sábado y domingo");
+}
+function renderAtnPreguntas(){
+  renderAtnTiempos();
+  const el = document.getElementById("atnPregLista"); if(!el) return;
+  if(!atn.preg.length){ el.innerHTML = `<div class="atn-vacio">✅ No hay preguntas sin responder.</div>`; return; }
+  const rap = atnRapidas();
+  el.innerHTML = atn.preg.map(q=>{
+    const min = (Date.now()-Date.parse(q.date_created))/60000;
+    return `<div class="atn-card" id="atnQ${q.id}">
+      ${atnItemHtml(q.item_id)}
+      <div class="atn-preg"><span class="atn-hace" style="color:${min>60?"var(--red)":"var(--text-soft)"};" title="${esc(atnFechaHora(q.date_created))}">⏱️ hace ${atnMinTxt(min)}</span>
+        ${(q.ai_categories||[]).map(c=>`<span class="badge badge-gray" style="margin-left:6px;">${esc(c)}</span>`).join("")}
+        <div class="atn-burbuja">${esc(q.text)}</div></div>
+      <div class="admin-only">
+        <div class="atn-rapidas">${rap.map((x,i)=>`<button type="button" class="merc-chip" onclick="atnUsarRapida(${q.id},${i})" title="${esc(x.x)}">⚡ ${esc(x.t)}</button>`).join("")}</div>
+        <textarea id="atnR${q.id}" maxlength="2000" rows="3" placeholder="Escribí la respuesta…" oninput="document.getElementById('atnRc${q.id}').textContent=this.value.length+' / 2000'"></textarea>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+          <span id="atnRc${q.id}" style="font-size:11px;color:var(--text-soft);">0 / 2000</span>
+          <button class="btn btn-primary btn-sm" id="atnRb${q.id}" onclick="atnResponder(${q.id})">📤 Responder</button>
+        </div>
+      </div>
+    </div>`;
+  }).join("") + (atn.pregTotal > atn.preg.length ? `<div class="atn-vacio">Se muestran las ${atn.preg.length} más antiguas de ${atn.pregTotal}.</div>` : "");
+  atnSoloAdmin(el);
+}
+function atnUsarRapida(qid, i){
+  const x = atnRapidas()[i], ta = document.getElementById("atnR"+qid); if(!x || !ta) return;
+  ta.value = ta.value.trim() ? ta.value.trim()+" "+x.x : x.x;
+  ta.dispatchEvent(new Event("input")); ta.focus();
+}
+async function atnResponder(qid){
+  if(checkViewer("Responder preguntas")) return;
+  const ta = document.getElementById("atnR"+qid), btn = document.getElementById("atnRb"+qid);
+  const txt = (ta && ta.value || "").trim();
+  if(!txt){ toast("Escribí la respuesta.","err"); return; }
+  if(txt.length > 2000){ toast("Máximo 2000 caracteres.","err"); return; }
+  btn.disabled = true; btn.textContent = "⏳ Enviando…";
+  const r = await atnPost("/answers", {question_id:qid, text:txt});
+  if(!r.ok){ btn.disabled = false; btn.textContent = "📤 Responder"; toast("ML no aceptó la respuesta: "+_mlError(r),"err",7000); return; }
+  atn.preg = atn.preg.filter(q=>q.id!==qid); atn.pregTotal = Math.max(0, atn.pregTotal-1);
+  atn.cnt.preg = atn.pregTotal; atnPintarContadores();
+  renderAtnPreguntas();
+  toast("Respuesta publicada en MercadoLibre ✅","ok");
+}
+async function atnVerRespondidas(){
+  const el = document.getElementById("atnRespondidas"); if(!el) return;
+  if(el.dataset.abierto==="1"){ el.innerHTML = ""; el.dataset.abierto = ""; document.getElementById("atnBtnRespondidas").textContent = "🕘 Ver últimas respondidas"; return; }
+  el.innerHTML = `<div class="atn-vacio">⏳ Cargando…</div>`;
+  const uid = await atnUid();
+  const r = await mlGet(`/questions/search?seller_id=${uid}&status=ANSWERED&api_version=4&limit=20&sort_fields=date_created&sort_types=DESC`);
+  if(!r.ok || !r.data){ el.innerHTML = `<div class="atn-vacio" style="color:var(--red);">❌ ${esc(_mlError(r))}</div>`; return; }
+  const qs = r.data.questions||[];
+  await atnCargarItems(qs.map(q=>q.item_id));
+  el.dataset.abierto = "1"; document.getElementById("atnBtnRespondidas").textContent = "Ocultar respondidas";
+  el.innerHTML = `<h3 style="font-size:14px;margin:0 0 8px;">Últimas ${qs.length} respondidas</h3>` + qs.map(q=>{
+    const demora = q.answer && q.answer.date_created ? (Date.parse(q.answer.date_created)-Date.parse(q.date_created))/60000 : null;
+    return `<div class="atn-card atn-card-sm">${atnItemHtml(q.item_id)}
+      <div class="atn-burbuja">${esc(q.text)}</div>
+      <div class="atn-burbuja atn-mia">${esc(q.answer && q.answer.text || "")}</div>
+      <div class="atn-sub">${esc(atnFechaHora(q.date_created))}${demora!=null?` · respondida en <strong style="color:${demora>60?"var(--orange)":"var(--green)"};">${atnMinTxt(demora)}</strong>`:""}</div></div>`;
+  }).join("");
+}
+function atnEditarRapidas(){
+  if(checkViewer("Editar respuestas rápidas")) return;
+  let ov = document.getElementById("modalAtnRapidas");
+  if(!ov){
+    ov = document.createElement("div"); ov.className = "overlay"; ov.id = "modalAtnRapidas";
+    ov.innerHTML = `<div class="modal" style="max-width:640px;"><button type="button" class="modal-x" aria-label="Cerrar" onclick="document.getElementById('modalAtnRapidas').classList.remove('show')">✕</button>
+      <h3>⚡ Respuestas rápidas</h3><p style="font-size:12px;color:var(--text-soft);margin:0 0 10px;">Textos que insertás con un clic al responder preguntas. Se guardan para todo el equipo.</p>
+      <div id="atnRapLista"></div><button class="btn btn-ghost btn-sm" onclick="atnRapAgregar()">+ Agregar</button>
+      <div class="modal-actions"><button class="btn btn-ghost" onclick="document.getElementById('modalAtnRapidas').classList.remove('show')">Cancelar</button><button class="btn btn-primary" onclick="atnRapGuardar()">💾 Guardar</button></div></div>`;
+    ov.addEventListener("click", e=>{ if(e.target===ov) ov.classList.remove("show"); });
+    document.body.appendChild(ov);
+  }
+  atn._rapEdit = JSON.parse(JSON.stringify(atnRapidas()));
+  atnRapPintar(); ov.classList.add("show");
+}
+function atnRapPintar(){
+  document.getElementById("atnRapLista").innerHTML = atn._rapEdit.map((x,i)=>`<div style="display:flex;gap:6px;margin-bottom:8px;align-items:flex-start;">
+    <input type="text" value="${esc(x.t)}" placeholder="Nombre" oninput="atn._rapEdit[${i}].t=this.value" style="width:120px;">
+    <textarea rows="2" style="flex:1;" oninput="atn._rapEdit[${i}].x=this.value">${esc(x.x)}</textarea>
+    <button class="btn btn-danger btn-sm" onclick="atn._rapEdit.splice(${i},1);atnRapPintar()">✕</button></div>`).join("");
+}
+function atnRapAgregar(){ atn._rapEdit.push({t:"", x:""}); atnRapPintar(); }
+async function atnRapGuardar(){
+  const lista = atn._rapEdit.map(x=>({t:String(x.t||"").trim(), x:String(x.x||"").trim()})).filter(x=>x.t && x.x);
+  appConfig.atn_rapidas = lista;
+  try{ await sbUpsert("app_config", {key:"atn_rapidas", value:lista, updated_at:new Date().toISOString()}); }
+  catch(e){ toast("No se pudo guardar: "+e.message,"err"); return; }
+  document.getElementById("modalAtnRapidas").classList.remove("show");
+  renderAtnPreguntas(); toast("Respuestas rápidas guardadas ✅","ok");
+}
+
+// ── Mensajes ──
+async function atnCargarMensajes(){
+  const uid = await atnUid();
+  const r = await mlGet(`/messages/unread?role=seller&tag=post_sale`);
+  if(!r.ok || !r.data) throw new Error(_mlError(r));
+  const res = Array.isArray(r.data.results) ? r.data.results : [];
+  atn.cnt.msg = res.length; atnPintarContadores();
+  atn.convs = (await _pool(res.slice(0,40), 4, async x=>{
+    const packId = (String(x.resource||"").match(/\/packs\/(\d+)/)||[])[1];
+    return packId ? atnCargarConv(packId, uid, x.count) : null;
+  })).filter(c=>c && !c.error);
+  renderAtnMensajes();
+}
+async function atnCargarConv(packId, uid, count){
+  const c = {packId, count:count||0, uid};
+  const [mm, pk] = await Promise.all([
+    mlGet(`/messages/packs/${packId}/sellers/${uid}?tag=post_sale&mark_as_read=false&limit=30`),
+    mlGet(`/packs/${packId}`)
+  ]);
+  c.msgs = mm.ok && mm.data && Array.isArray(mm.data.messages) ? mm.data.messages.slice().sort((a,b)=>String(a.message_date&&a.message_date.created).localeCompare(String(b.message_date&&b.message_date.created))) : [];
+  c.estado = mm.ok && mm.data ? mm.data.conversation_status : null;
+  c.maxLen = (mm.data && mm.data.seller_max_message_length) || 350;
+  c.orderId = (pk.ok && pk.data && Array.isArray(pk.data.orders) && pk.data.orders[0] && pk.data.orders[0].id) || packId;
+  const od = await mlGet(`/orders/${c.orderId}`);
+  c.order = od.ok ? od.data : null;
+  const oi = c.order && c.order.order_items && c.order.order_items[0];
+  c.itemId = oi && oi.item && oi.item.id; c.titulo = oi && oi.item && oi.item.title; c.sku = oi && oi.item && oi.item.seller_sku; c.cant = oi && oi.quantity;
+  c.buyerId = (c.order && c.order.buyer && c.order.buyer.id) || (pk.data && pk.data.buyer && pk.data.buyer.id)
+    || ((c.msgs.find(m=>String(m.from && m.from.user_id)!==String(uid))||{}).from||{}).user_id || null;
+  c.buyerNick = c.order && c.order.buyer && c.order.buyer.nickname || "";
+  return c;
+}
+function atnConvResumen(c){
+  const ult = c.msgs[c.msgs.length-1];
+  const claims = (c.estado && (c.estado.claim_ids || (c.estado.claim_id?[c.estado.claim_id]:[]))) || [];
+  return {ult, claims};
+}
+function renderAtnMensajes(){
+  const el = document.getElementById("atnMsgLista"); if(!el) return;
+  if(!atn.convs.length){ el.innerHTML = `<div class="atn-vacio">✅ No hay mensajes sin leer.</div>`; return; }
+  el.innerHTML = atn.convs.map((c,i)=>{
+    const {ult, claims} = atnConvResumen(c);
+    return `<div class="atn-card atn-click" onclick="atnAbrirConv(${i})">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <div><strong>${esc(c.buyerNick||("Comprador "+(c.buyerId||"")))}</strong> · <span class="atn-sub">Venta #${esc(c.orderId)}${c.order&&c.order.date_created?" del "+esc(atnFechaHora(c.order.date_created)):""}</span></div>
+        <div><span class="badge badge-blue">${c.count} sin leer</span>${claims.length?` <span class="badge badge-red" title="Reclamo ${esc(claims.join(", "))}">⚠️ con reclamo</span>`:""}</div>
+      </div>
+      <div class="atn-sub" style="margin:4px 0;">${esc(c.titulo||"")}${c.sku?` · <strong>SKU ${esc(c.sku)}</strong>`:""}${c.cant?` · ${c.cant} u.`:""}</div>
+      ${ult?`<div class="atn-burbuja">${esc(ult.text||"")}<div class="atn-sub">${esc(atnFechaHora(ult.message_date&&ult.message_date.created))} · hace ${atnHace(ult.message_date&&ult.message_date.created)}</div></div>`:""}
+      <div style="text-align:right;"><button class="btn btn-ghost btn-sm">💬 Abrir conversación</button></div>
+    </div>`;
+  }).join("");
+}
+function atnAbrirConv(i){
+  const c = atn.convs[i]; if(!c) return;
+  atn._conv = i;
+  let ov = document.getElementById("modalAtnConv");
+  if(!ov){
+    ov = document.createElement("div"); ov.className = "overlay"; ov.id = "modalAtnConv";
+    ov.innerHTML = `<div class="modal" style="max-width:640px;"><button type="button" class="modal-x" aria-label="Cerrar" onclick="document.getElementById('modalAtnConv').classList.remove('show')">✕</button><div id="atnConvCont"></div></div>`;
+    ov.addEventListener("click", e=>{ if(e.target===ov) ov.classList.remove("show"); });
+    document.body.appendChild(ov);
+  }
+  atnPintarConv(); ov.classList.add("show");
+}
+function atnPintarConv(){
+  const c = atn.convs[atn._conv]; if(!c) return;
+  const {claims} = atnConvResumen(c);
+  document.getElementById("atnConvCont").innerHTML = `
+    <h3>✉️ ${esc(c.buyerNick||"Comprador")} · Venta #${esc(c.orderId)}</h3>
+    <div class="atn-sub" style="margin-bottom:8px;">${esc(c.titulo||"")}${c.sku?` · SKU ${esc(c.sku)}`:""}${c.cant?` · ${c.cant} u.`:""}${c.order&&c.order.total_amount?` · $${fmt(c.order.total_amount)}`:""}</div>
+    ${claims.length?`<div class="atn-alerta">⚠️ Esta venta tiene un reclamo abierto (#${esc(claims.join(", #"))}). Revisalo en la pestaña Reclamos o en ML.</div>`:""}
+    <div class="atn-hilo">${c.msgs.map(m=>{ const mio = String(m.from&&m.from.user_id)===String(c.uid);
+      return `<div class="atn-burbuja ${mio?"atn-mia":""}">${esc(m.text||"")}${(m.message_attachments||[]).length?`<div class="atn-sub">📎 ${m.message_attachments.length} adjunto(s) — verlos en ML</div>`:""}<div class="atn-sub">${mio?"Vos":"Comprador"} · ${esc(atnFechaHora(m.message_date&&m.message_date.created))}</div></div>`; }).join("") || `<div class="atn-vacio">Sin mensajes.</div>`}</div>
+    <div class="admin-only" style="margin-top:10px;">
+      <textarea id="atnMsgTxt" rows="3" maxlength="${c.maxLen}" placeholder="Escribí tu mensaje (máx. ${c.maxLen} caracteres)…" oninput="document.getElementById('atnMsgCnt').textContent=this.value.length+' / ${c.maxLen}'"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;"><span id="atnMsgCnt" style="font-size:11px;color:var(--text-soft);">0 / ${c.maxLen}</span>
+        <button class="btn btn-primary btn-sm" id="atnMsgBtn" onclick="atnEnviarMsg()">📤 Enviar</button></div>
+    </div>
+    <div class="modal-actions">
+      <a class="btn btn-ghost" href="${atnVenta(c.orderId)}" target="_blank" rel="noopener">Ver venta en ML</a>
+      <button class="btn btn-ghost admin-only" onclick="atnMarcarLeido()">✔️ Marcar como leído</button>
+      <button class="btn btn-primary" onclick="document.getElementById('modalAtnConv').classList.remove('show')">Cerrar</button>
+    </div>`;
+  atnSoloAdmin(document.getElementById("atnConvCont"));
+  const h = document.querySelector("#atnConvCont .atn-hilo"); if(h) h.scrollTop = h.scrollHeight;
+}
+async function atnEnviarMsg(){
+  if(checkViewer("Enviar mensajes")) return;
+  const c = atn.convs[atn._conv]; if(!c) return;
+  const txt = (document.getElementById("atnMsgTxt").value||"").trim();
+  if(!txt){ toast("Escribí el mensaje.","err"); return; }
+  if(txt.length > c.maxLen){ toast("Máximo "+c.maxLen+" caracteres.","err"); return; }
+  const porAgente = c.estado && /\/conversations\//.test(String(c.estado.path||""));
+  const to = porAgente ? ATN_AGENTE_MLA : c.buyerId;
+  if(!to){ toast("No se pudo identificar al comprador de esta venta.","err"); return; }
+  const btn = document.getElementById("atnMsgBtn"); btn.disabled = true; btn.textContent = "⏳ Enviando…";
+  const r = await atnPost(`/messages/packs/${c.packId}/sellers/${c.uid}?tag=post_sale`, {from:{user_id:String(c.uid)}, to:{user_id:String(to)}, text:txt});
+  btn.disabled = false; btn.textContent = "📤 Enviar";
+  if(!r.ok){
+    const msg = _mlError(r);
+    toast(/fulfillment|Full/i.test(msg) ? "ML no deja escribir en ventas por Full hasta que el paquete se entrega." : "ML no aceptó el mensaje: "+msg, "err", 8000);
+    return;
+  }
+  c.msgs.push({text:txt, from:{user_id:c.uid}, message_date:{created:new Date().toISOString()}});
+  atnPintarConv(); toast("Mensaje enviado ✅","ok");
+}
+async function atnMarcarLeido(){
+  if(checkViewer("Marcar mensajes")) return;
+  const c = atn.convs[atn._conv]; if(!c) return;
+  const r = await mlGet(`/messages/packs/${c.packId}/sellers/${c.uid}?tag=post_sale&limit=1`);
+  if(!r.ok){ toast("No se pudo marcar: "+_mlError(r),"err"); return; }
+  atn.convs.splice(atn._conv, 1); atn.cnt.msg = atn.convs.length; atnPintarContadores();
+  document.getElementById("modalAtnConv").classList.remove("show");
+  renderAtnMensajes(); toast("Marcado como leído en ML","ok");
+}
+
+// ── Reclamos (solo lectura) ──
+const ATN_TIPO_REC = {mediations:"Reclamo", returns:"Devolución", return:"Devolución", fulfillment:"Reclamo Full", ml_case:"Cancelación por demora", cancel_sale:"Cancelación del vendedor", cancel_purchase:"Cancelación del comprador", change:"Cambio de producto", service:"Servicio"};
+const ATN_ETAPA_REC = {claim:"Entre vos y el comprador", dispute:"En mediación con ML", recontact:"Recontacto", stale:"Con ML", none:""};
+const ATN_TRIAGE = {defective:"Producto defectuoso", not_working:"No funciona", different:"Producto diferente", incomplete:"Llegó incompleto", repentant:"Se arrepintió de la compra"};
+function atnMotivo(c){
+  const rs = atn.reasons[c.reason_id], tri = rs && rs.settings && (rs.settings.rules_engine_triage||[])[0];
+  if(tri && ATN_TRIAGE[tri]) return ATN_TRIAGE[tri];
+  const id = String(c.reason_id||"");
+  if(id.startsWith("PNR")) return "Producto no recibido";
+  if(id.startsWith("PDD")) return "Producto diferente o defectuoso";
+  if(id.startsWith("CS")) return "Compra cancelada";
+  return rs && rs.detail || id;
+}
+async function atnCargarReclamos(){
+  const uid = await atnUid();
+  const r = await mlGet(`/post-purchase/v1/claims/search?players.user_id=${uid}&players.role=respondent&status=opened&limit=50&sort=date_created:desc`);
+  if(!r.ok || !r.data) throw new Error(_mlError(r));
+  const lista = Array.isArray(r.data.data) ? r.data.data : [];
+  atn.cnt.rec = (r.data.paging && Number(r.data.paging.total)) || lista.length; atnPintarContadores();
+  atn.recs = (await _pool(lista, 4, async c=>{
+    const [d, a] = await Promise.all([mlGet(`/post-purchase/v1/claims/${c.id}/detail`), mlGet(`/post-purchase/v1/claims/${c.id}/affects-reputation`)]);
+    c._det = d.ok ? d.data : null; c._rep = a.ok ? a.data : null;
+    if(c.reason_id && atn.reasons[c.reason_id]===undefined){ const rr = await mlGet(`/post-purchase/v1/claims/reasons/${c.reason_id}`); atn.reasons[c.reason_id] = rr.ok ? rr.data : null; }
+    if(c.resource==="order" && c.resource_id){
+      const o = await mlGet(`/orders/${c.resource_id}`);
+      if(o.ok && o.data){ const oi = (o.data.order_items||[])[0]||{}; c._ord = {id:o.data.id, total:o.data.total_amount, titulo:oi.item&&oi.item.title, sku:oi.item&&oi.item.seller_sku, cant:oi.quantity, fecha:o.data.date_created}; }
+    }
+    return c;
+  })).filter(c=>c && !c.error);
+  atn.recs.sort((a,b)=>String((a._det&&a._det.due_date)||"9").localeCompare(String((b._det&&b._det.due_date)||"9")));
+  renderAtnReclamos();
+}
+function renderAtnReclamos(){
+  const el = document.getElementById("atnRecLista"); if(!el) return;
+  if(!atn.recs.length){ el.innerHTML = `<div class="atn-vacio">✅ No hay reclamos abiertos.</div>`; return; }
+  el.innerHTML = atn.recs.map(c=>{
+    const d = c._det || {}, rep = c._rep || {}, o = c._ord || {};
+    const yo = (c.players||[]).find(p=>p.type==="seller"||p.role==="respondent") || {};
+    const oblig = (yo.available_actions||[]).filter(a=>a.mandatory);
+    const due = d.due_date || (oblig[0] && oblig[0].due_date);
+    const horas = due ? (Date.parse(due)-Date.now())/3600000 : null;
+    const meToca = d.action_responsible==="respondent" || oblig.length;
+    const urg = meToca && horas!=null && horas < 48;
+    const orderId = o.id || (c.resource==="order" ? c.resource_id : "");
+    return `<div class="atn-card" style="${urg?"border-color:var(--red);":""}">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <div><strong>${esc(ATN_TIPO_REC[c.type]||c.type)} #${esc(c.id)}</strong> · <span class="atn-sub">${esc(ATN_ETAPA_REC[c.stage]||c.stage||"")}</span></div>
+        <div>${rep.affects_reputation==="affected"?`<span class="badge badge-red">Afecta tu reputación</span>`:rep.affects_reputation==="not_affected"?`<span class="badge badge-green">No afecta reputación</span>`:""}
+          ${rep.has_incentive?` <span class="badge badge-blue" title="Si respondés bien dentro de las 48 h no afecta la reputación">Respondé en 48 h</span>`:""}</div>
+      </div>
+      <div style="margin:6px 0;"><strong>${esc(atnMotivo(c))}</strong>${d.problem?` — ${esc(d.problem)}`:""}</div>
+      ${d.title?`<div class="atn-burbuja"><strong>${esc(d.title)}</strong>${d.description?`<div class="atn-sub">${esc(d.description)}</div>`:""}</div>`:""}
+      ${due?`<div style="margin:6px 0;font-weight:700;color:${urg?"var(--red)":meToca?"var(--orange)":"var(--text-soft)"};">${meToca?"⏰ Te toca responder":"Fecha límite"} hasta el ${esc(atnFechaHora(due))}${horas!=null?(horas>0?` (faltan ${atnMinTxt(horas*60)})`:" (vencido)"):""}</div>`:""}
+      ${oblig.length?`<div class="atn-sub">Acción pedida: ${oblig.map(a=>esc({send_message_to_mediator:"enviar mensaje al mediador",send_message_to_complainant:"enviar mensaje al comprador",refund:"devolver el dinero",allow_return:"aceptar la devolución",add_shipping_evidence:"cargar evidencia de envío"}[a.action]||a.action)).join(", ")}</div>`:""}
+      ${o.titulo?`<div class="atn-sub" style="margin-top:6px;">${esc(o.titulo)}${o.sku?` · <strong>SKU ${esc(o.sku)}</strong>`:""}${o.cant?` · ${o.cant} u.`:""}${o.total?` · $${fmt(o.total)}`:""}${o.fecha?` · venta del ${esc(atnFechaHora(o.fecha))}`:""}</div>`:""}
+      <div style="text-align:right;margin-top:8px;">${orderId?`<a class="btn btn-primary btn-sm" href="${atnVenta(orderId)}" target="_blank" rel="noopener">Abrir en ML</a>`:""}</div>
+    </div>`;
+  }).join("");
+}
+
+// ── Contadores automáticos mientras el panel está abierto ──
+setTimeout(()=>{ try{ if(typeof sesion!=="undefined" && sesion) atnContar(); }catch(e){} }, 8000);
+setInterval(()=>{ try{ if(typeof sesion!=="undefined" && sesion && document.visibilityState==="visible") atnContar(); }catch(e){} }, 5*60*1000);
+setInterval(()=>{ try{ if(typeof sesion!=="undefined" && sesion && atn.cnt.preg===null && document.visibilityState==="visible") atnContar(); }catch(e){} }, 60*1000);
+// ================================================================
+// Sincronización automática
+// 1) Ventas de ML: las importa el servidor (función nexo-sync, cada 30 min) con 48 h de margen,
+//    igual que el reporte de ML y sin duplicar. Acá se muestra el estado, se activa/desactiva y se
+//    puede forzar con "Sincronizar ahora".
+// 2) Datos del panel: se recargan solos cada 5 minutos mientras la pestaña está visible
+//    (sin pisar lo que estés editando: se saltea si hay una ventana abierta o estás escribiendo).
+// ================================================================
+let syncAuto = {log:[], cargado:false, corriendo:false};
+function syncCfg(){ const v = appConfig && appConfig.sync_auto; return (v && typeof v === "object") ? v : {}; }
+async function syncCargarLog(){
+  try{ syncAuto.log = await sbGet("nexo_sync_log", "select=id,tipo,inicio,fin,ok,resultado&tipo=eq.ventas&order=inicio.desc&limit=30"); }
+  catch(e){ syncAuto.log = []; }
+  syncAuto.cargado = true;
+}
+function syncUltimaOk(){ return (syncAuto.log||[]).find(l=>l.ok); }
+function syncResumenTxt(){
+  const cfg = syncCfg(), u = syncUltimaOk();
+  if(!cfg.ventas) return `<span style="color:var(--text-soft);">⏸️ Ventas ML automáticas desactivadas</span>`;
+  if(!u) return `<span style="color:var(--text-soft);">🔄 Ventas ML automáticas activadas · todavía no corrió</span>`;
+  const r = u.resultado || {}, min = Math.round((Date.now()-Date.parse(u.fin||u.inicio))/60000);
+  const hace = min < 60 ? `hace ${min} min` : min < 1440 ? `hace ${Math.round(min/60)} h` : `hace ${Math.round(min/1440)} días`;
+  const nuevas24 = (syncAuto.log||[]).filter(l=>l.ok && Date.now()-Date.parse(l.inicio) < 86400000).reduce((a,l)=>a+(Number(l.resultado&&l.resultado.insertadas)||0),0);
+  return `<span style="color:var(--green);">🔄 Ventas ML automáticas</span> · última revisión ${hace}${nuevas24?` · <strong>${nuevas24} venta${nuevas24===1?"":"s"} nueva${nuevas24===1?"":"s"} en 24 h</strong>`:" · sin ventas nuevas en 24 h"}`;
+}
+async function renderSyncAuto(){
+  if(!syncAuto.cargado) await syncCargarLog();
+  const cfg = syncCfg();
+  const res = document.getElementById("ventasSyncResumen");
+  if(res) res.innerHTML = syncResumenTxt() + ` · <a href="#ml" onclick="return navClick(event,'ml')">ver detalle</a>`;
+  const el = document.getElementById("syncAutoCard"); if(!el) return;
+  const err = (syncAuto.log||[])[0] && !(syncAuto.log||[])[0].ok ? syncAuto.log[0] : null;
+  el.innerHTML = `
+    <div class="card-header"><h3>💸 Ventas ML automáticas</h3></div>
+    <div style="padding:16px;">
+      <p style="font-size:13px;color:var(--text-soft);margin:0 0 10px;">NEXO revisa MercadoLibre <strong>cada 30 minutos</strong>, aunque no tengas el panel abierto, e importa las ventas que tienen más de <strong>${Number(cfg.margen_horas??48)} h</strong> (ya no se pueden cancelar). Usa el mismo número de venta que el reporte de ML, así que <strong>nunca duplica</strong> lo que subas a mano. No importa canceladas, devueltas ni con reclamo abierto.</p>
+      <label class="admin-only" style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:10px;"><input type="checkbox" id="syncVentasOn" ${cfg.ventas?"checked":""} onchange="syncActivar(this.checked)"> Importar ventas de ML automáticamente</label>
+      <div style="font-size:13px;margin-bottom:10px;">${syncResumenTxt()}</div>
+      ${err?`<div class="atn-alerta">⚠️ La última sincronización falló: ${esc((err.resultado&&err.resultado.error)||"error")}. Se reintenta sola en la próxima vuelta.</div>`:""}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <button class="btn btn-primary btn-sm admin-only" id="btnSyncAhora" onclick="syncAhora()">🔄 Sincronizar ahora</button>
+      </div>
+      <details><summary style="cursor:pointer;font-size:12.5px;">Últimas sincronizaciones</summary>
+        <div class="table-wrap" style="max-height:280px;overflow:auto;margin-top:8px;"><table>
+          <thead><tr><th>Fecha</th><th>Origen</th><th>Nuevas</th><th>Revisadas</th><th>No importadas</th></tr></thead>
+          <tbody>${(syncAuto.log||[]).slice(0,20).map(l=>{ const r=l.resultado||{}, e=r.estados||{};
+            const no = Object.entries(e).filter(([k])=>k!=="ok").map(([k,v])=>`${v} ${({cancelada:"canceladas",devuelta:"devueltas",en_reclamo:"en reclamo",con_reclamo:"con reclamo",reclamo_perdido:"reclamo perdido",no_pagada:"sin pagar"})[k]||k}`).join(", ");
+            return `<tr><td style="white-space:nowrap;">${new Date(l.inicio).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</td><td>${esc(r.origen||"automático")}</td>
+              <td class="num" style="font-weight:700;">${l.ok?(r.insertadas||0):`<span style="color:var(--red);" title="${esc(r.error||"")}">error</span>`}</td><td class="num">${r.ordenes??""}</td><td style="font-size:11px;color:var(--text-soft);">${esc(no)}</td></tr>`; }).join("") || `<tr><td colspan="5" style="text-align:center;color:var(--text-soft);">Sin registros todavía.</td></tr>`}</tbody>
+        </table></div></details>
+    </div>`;
+  if(typeof esAdmin==="function" && !esAdmin()) el.querySelectorAll(".admin-only").forEach(x=>x.style.display="none");
+}
+async function syncActivar(on){
+  if(checkViewer("Configurar la sincronización")){ renderSyncAuto(); return; }
+  const v = Object.assign({margen_horas:48, dias:20}, syncCfg(), {ventas:!!on});
+  appConfig.sync_auto = v;
+  try{ await sbUpsert("app_config", {key:"sync_auto", value:v, updated_at:new Date().toISOString()}); toast(on?"Ventas automáticas activadas ✅":"Ventas automáticas desactivadas","ok"); }
+  catch(e){ toast("No se pudo guardar: "+e.message,"err"); }
+  renderSyncAuto();
+}
+async function syncAhora(){
+  if(checkViewer("Sincronizar ventas")) return;
+  if(syncAuto.corriendo) return;
+  syncAuto.corriendo = true;
+  const btn = document.getElementById("btnSyncAhora"); if(btn){ btn.disabled = true; btn.textContent = "⏳ Revisando ML…"; }
+  try{
+    const r = await fetch(SB_URL+"/functions/v1/nexo-sync", {method:"POST", headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+sbAuth()}, body:"{}"});
+    const d = await r.json().catch(()=>({}));
+    const s = (d.salida||[])[0] || {};
+    if(!r.ok || s.error) throw new Error(s.error || d.message || d.error || ("HTTP "+r.status));
+    if(s.ocupado) toast("Ya se está sincronizando, esperá un minuto.","ok");
+    else{
+      toast(s.insertadas ? `🛒 ${s.insertadas} venta${s.insertadas===1?"":"s"} nueva${s.insertadas===1?"":"s"} importada${s.insertadas===1?"":"s"} de ML` : "Sin ventas nuevas para importar ✅","ok",5000);
+      if(s.insertadas) await nexoAutoRefrescar(true);
+    }
+  }catch(e){ toast("No se pudo sincronizar: "+e.message,"err",7000); }
+  finally{ syncAuto.corriendo = false; await syncCargarLog(); renderSyncAuto(); }
+}
+
+// ── Recarga automática del panel ──
+let _nexoUltRefresco = Date.now(), _nexoRefrescando = false;
+function nexoSeccionActiva(){ const s = document.querySelector(".section.active"); return s ? s.id.replace(/^sec-/,"") : null; }
+function nexoOcupado(){
+  if(document.querySelector(".overlay.show")) return true;
+  const a = document.activeElement;
+  if(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.type!=="checkbox" && a.type!=="button") return true;
+  if(typeof sesion==="undefined" || !sesion) return true;
+  return false;
+}
+async function nexoAutoRefrescar(forzar){
+  if(_nexoRefrescando) return;
+  if(!forzar && (document.visibilityState!=="visible" || nexoOcupado())) return;
+  const id = nexoSeccionActiva(); if(!id) return;
+  _nexoRefrescando = true;
+  const antes = (ventas||[]).length, y = window.scrollY;
+  const mc = mostrarCargando; mostrarCargando = function(){};
+  try{
+    await mostrarSeccion(id);
+    window.scrollTo(0, y);
+    _nexoUltRefresco = Date.now();
+    syncAuto.cargado = false; renderSyncAuto();
+    const nuevas = (ventas||[]).length - antes;
+    if(nuevas > 0 && !forzar) toast(`🛒 Entraron ${nuevas} venta${nuevas===1?"":"s"} nueva${nuevas===1?"":"s"} de ML`,"ok",5000);
+  }catch(e){ console.warn("Recarga automática:", e); }
+  finally{ mostrarCargando = mc; _nexoRefrescando = false; }
+}
+setInterval(()=>{ if(Date.now()-_nexoUltRefresco > 5*60*1000) nexoAutoRefrescar(false); }, 60*1000);
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible" && Date.now()-_nexoUltRefresco > 3*60*1000) setTimeout(()=>nexoAutoRefrescar(false), 800); });
+// ================================================================
+// Promociones de MercadoLibre (/seller-promotions)
+// Lista las campañas a las que invitan al vendedor, los productos de cada una y la ganancia real
+// si entra al precio de la promo. Sumarse / quitarse va por ml-api (solo admin, con confirmación).
+// ================================================================
+const PRM_TIPOS = {
+  DEAL:{n:"Campaña tradicional", d:"Vos elegís el precio dentro del rango que permite ML.", unir:true, precio:true},
+  SMART:{n:"Compartida con ML", d:"ML pone parte del descuento. El precio lo fija ML.", unir:true},
+  PRICE_MATCHING:{n:"Precio competitivo", d:"ML pone parte del descuento para igualar a la competencia.", unir:true},
+  PRICE_MATCHING_MELI_ALL:{n:"Precio competitivo (100% ML)", d:"El descuento lo paga todo ML; se activa sola."},
+  MARKETPLACE_CAMPAIGN:{n:"Co-fondeada", d:"ML pone parte del descuento."},
+  LIGHTNING:{n:"Oferta relámpago", d:"Descuento por pocas horas con stock limitado."},
+  DOD:{n:"Oferta del día", d:"Descuento por un día."},
+  VOLUME:{n:"Descuento por cantidad", d:"Ej.: llevá 3 y pagá 2."},
+  PRICE_DISCOUNT:{n:"Descuento individual", d:"Descuento propio sobre una publicación."},
+  PRE_NEGOTIATED:{n:"Descuento pre-acordado", d:"Acordado con ML por publicación."},
+  SELLER_CAMPAIGN:{n:"Campaña del vendedor", d:"Campaña propia."},
+  UNHEALTHY_STOCK:{n:"Liquidación stock Full", d:"Para stock con antigüedad en Full."}
+};
+const PRM_EST = {candidate:"Invitado", pending:"Programado", started:"Participando", finished:"Terminado"};
+let prm = {camps:[], items:{}, info:{}, pubs:null, abiertos:{}, cargando:false, at:null, calc:{}};
+
+async function mlReq(method, path, data){
+  let r;
+  try{
+    r = await fetch(SB_URL+"/functions/v1/ml-api", {method:"POST",
+      headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+sbAuth()},
+      body: JSON.stringify(Object.assign({grant_type:"proxy", path, method}, data!==undefined?{data}:{}))});
+  }catch(e){ return {ok:false, status:0, data:{message:"Sin conexión"}}; }
+  const d = await r.json().catch(()=>({}));
+  return {ok: r.ok && !(d && d.error && !Array.isArray(d)), status:r.status, data:d};
+}
+function prmFecha(iso){ const t = Date.parse(iso); return t ? new Date(t).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit"}) : "—"; }
+function prmFaltan(iso){
+  const h = (Date.parse(iso)-Date.now())/3600000;
+  if(!(h > -1e9)) return "";
+  if(h < 0) return "vencida";
+  return h < 48 ? `quedan ${Math.max(1,Math.round(h))} h` : `quedan ${Math.round(h/24)} días`;
+}
+
+function renderPromos(){ if(!prm.at || Date.now()-prm.at > 10*60*1000) prmCargar(false); else renderPrm(); }
+async function prmCargar(forzar){
+  if(prm.cargando) return;
+  prm.cargando = true;
+  const el = document.getElementById("prmLista"); if(el) el.innerHTML = `<div class="atn-vacio">⏳ Consultando campañas en MercadoLibre…</div>`;
+  try{
+    if(forzar){ prm.items = {}; prm.calc = {}; }
+    const uid = await mercUserId();
+    if(!uid) throw new Error("No se pudo conectar con MercadoLibre. Revisá la conexión en la sección MercadoLibre.");
+    const r = await mlGet(`/seller-promotions/users/${uid}?app_version=v2`);
+    if(!r.ok || !r.data) throw new Error(_mlError(r));
+    prm.camps = (r.data.results||[]).filter(c=>c.status!=="finished");
+    // Ítems de cada campaña (paginado con search_after)
+    await _pool(prm.camps, 3, async c=>{
+      if(prm.items[c.id] && !forzar) return;
+      const out = []; let sa = null, vueltas = 0;
+      do{
+        const q = `/seller-promotions/promotions/${encodeURIComponent(c.id)}/items?promotion_type=${c.type}&app_version=v2&limit=50`+(sa?`&search_after=${encodeURIComponent(sa)}`:"");
+        const ri = await mlGet(q);
+        if(!ri.ok || !ri.data) break;
+        out.push(...(ri.data.results||[]));
+        sa = ri.data.paging && (ri.data.paging.searchAfter || ri.data.paging.search_after);
+      }while(sa && ++vueltas < 8);
+      prm.items[c.id] = out;
+    });
+    await prmCargarInfo(Object.values(prm.items).flat().map(x=>x.id));
+    prm.at = Date.now();
+    const a = document.getElementById("prmActualizado"); if(a) a.textContent = "Actualizado "+new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+    renderPrm();
+  }catch(e){ if(el) el.innerHTML = `<div class="atn-vacio" style="color:var(--red);">❌ ${esc(e.message||String(e))}</div>`; }
+  finally{ prm.cargando = false; }
+}
+async function prmCargarInfo(ids){
+  const faltan = [...new Set(ids.filter(id=>id && !prm.info[id]))];
+  for(let i=0;i<faltan.length;i+=20){
+    const r = await mlGet("/items?ids="+faltan.slice(i,i+20).join(",")+"&attributes=id,title,thumbnail,secure_thumbnail,price,available_quantity,permalink,seller_custom_field,category_id,listing_type_id,shipping,status");
+    (r.ok && Array.isArray(r.data) ? r.data : []).forEach(x=>{ if(x && x.body && x.body.id) prm.info[x.body.id] = x.body; });
+  }
+  if(!prm.pubs){ try{ prm.pubs = await sbGet("nexo_ml_publicaciones","select=sku,ml_item_id"); }catch(e){ prm.pubs = []; } }
+}
+function prmProducto(itemId){
+  const id = String(itemId||"").toUpperCase();
+  let p = (productos||[]).find(x=>String(x.ml_item_id||"").toUpperCase()===id);
+  if(!p){ const pub = (prm.pubs||[]).find(x=>String(x.ml_item_id||"").toUpperCase()===id && x.sku); if(pub) p = (productos||[]).find(x=>String(x.sku||"").toUpperCase()===String(pub.sku).toUpperCase()); }
+  if(!p){ const sku = (prm.info[itemId]||{}).seller_custom_field; if(sku) p = (productos||[]).find(x=>String(x.sku||"").toUpperCase()===String(sku).toUpperCase()); }
+  return p || null;
+}
+
+// ── Cálculo de ganancia a un precio ──
+const _prmEnvioCache = {};
+async function prmEnvio(itemId, precio){
+  const it = prm.info[itemId]; if(!it || !it.shipping || !it.shipping.free_shipping) return 0;
+  const k = itemId+"|"+Math.round(precio);
+  if(_prmEnvioCache[k] !== undefined) return _prmEnvioCache[k];
+  const uid = await mercUserId();
+  const qs = new URLSearchParams({item_id:itemId, item_price:Math.round(precio), listing_type_id:it.listing_type_id||"gold_special", mode:it.shipping.mode||"me2", condition:"new"});
+  if(it.shipping.logistic_type) qs.append("logistic_type", it.shipping.logistic_type);
+  const r = await mlGet(`/users/${uid}/shipping_options/free?`+qs.toString());
+  const cov = r.ok && r.data && r.data.coverage && r.data.coverage.all_country;
+  return (_prmEnvioCache[k] = cov ? Number(cov.list_cost)||0 : 0);
+}
+async function prmCalcular(itemId, precioComprador, ingresoVendedor){
+  const it = prm.info[itemId] || {};
+  const p = prmProducto(itemId);
+  const fee = await mercComision(it.category_id, ingresoVendedor, it.listing_type_id||"gold_special");
+  const envio = await prmEnvio(itemId, precioComprador);
+  const imp = Number(appConfig.impuesto_pct||0), per = Number(appConfig.percepcion_pct||0);
+  const comision = fee ? fee.monto : null;
+  const impuestos = ingresoVendedor*(imp+per)/100;
+  const neto = comision==null ? null : ingresoVendedor - comision - envio - impuestos;
+  const costo = p ? Number(p.costo)||0 : 0;
+  const ganancia = (neto!=null && costo>0) ? neto - costo : null;
+  return {comision, envio, impuestos, neto, costo, ganancia, pct: ganancia!=null ? ganancia/ingresoVendedor*100 : null};
+}
+// Precio que paga el comprador y lo que cobra el vendedor, según el tipo de campaña
+function prmPrecios(c, x, precioElegido){
+  const orig = Number(x.original_price)||0;
+  if(["SMART","PRICE_MATCHING","PRICE_MATCHING_MELI_ALL","MARKETPLACE_CAMPAIGN","PRE_NEGOTIATED"].includes(c.type) && x.meli_percentage!=null){
+    const comprador = Number(x.total_price_for_boosted_offer || x.price) || orig*(1-((Number(x.meli_percentage)||0)+(Number(x.seller_percentage)||0))/100);
+    const vendedor = orig*(1-(Number(x.seller_percentage)||0)/100);
+    return {comprador, vendedor, mlPone: Math.max(0, vendedor-comprador)};
+  }
+  const p = Number(precioElegido) || (x.status==="candidate" ? Number(x.suggested_discounted_price||x.price||x.max_discounted_price)||0 : Number(x.price)||0) || orig;
+  return {comprador:p, vendedor:p, mlPone:0};
+}
+
+// ── Render ──
+function renderPrm(){
+  const st = document.getElementById("prmStats"), el = document.getElementById("prmLista"); if(!el) return;
+  const todos = prm.camps.map(c=>({c, its:prm.items[c.id]||[]}));
+  const invit = todos.reduce((a,x)=>a+x.its.filter(i=>i.status==="candidate").length,0);
+  const part = todos.reduce((a,x)=>a+x.its.filter(i=>i.status==="started"||i.status==="pending").length,0);
+  const pronto = todos.filter(x=>x.its.some(i=>i.status==="candidate") && (Date.parse(x.c.deadline_date||x.c.finish_date)-Date.now()) < 72*3600000).length;
+  if(st) st.innerHTML = `<div class="stat-card"><div class="label">Campañas</div><div class="value">${prm.camps.length}</div><div class="sub">activas o por empezar</div></div>
+    <div class="stat-card"><div class="label">Invitaciones</div><div class="value" style="color:var(--brand-primario, var(--ml-blue));">${invit}</div><div class="sub">productos que podés sumar</div></div>
+    <div class="stat-card"><div class="label">Participando</div><div class="value" style="color:var(--green);">${part}</div><div class="sub">productos en promoción</div></div>
+    <div class="stat-card"><div class="label">Vencen pronto</div><div class="value" style="color:${pronto?"var(--orange)":"inherit"};">${pronto}</div><div class="sub">campañas con invitaciones que cierran en menos de 3 días</div></div>`;
+  if(!prm.camps.length){ el.innerHTML = `<div class="atn-vacio">No tenés campañas activas en este momento.</div>`; return; }
+  const orden = todos.slice().sort((a,b)=>String(a.c.deadline_date||a.c.finish_date||"9").localeCompare(String(b.c.deadline_date||b.c.finish_date||"9")));
+  el.innerHTML = orden.map(({c, its})=>{
+    const t = PRM_TIPOS[c.type] || {n:c.type, d:""};
+    const cand = its.filter(i=>i.status==="candidate").length, part = its.filter(i=>i.status==="started"||i.status==="pending").length;
+    const lim = c.deadline_date || c.finish_date, falta = prmFaltan(lim), urg = cand && (Date.parse(lim)-Date.now()) < 72*3600000;
+    const ml = its.find(i=>i.meli_percentage!=null);
+    return `<div class="atn-card" id="prmC_${esc(c.id)}">
+      <div class="atn-click" onclick="prmToggle('${esc(c.id)}')" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
+        <div><strong>${esc(c.name||t.n)}</strong> <span class="badge badge-gray">${esc(t.n)}</span> ${c.status==="pending"?`<span class="badge badge-blue">Empieza el ${prmFecha(c.start_date)}</span>`:""}
+          <div class="atn-sub">${esc(t.d)}${ml?` ML pone ~${ml.meli_percentage}% y vos ${ml.seller_percentage}%.`:""} ${c.start_date?` · Del ${prmFecha(c.start_date)} al ${prmFecha(c.finish_date)}`:""}${lim?` · Podés sumarte hasta el ${prmFecha(lim)} <strong style="color:${urg?"var(--orange)":"inherit"};">(${falta})</strong>`:""}</div></div>
+        <div style="white-space:nowrap;">${cand?`<span class="badge badge-blue">${cand} invitado${cand===1?"":"s"}</span>`:""} ${part?`<span class="badge badge-green">${part} participando</span>`:""} <span style="font-size:18px;">${prm.abiertos[c.id]?"▴":"▾"}</span></div>
+      </div>
+      <div id="prmT_${esc(c.id)}" style="${prm.abiertos[c.id]?"":"display:none;"}margin-top:10px;"></div>
+    </div>`;
+  }).join("");
+  Object.keys(prm.abiertos).forEach(id=>{ if(prm.abiertos[id]) prmTabla(id); });
+}
+function prmToggle(id){ prm.abiertos[id] = !prm.abiertos[id]; renderPrm(); }
+async function prmTabla(cid){
+  const c = prm.camps.find(x=>x.id===cid), box = document.getElementById("prmT_"+cid); if(!c || !box) return;
+  const its = (prm.items[cid]||[]).slice().sort((a,b)=>(a.status==="candidate"?1:0)-(b.status==="candidate"?1:0));
+  const t = PRM_TIPOS[c.type] || {};
+  if(!its.length){ box.innerHTML = `<div class="atn-vacio">No hay productos tuyos en esta campaña.</div>`; return; }
+  box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Producto</th><th>Stock</th><th>Precio actual</th><th>Precio promo</th><th>Cobrás</th><th>Comisión + envío + imp.</th><th>Costo</th><th>Ganancia</th><th>Margen</th><th>Estado</th><th></th></tr></thead>
+    <tbody>${its.map((x,i)=>`<tr id="prmR_${esc(cid)}_${i}"><td colspan="11" class="atn-sub">⏳ Calculando ${esc((prm.info[x.id]||{}).title||x.id)}…</td></tr>`).join("")}</tbody></table></div>
+    ${!t.unir?`<div class="atn-sub" style="margin-top:6px;">Este tipo de campaña se gestiona desde MercadoLibre (Publicidad › Promociones). Acá ves cuánto ganás.</div>`:""}`;
+  await _pool(its.map((x,i)=>({x,i})), 4, async ({x,i})=>{ await prmFila(c, x, i); });
+  if(typeof esAdmin==="function" && !esAdmin()) box.querySelectorAll(".admin-only").forEach(e=>e.style.display="none");
+}
+async function prmFila(c, x, i, precioElegido){
+  const tr = document.getElementById(`prmR_${c.id}_${i}`); if(!tr) return;
+  const it = prm.info[x.id] || {}, p = prmProducto(x.id), t = PRM_TIPOS[c.type] || {};
+  const pr = prmPrecios(c, x, precioElegido);
+  const calc = await prmCalcular(x.id, pr.comprador, pr.vendedor);
+  const actual = await prmCalcular(x.id, Number(it.price||x.original_price)||0, Number(it.price||x.original_price)||0);
+  prm.calc[c.id+"|"+x.id] = {pr, calc};
+  const rm = _recMargen(calc.pct);
+  const desc = x.original_price ? Math.round((1-pr.comprador/x.original_price)*1000)/10 : 0;
+  const editable = t.precio && x.status==="candidate";
+  const img = it.secure_thumbnail || it.thumbnail;
+  const cargos = calc.comision!=null ? calc.comision + calc.envio + calc.impuestos : null;
+  tr.innerHTML = `
+    <td style="min-width:220px;"><div class="atn-item" style="margin:0;">${img?`<img src="${esc(_https(img))}" alt="">`:""}<div><a href="${esc(it.permalink||"#")}" target="_blank" rel="noopener">${esc(it.title||x.id)}</a>
+      <div class="atn-sub">${esc(x.id)}${p?` · <strong>SKU ${esc(p.sku)}</strong>`:` · <span style="color:var(--orange);">sin SKU en el Catálogo</span>`}</div></div></div></td>
+    <td class="num">${it.available_quantity!=null?it.available_quantity:"—"}${x.stock?`<div class="atn-sub">pide ${x.stock.min}–${x.stock.max}</div>`:""}</td>
+    <td class="num">$${fmt(x.original_price||it.price||0)}${actual.ganancia!=null?`<div class="atn-sub">gana $${fmt(actual.ganancia)}</div>`:""}</td>
+    <td class="num">${editable?`<input type="number" step="any" value="${Math.round(pr.comprador*100)/100}" min="${x.min_discounted_price||0}" max="${x.max_discounted_price||""}" onchange="prmCambiarPrecio('${esc(c.id)}',${i},this.value)" style="width:96px;padding:5px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;background:transparent;color:inherit;">
+      <div class="atn-sub">sugerido $${fmt(x.suggested_discounted_price||0)} · rango $${fmt(x.min_discounted_price||0)}–$${fmt(x.max_discounted_price||0)}</div>`
+      : `$${fmt(pr.comprador)}`}<div class="atn-sub">−${desc}%</div></td>
+    <td class="num">$${fmt(pr.vendedor)}${pr.mlPone?`<div class="atn-sub" style="color:var(--green);">ML pone $${fmt(pr.mlPone)}</div>`:""}</td>
+    <td class="num" style="color:var(--orange);">${cargos!=null?"$"+fmt(cargos):"—"}<div class="atn-sub">${calc.comision!=null?`com. $${fmt(calc.comision)} · env. $${fmt(calc.envio)}`:""}</div></td>
+    <td class="num">${calc.costo?"$"+fmt(calc.costo):"—"}</td>
+    <td class="num" style="font-weight:700;">${calc.ganancia!=null?`<span class="${calc.ganancia>=0?"num-pos":"num-neg"}">$${fmt(calc.ganancia)}</span>`:"—"}</td>
+    <td class="num">${calc.pct!=null?calc.pct.toFixed(1)+"%":"—"}</td>
+    <td><span class="badge ${x.status==="started"?"badge-green":x.status==="pending"?"badge-blue":"badge-gray"}">${PRM_EST[x.status]||x.status}</span>${calc.pct!=null?` <span class="badge ${rm.cls}">${rm.rec}</span>`:""}</td>
+    <td style="white-space:nowrap;">${t.unir ? (x.status==="candidate"
+        ? `<button class="btn btn-primary btn-sm admin-only" onclick="prmSumar('${esc(c.id)}',${i})">➕ Sumar</button>`
+        : (x.status==="started"||x.status==="pending") ? `<button class="btn btn-ghost btn-sm admin-only" onclick="prmQuitar('${esc(c.id)}',${i})">Quitar</button>` : "") : ""}</td>`;
+  if(typeof esAdmin==="function" && !esAdmin()) tr.querySelectorAll(".admin-only").forEach(e=>e.style.display="none");
+}
+async function prmCambiarPrecio(cid, i, v){
+  const c = prm.camps.find(x=>x.id===cid), x = (prm.items[cid]||[]).slice().sort((a,b)=>(a.status==="candidate"?1:0)-(b.status==="candidate"?1:0))[i];
+  if(!c || !x) return;
+  x._precio = Number(v)||null;
+  await prmFila(c, x, i, x._precio);
+}
+function prmItemsOrdenados(cid){ return (prm.items[cid]||[]).slice().sort((a,b)=>(a.status==="candidate"?1:0)-(b.status==="candidate"?1:0)); }
+function prmSumar(cid, i){
+  if(checkViewer("Sumar productos a promociones")) return;
+  const c = prm.camps.find(x=>x.id===cid), x = prmItemsOrdenados(cid)[i]; if(!c || !x) return;
+  const k = prm.calc[cid+"|"+x.id] || {}, pr = k.pr || prmPrecios(c, x, x._precio), calc = k.calc || {};
+  if(c.type==="DEAL" && (pr.comprador < (x.min_discounted_price||0) || (x.max_discounted_price && pr.comprador > x.max_discounted_price))){
+    toast(`El precio tiene que estar entre $${fmt(x.min_discounted_price||0)} y $${fmt(x.max_discounted_price||0)}.`,"err",6000); return;
+  }
+  const it = prm.info[x.id] || {};
+  confirmCb = async()=>{
+    const body = c.type==="DEAL" ? {promotion_id:c.id, promotion_type:"DEAL", deal_price:Math.round(pr.comprador*100)/100}
+      : {promotion_id:c.id, promotion_type:c.type, offer_id:x.offer_id || x.ref_id};
+    const r = await mlReq("POST", `/seller-promotions/items/${x.id}?app_version=v2`, body);
+    if(!r.ok){ toast("ML no aceptó: "+_mlError(r),"err",8000); return; }
+    toast("Producto sumado a la promoción ✅","ok");
+    prm.items[cid] = null; await prmCargar(false);
+  };
+  document.getElementById("confirmMsg").innerHTML = `<strong>¿Sumar a "${esc(c.name||c.id)}"?</strong><br><br>${esc(it.title||x.id)}<br>
+    <span style="font-size:13px;">Precio para el comprador: <strong>$${fmt(pr.comprador)}</strong> (antes $${fmt(x.original_price)})<br>Cobrás: $${fmt(pr.vendedor)}${pr.mlPone?` (ML pone $${fmt(pr.mlPone)})`:""}<br>
+    ${calc.ganancia!=null?`Ganancia estimada por unidad: <strong style="color:${calc.ganancia>=0?"var(--green)":"var(--red)"};">$${fmt(calc.ganancia)} (${calc.pct.toFixed(1)}%)</strong>`:"Sin costo cargado: no se puede calcular la ganancia."}</span><br><br>
+    <span style="font-size:12px;color:var(--text-soft);">La promoción se aplica en MercadoLibre del ${prmFecha(c.start_date)} al ${prmFecha(c.finish_date)}.</span>`;
+  document.getElementById("confirmBtn").textContent = "➕ Sumar";
+  document.getElementById("modalConfirm").classList.add("show");
+}
+function prmQuitar(cid, i){
+  if(checkViewer("Quitar productos de promociones")) return;
+  const c = prm.camps.find(x=>x.id===cid), x = prmItemsOrdenados(cid)[i]; if(!c || !x) return;
+  const it = prm.info[x.id] || {};
+  confirmCb = async()=>{
+    let q = `/seller-promotions/items/${x.id}?promotion_type=${c.type}&promotion_id=${encodeURIComponent(c.id)}&app_version=v2`;
+    if(x.offer_id) q += `&offer_id=${encodeURIComponent(x.offer_id)}`;
+    const r = await mlReq("DELETE", q);
+    if(!r.ok){ toast("ML no aceptó: "+_mlError(r),"err",8000); return; }
+    toast("Producto quitado de la promoción","ok");
+    prm.items[cid] = null; await prmCargar(false);
+  };
+  document.getElementById("confirmMsg").innerHTML = `<strong>¿Quitar de "${esc(c.name||c.id)}"?</strong><br><br>${esc(it.title||x.id)}<br><span style="font-size:13px;">Vuelve a su precio normal de $${fmt(x.original_price||it.price||0)} en MercadoLibre.</span>`;
+  document.getElementById("confirmBtn").textContent = "Quitar";
+  document.getElementById("modalConfirm").classList.add("show");
+}
 
 // ================================================================
 // SUPERADMIN NEXO
@@ -9398,6 +10216,9 @@ async function mostrarSeccion(id){
   if(id==="stock"){ renderStock(); mostrarUltimaSync("stock","ultimaSyncStock"); }
   if(id==="alertas") renderAlertas();
   if(id==="fullml") renderFullML();
+  if(id==="atencion") renderAtencion();
+  if(id==="ventas" || id==="ml") renderSyncAuto();
+  if(id==="promos") renderPromos();
   if(id==="movimientos") renderMovimientos();
   if(id==="cuentacorriente") renderCC();
   if(id==="compras"){ renderCompras(); actualizarSkuListCompras(); }
