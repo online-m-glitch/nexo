@@ -157,6 +157,32 @@ html[data-theme="dark"] .atn-mia{background:rgba(56,189,248,.15);}
 .atn-vacio{padding:18px;text-align:center;color:var(--text-soft);}
 #sec-atencion a.btn,#modalAtnConv a.btn{text-decoration:none;}
 .atn-alerta{background:#fef2f2;color:#991b1b;border-radius:8px;padding:8px 12px;font-size:12.5px;margin-bottom:8px;}
+.seg-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;border-bottom:1px solid var(--border);}
+.seg-tab{background:none;border:none;border-bottom:2px solid transparent;padding:8px 12px;font-size:13px;font-weight:600;color:var(--text-soft);cursor:pointer;font-family:inherit;}
+.seg-tab.active{color:var(--text);border-bottom-color:var(--brand-primario, var(--ml-blue));}
+.seg-alta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+.seg-fila{cursor:pointer;}
+.seg-fila:hover td,.seg-abierta td{background:rgba(127,127,127,.07);}
+.seg-chip{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 6px;border-radius:10px;background:rgba(127,127,127,.15);color:var(--text-soft);vertical-align:middle;}
+.seg-nota{font-size:11.5px;color:var(--text-soft);margin:8px 0;}
+.seg-detalle{padding:12px 14px;border-top:1px solid var(--border);}
+.seg-spark rect{fill:var(--brand-primario, var(--ml-blue));opacity:.85;}
+.seg-spark rect:hover{opacity:1;}
+.seg-barras{width:100%;height:auto;max-width:760px;display:block;margin:4px 0 8px;}
+.seg-grid{stroke:var(--border);stroke-width:1;}
+.seg-eje{font-size:10px;fill:var(--text-soft);}
+.seg-bar-v{fill:var(--brand-primario, var(--ml-blue));}
+.seg-bar:hover .seg-bar-v{opacity:.75;}
+.seg-linea{fill:none;stroke:var(--brand-primario, var(--ml-blue));stroke-width:2;}
+.seg-punto{fill:var(--brand-primario, var(--ml-blue));stroke:var(--surface);stroke-width:2;}
+.seg-prod{margin-bottom:10px;overflow:hidden;}
+.seg-prod-cab{display:flex;gap:12px;align-items:center;padding:10px 14px;cursor:pointer;}
+.seg-prod-cab img{width:44px;height:44px;object-fit:contain;border-radius:6px;background:#fff;}
+.seg-mio td{background:rgba(52,131,250,.10);}
+.seg-trend{display:inline-block;margin:3px 4px 3px 0;padding:4px 10px;border:1px solid var(--border);border-radius:14px;font-size:12.5px;text-decoration:none;color:inherit;}
+.seg-trend:hover{border-color:var(--brand-primario, var(--ml-blue));}
+.seg-tabla td{vertical-align:middle;}
+#sec-seguimiento input.form-control{padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:transparent;color:inherit;box-sizing:border-box;width:100%;}
 .fml-tabs button{padding:9px 16px;border-radius:9px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-weight:600;font-size:13px;cursor:pointer;}
 .fml-tabs button.active{background:var(--brand-primario, var(--ml-blue));border-color:transparent;color:#fff;}
 .fml-pane{display:none;padding:20px;}
@@ -650,6 +676,9 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
     <a class="nav-item" href="#promos" data-sec="promos" onclick="return navClick(event,'promos')">
       <span class="icon">🏷️</span> Promociones
     </a>
+    <a class="nav-item" href="#seguimiento" data-sec="seguimiento" onclick="return navClick(event,'seguimiento')">
+      <span class="icon">🔭</span> Seguimiento
+    </a>
     <div class="nav-section">Operaciones</div>
     <a class="nav-item" href="#movimientos" data-sec="movimientos" onclick="return navClick(event,'movimientos')">
       <span class="icon">↕️</span> Movimientos
@@ -1018,6 +1047,25 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
         <div class="stats-grid" id="prmStats" style="margin-bottom:16px;"></div>
         <p style="font-size:12px;color:var(--text-soft);margin:0 0 14px;">La ganancia se calcula con la comisión y el envío de ML <strong>al precio de la promoción</strong>, más el impuesto y la percepción que tenés configurados y el costo del Catálogo. En las campañas <strong>compartidas</strong>, ML pone parte del descuento: el cálculo usa lo que realmente cobrás. Sumarte o quitarte siempre pide confirmación.</p>
         <div id="prmLista"><div class="atn-vacio">Abrí la sección para consultar MercadoLibre…</div></div>
+      </div>
+    </div>
+
+    <!-- ========== SEGUIMIENTO DE VENDEDORES ========== -->
+    <div id="sec-seguimiento" class="section">
+      <div class="page-header">
+        <div><h2>Seguimiento de vendedores</h2><div class="sub">Ventas, tendencias y precios de tu competencia, con una foto automática por día</div></div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-ghost btn-sm admin-only" id="btnSegAhora" onclick="segActualizarAhora(false)">🔄 Actualizar ahora</button>
+        </div>
+      </div>
+      <div style="padding:24px;">
+        <div class="stats-grid" id="segStats" style="margin-bottom:16px;"></div>
+        <div class="seg-tabs">
+          <button class="seg-tab active" data-tab="vend" onclick="segTab('vend')">👥 Vendedores</button>
+          <button class="seg-tab" data-tab="prod" onclick="segTab('prod')">📦 Productos de catálogo</button>
+          <button class="seg-tab" data-tab="tend" onclick="segTab('tend')">🔥 Lo más buscado</button>
+        </div>
+        <div id="segLista"><div class="atn-vacio">Abrí la sección para cargar el seguimiento…</div></div>
       </div>
     </div>
 
@@ -7571,6 +7619,343 @@ function prmQuitar(cid, i){
   document.getElementById("confirmBtn").textContent = "Quitar";
   document.getElementById("modalConfirm").classList.add("show");
 }
+// ================================================================
+// Seguimiento de vendedores y productos de catálogo
+// El servidor (nexo-sync, acción "seguimiento") saca una foto por día (02:10 h):
+//   · vendedores: ventas históricas totales de ML → la diferencia entre días = ventas del día;
+//     reputación y medalla.
+//   · productos de catálogo: todos los vendedores con precio, Full, envío gratis y visitas del día anterior.
+// ML no deja ver las publicaciones ni las unidades vendidas de otros vendedores: la facturación es
+// una ESTIMACIÓN (ventas × ticket promedio).
+// ================================================================
+let seg = {vend:[], prod:[], vsnap:[], psnap:[], nick:{}, cargado:false, cargando:false, abierto:null, tab:"vend", trends:{}, misCat:null};
+
+function segHoy(off){ return new Date(Date.now() - 3*3600*1000 + (off||0)*86400000).toISOString().slice(0,10); }
+function segMedalla(m){ return ({platinum:"🏆 Platinum", gold:"🥇 Gold", silver:"🥈 Silver"})[m] || "—"; }
+function segNivel(l){ const n = String(l||"").replace(/^\d+_/,""); return ({green:"🟢",light_green:"🟢",yellow:"🟡",orange:"🟠",red:"🔴"})[n] || "⚪"; }
+
+async function renderSeguimiento(){ if(!seg.miUid){ try{ seg.miUid = await mercUserId(); }catch(e){} } if(!seg.cargado) await segCargar(); else segPintar(); }
+async function segCargar(){
+  if(seg.cargando) return;
+  seg.cargando = true;
+  const el = document.getElementById("segLista"); if(el) el.innerHTML = `<div class="atn-vacio">⏳ Cargando seguimiento…</div>`;
+  try{
+    const d90 = segHoy(-95), d35 = segHoy(-35);
+    const [v, p, vs, ps] = await Promise.all([
+      sbGet("nexo_seg_vendedores", "select=*&activo=eq.true&order=created_at"),
+      sbGet("nexo_seg_productos", "select=*&activo=eq.true&order=created_at"),
+      sbGetAll("nexo_seg_vend_snap", `select=seller_id,fecha,nickname,transacciones,nivel,medalla,tipo&fecha=gte.${d90}&order=fecha,seller_id`),
+      sbGetAll("nexo_seg_prod_snap", `select=product_id,fecha,item_id,seller_id,precio,precio_original,full_ml,envio_gratis,tienda_oficial,visitas_dia&fecha=gte.${d35}&order=fecha,product_id,item_id`)
+    ]);
+    seg.vend = v||[]; seg.prod = p||[]; seg.vsnap = vs||[]; seg.psnap = ps||[];
+    seg.vend.forEach(x=>{ if(x.nickname) seg.nick[x.seller_id] = x.nickname; });
+    seg.vsnap.forEach(x=>{ if(x.nickname) seg.nick[x.seller_id] = x.nickname; });
+    seg.cargado = true;
+  }catch(e){
+    if(el) el.innerHTML = `<div class="atn-alerta">No se pudo cargar el seguimiento: ${esc(e.message)}</div>`;
+    seg.cargando = false; return;
+  }
+  seg.cargando = false;
+  segPintar();
+  segNicks();
+}
+// Apodos de los vendedores que aparecen en los productos (consulta pública de ML, en lotes de 20)
+async function segNicks(){
+  const faltan = [...new Set(seg.psnap.map(r=>r.seller_id))].filter(id=>id && !seg.nick[id]);
+  if(!faltan.length) return;
+  for(let i=0;i<faltan.length;i+=20){
+    const r = await mlGet("/users?ids="+faltan.slice(i,i+20).join(","));
+    if(r.ok && Array.isArray(r.data)) r.data.forEach(x=>{ if(x && x.code===200 && x.body) seg.nick[x.body.id] = x.body.nickname; });
+  }
+  segPintar();
+}
+
+// ── Cálculos ──
+// Ventas por día de un vendedor: diferencia entre fotos consecutivas
+function segSerieVend(id){
+  const s = seg.vsnap.filter(r=>Number(r.seller_id)===Number(id) && r.transacciones!=null).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  const dias = [];
+  for(let i=1;i<s.length;i++){
+    const gap = Math.round((Date.parse(s[i].fecha)-Date.parse(s[i-1].fecha))/86400000) || 1;
+    dias.push({fecha:s[i].fecha, ventas:Math.max(0, Number(s[i].transacciones)-Number(s[i-1].transacciones)), dias:gap});
+  }
+  return {fotos:s, dias, ultima:s[s.length-1]||null};
+}
+function segSuma(dias, desde){ return dias.filter(d=>d.fecha>desde).reduce((a,d)=>a+d.ventas,0); }
+function segUltFecha(){ return seg.psnap.reduce((m,r)=>r.fecha>m?r.fecha:m, ""); }
+// Ticket promedio observado: precio medio de sus publicaciones en los productos que seguís (última foto)
+function segTicketObs(id){
+  const f = segUltFecha();
+  const xs = seg.psnap.filter(r=>r.fecha===f && Number(r.seller_id)===Number(id)).map(r=>Number(r.precio)).filter(x=>x>0);
+  return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : null;
+}
+function segResumenVend(v){
+  const s = segSerieVend(v.seller_id), hoy = segHoy();
+  const v7 = segSuma(s.dias, segHoy(-7)), v30 = segSuma(s.dias, segHoy(-30)), ant7 = segSuma(s.dias.filter(d=>d.fecha<=segHoy(-7)), segHoy(-14));
+  const diasCub = s.dias.filter(d=>d.fecha>segHoy(-30)).reduce((a,d)=>a+d.dias,0);
+  const ticketObs = segTicketObs(v.seller_id), ticket = Number(v.ticket)||ticketObs;
+  const tend = ant7>0 ? Math.round((v7-ant7)/ant7*100) : null;
+  return {s, v7, v30, ant7, tend, diasCub, ticket, ticketObs, fact30: ticket ? v30*ticket : null, hoy};
+}
+
+// ── Pintado ──
+function segPintar(){
+  const el = document.getElementById("segLista"); if(!el) return;
+  document.querySelectorAll(".seg-tab").forEach(b=>b.classList.toggle("active", b.dataset.tab===seg.tab));
+  const st = document.getElementById("segStats");
+  const tot7 = seg.vend.reduce((a,v)=>a+segResumenVend(v).v7,0);
+  if(st) st.innerHTML = `<div class="stat-card"><div class="label">Vendedores seguidos</div><div class="value">${seg.vend.length}</div><div class="sub">foto automática todos los días</div></div>
+    <div class="stat-card"><div class="label">Productos seguidos</div><div class="value">${seg.prod.length}</div><div class="sub">de catálogo</div></div>
+    <div class="stat-card"><div class="label">Ventas de los seguidos</div><div class="value">${fmtN(tot7)}</div><div class="sub">últimos 7 días</div></div>
+    <div class="stat-card"><div class="label">Última foto</div><div class="value" style="font-size:18px;">${segUltFotoTxt()}</div><div class="sub">se actualiza sola a las 02:10 h</div></div>`;
+  el.innerHTML = seg.tab==="prod" ? segHtmlProductos() : seg.tab==="tend" ? segHtmlTendencias() : segHtmlVendedores();
+  if(typeof esAdmin==="function" && !esAdmin()) el.querySelectorAll(".admin-only").forEach(x=>x.style.display="none");
+  if(seg.tab==="tend") segCargarTendencias();
+}
+function segUltFotoTxt(){
+  const f = [seg.vsnap.reduce((m,r)=>r.fecha>m?r.fecha:m,""), segUltFecha()].sort().pop();
+  return f ? f.split("-").reverse().join("/") : "todavía no";
+}
+function segTab(t){ seg.tab = t; seg.abierto = null; segPintar(); }
+
+function segHtmlVendedores(){
+  const alta = `<div class="seg-alta admin-only">
+      <input id="segVendId" class="form-control" placeholder="Número de vendedor (ej. 422230073)" style="max-width:260px;" onkeydown="if(event.key==='Enter')segAgregarVend()">
+      <button class="btn btn-primary btn-sm" onclick="segAgregarVend()">➕ Seguir vendedor</button>
+      <span style="font-size:12px;color:var(--text-soft);">También podés seguirlos desde la pestaña <a href="#" onclick="segTab('prod');return false;">Productos</a>, con el botón ➕ de cada vendedor.</span>
+    </div>`;
+  if(!seg.vend.length) return alta + `<div class="atn-vacio">Todavía no seguís a ningún vendedor.</div>`;
+  const filas = seg.vend.map(v=>{
+    const r = segResumenVend(v), u = r.s.ultima || {}, ab = seg.abierto===("v"+v.seller_id);
+    const sinDatos = !r.s.dias.length;
+    return `<tr class="seg-fila${ab?" seg-abierta":""}" onclick="segAbrir('v${v.seller_id}')">
+        <td><strong>${esc(seg.nick[v.seller_id]||v.nickname||v.seller_id)}</strong>${u.tipo==="brand"?` <span class="seg-chip">Tienda oficial</span>`:""}<div style="font-size:11px;color:var(--text-soft);">#${v.seller_id}</div></td>
+        <td>${segNivel(u.nivel)} ${segMedalla(u.medalla)}</td>
+        <td class="num">${u.transacciones!=null?fmtN(u.transacciones):"—"}</td>
+        <td class="num"><strong>${sinDatos?"—":fmtN(r.v7)}</strong></td>
+        <td class="num">${sinDatos?"—":(r.tend==null?"—":`<span style="color:${r.tend>=0?"var(--green)":"var(--red)"};">${r.tend>=0?"▲":"▼"} ${Math.abs(r.tend)}%</span>`)}</td>
+        <td class="num">${sinDatos?"—":fmtN(r.v30)}${r.diasCub && r.diasCub<30?`<div style="font-size:10.5px;color:var(--text-soft);">en ${r.diasCub} día${r.diasCub===1?"":"s"}</div>`:""}</td>
+        <td class="num">${r.fact30!=null && !sinDatos?"$ "+fmt(r.fact30):"—"}</td>
+        <td>${segSpark(r.s.dias.slice(-30))}</td>
+      </tr>${ab?`<tr><td colspan="8" style="padding:0;">${segDetalleVend(v, r)}</td></tr>`:""}`;
+  }).join("");
+  return alta + `<div class="table-wrap"><table class="seg-tabla">
+    <thead><tr><th>Vendedor</th><th>Reputación</th><th class="num">Ventas históricas</th><th class="num">Ventas 7 días</th><th class="num">vs. 7 días antes</th><th class="num">Ventas 30 días</th><th class="num">Facturación est. 30 días</th><th>Últimos 30 días</th></tr></thead>
+    <tbody>${filas}</tbody></table></div>
+    <p class="seg-nota">Las ventas son operaciones (ML no informa unidades de otros vendedores) y se calculan con la diferencia entre la foto de un día y la del anterior: el primer día de seguimiento todavía no hay ventas para mostrar. La facturación es una estimación: ventas × ticket promedio.</p>`;
+}
+function segAbrir(k){ seg.abierto = seg.abierto===k ? null : k; segPintar(); }
+
+// Mini gráfico de barras (una sola serie: ventas por día)
+function segSpark(dias){
+  if(dias.length<2) return `<span style="font-size:11px;color:var(--text-soft);">se arma día a día</span>`;
+  const w=120, h=28, max=Math.max(1,...dias.map(d=>d.ventas)), bw=Math.max(2, Math.floor(w/dias.length)-1);
+  return `<svg class="seg-spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-label="Ventas por día">${dias.map((d,i)=>{ const bh=Math.max(1,Math.round(d.ventas/max*(h-2))); return `<rect x="${i*(bw+1)}" y="${h-bh}" width="${bw}" height="${bh}" rx="1"><title>${d.fecha.split("-").reverse().join("/")}: ${fmtN(d.ventas)} venta${d.ventas===1?"":"s"}</title></rect>`; }).join("")}</svg>`;
+}
+// Gráfico grande con eje y valores al pasar el mouse
+function segBarras(dias){
+  if(dias.length<2) return `<div class="atn-vacio" style="padding:10px;">El gráfico aparece cuando haya al menos 2 días de ventas registradas.</div>`;
+  const W=640, H=180, pl=40, pb=22, pt=8, n=dias.length, max=Math.max(1,...dias.map(d=>d.ventas));
+  const paso=(W-pl)/n, bw=Math.max(3,paso-2), y=v=>H-pb-(v/max)*(H-pb-pt);
+  const ticks=[0, Math.round(max/2), max];
+  return `<svg class="seg-barras" viewBox="0 0 ${W} ${H}" role="img" aria-label="Ventas por día">
+    ${ticks.map(t=>`<line x1="${pl}" x2="${W}" y1="${y(t)}" y2="${y(t)}" class="seg-grid"/><text x="${pl-6}" y="${y(t)+4}" text-anchor="end" class="seg-eje">${fmtN(t)}</text>`).join("")}
+    ${dias.map((d,i)=>{ const x=pl+i*paso+1, top=y(d.ventas), lab=d.fecha.slice(8)+"/"+d.fecha.slice(5,7);
+      return `<g class="seg-bar"><rect x="${pl+i*paso}" y="${pt}" width="${paso}" height="${H-pb-pt}" fill="transparent"/>
+        <rect x="${x}" y="${top}" width="${bw}" height="${Math.max(1,H-pb-top)}" rx="${Math.min(4,bw/2)}" class="seg-bar-v"/>
+        <title>${lab}: ${fmtN(d.ventas)} venta${d.ventas===1?"":"s"}${d.dias>1?` (acumulado de ${d.dias} días)`:""}</title>
+        ${(n<=16 || i%Math.ceil(n/12)===0 || i===n-1)?`<text x="${x+bw/2}" y="${H-6}" text-anchor="middle" class="seg-eje">${lab}</text>`:""}</g>`; }).join("")}
+  </svg>`;
+}
+function segDetalleVend(v, r){
+  const f = segUltFecha();
+  const pubs = seg.psnap.filter(x=>x.fecha===f && Number(x.seller_id)===Number(v.seller_id));
+  const prodNom = id => (seg.prod.find(p=>p.product_id===id)||{}).nombre || id;
+  return `<div class="seg-detalle">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <strong>Ventas por día</strong>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <label class="admin-only" style="font-size:12px;">Ticket promedio $ <input type="number" class="form-control" style="width:110px;display:inline-block;" value="${v.ticket!=null?Number(v.ticket):""}" placeholder="${r.ticketObs?Math.round(r.ticketObs):"sin dato"}" onchange="segGuardarTicket(${v.seller_id}, this.value)" onclick="event.stopPropagation()"></label>
+        <a class="btn btn-ghost btn-sm" href="https://www.mercadolibre.com.ar/perfil/${encodeURIComponent(seg.nick[v.seller_id]||v.nickname||"")}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Ver perfil en ML ↗</a>
+        <button class="btn btn-ghost btn-sm admin-only" onclick="event.stopPropagation();segDejarVend(${v.seller_id})">Dejar de seguir</button>
+      </div>
+    </div>
+    ${segBarras(r.s.dias.slice(-60))}
+    <p class="seg-nota">Ticket usado para la facturación: ${r.ticket?("$ "+fmt(r.ticket)+(v.ticket!=null?" (cargado por vos)":" (precio promedio de sus publicaciones en tus productos seguidos)")):"sin dato: cargá un ticket promedio o seguí algún producto donde venda"}.</p>
+    ${pubs.length?`<div class="table-wrap"><table><thead><tr><th>Producto</th><th class="num">Precio</th><th>Full</th><th class="num">Visitas ayer</th></tr></thead><tbody>${pubs.map(x=>`<tr><td>${esc(prodNom(x.product_id))}</td><td class="num">$ ${fmt(x.precio)}</td><td>${x.full_ml?"⚡ Full":"—"}</td><td class="num">${x.visitas_dia!=null?fmtN(x.visitas_dia):"—"}</td></tr>`).join("")}</tbody></table></div>`:""}
+  </div>`;
+}
+
+function segHtmlProductos(){
+  const alta = `<div class="seg-alta admin-only">
+      <input id="segProdId" class="form-control" placeholder="Link del producto de catálogo o código (ej. MLA19678210)" style="max-width:380px;" onkeydown="if(event.key==='Enter')segAgregarProd()">
+      <button class="btn btn-primary btn-sm" onclick="segAgregarProd()">➕ Seguir producto</button>
+      <button class="btn btn-ghost btn-sm" onclick="segMisCatalogo()">📋 Elegir de mis publicaciones de catálogo</button>
+    </div><div id="segMisCat"></div>`;
+  if(!seg.prod.length) return alta + `<div class="atn-vacio">Todavía no seguís ningún producto. Solo se pueden seguir productos de <strong>catálogo</strong> (los que tienen la ficha única de ML con varios vendedores).</div>`;
+  const f = segUltFecha();
+  const fechas = [...new Set(seg.psnap.map(r=>r.fecha))].sort();
+  const fAnt = fechas.filter(x=>x<f).pop();
+  return alta + seg.prod.map(p=>{
+    const hoy = seg.psnap.filter(r=>r.product_id===p.product_id && r.fecha===f).sort((a,b)=>a.precio-b.precio);
+    const ant = {}; seg.psnap.filter(r=>r.product_id===p.product_id && r.fecha===fAnt).forEach(r=>ant[r.item_id]=r);
+    const ab = seg.abierto===("p"+p.product_id);
+    const mio = hoy.findIndex(r=>Number(r.seller_id)===Number(seg.miUid));
+    const minPrecios = fechas.map(d=>{ const xs=seg.psnap.filter(r=>r.product_id===p.product_id && r.fecha===d).map(r=>Number(r.precio)); return xs.length?{fecha:d, v:Math.min(...xs)}:null; }).filter(Boolean);
+    const visTot = hoy.reduce((a,r)=>a+(Number(r.visitas_dia)||0),0);
+    return `<div class="card seg-prod">
+      <div class="seg-prod-cab" onclick="segAbrir('p${p.product_id}')">
+        ${p.thumb?`<img src="${esc(p.thumb)}" alt="" loading="lazy">`:""}
+        <div style="flex:1;min-width:0;"><strong>${esc(p.nombre||p.product_id)}</strong>
+          <div style="font-size:12px;color:var(--text-soft);">${p.product_id} · ${hoy.length} vendedor${hoy.length===1?"":"es"} · desde $ ${hoy[0]?fmt(hoy[0].precio):"—"} · ${hoy.filter(r=>r.full_ml).length} en Full · ${fmtN(visTot)} visitas ayer${mio>=0?` · <strong>vos: puesto ${mio+1} por precio</strong>`:""}</div></div>
+        <span style="font-size:18px;">${ab?"▾":"▸"}</span>
+      </div>
+      ${ab?`<div class="seg-detalle">
+        ${minPrecios.length>=2?`<div style="font-size:12.5px;margin-bottom:6px;"><strong>Precio más bajo por día</strong></div>${segLinea(minPrecios)}`:`<p class="seg-nota">El historial de precios se arma a partir de hoy, con una foto por día.</p>`}
+        <div class="table-wrap"><table><thead><tr><th>#</th><th>Vendedor</th><th class="num">Precio</th><th class="num">vs. día anterior</th><th>Envío</th><th class="num">Visitas ayer</th><th></th></tr></thead><tbody>
+        ${hoy.map((r,i)=>{ const a = ant[r.item_id], dif = a ? Number(r.precio)-Number(a.precio) : null, soy = Number(r.seller_id)===Number(seg.miUid), sigo = seg.vend.some(v=>Number(v.seller_id)===Number(r.seller_id));
+          return `<tr${soy?` class="seg-mio"`:""}><td>${i+1}</td>
+            <td>${soy?"<strong>Vos</strong>":esc(seg.nick[r.seller_id]||("#"+r.seller_id))}${r.tienda_oficial?` <span class="seg-chip">Oficial</span>`:""}${!a&&fAnt?` <span class="seg-chip">Nuevo</span>`:""}</td>
+            <td class="num">$ ${fmt(r.precio)}${r.precio_original?`<div style="font-size:10.5px;color:var(--text-soft);text-decoration:line-through;">$ ${fmt(r.precio_original)}</div>`:""}</td>
+            <td class="num">${dif==null?"—":dif===0?"=":`<span style="color:${dif<0?"var(--red)":"var(--green)"};">${dif<0?"▼":"▲"} $ ${fmt(Math.abs(dif))}</span>`}</td>
+            <td>${r.full_ml?"⚡ Full":"—"}${r.envio_gratis?" · gratis":""}</td>
+            <td class="num">${r.visitas_dia!=null?fmtN(r.visitas_dia):"—"}</td>
+            <td>${soy?"":sigo?`<span style="font-size:11px;color:var(--text-soft);">siguiendo</span>`:`<button class="btn btn-ghost btn-sm admin-only" title="Seguir a este vendedor" onclick="segAgregarVend(${r.seller_id})">➕</button>`}</td></tr>`; }).join("") || `<tr><td colspan="7" style="text-align:center;color:var(--text-soft);">Sin foto todavía: tocá "Actualizar ahora".</td></tr>`}
+        </tbody></table></div>
+        <p class="seg-nota">Visitas: las de los 15 vendedores más baratos y las de los vendedores que seguís. ▼ en rojo = bajó el precio.</p>
+        <div style="text-align:right;"><button class="btn btn-ghost btn-sm admin-only" onclick="segDejarProd('${p.product_id}')">Dejar de seguir este producto</button></div>
+      </div>`:""}
+    </div>`;
+  }).join("");
+}
+// Línea simple (una serie: precio más bajo del día)
+function segLinea(pts){
+  const W=640, H=150, pl=64, pb=22, pt=10, n=pts.length;
+  const vs=pts.map(p=>p.v), mn=Math.min(...vs), mx=Math.max(...vs), rango=(mx-mn)||Math.max(1,mx*0.05);
+  const lo=mn-rango*0.15, hi=mx+rango*0.15;
+  const x=i=>pl+12+(n===1?0:i*(W-pl-40)/(n-1)), y=v=>H-pb-(v-lo)/(hi-lo)*(H-pb-pt);
+  return `<svg class="seg-barras" viewBox="0 0 ${W} ${H}" role="img" aria-label="Precio más bajo por día">
+    ${(mx>mn?[mn,(mn+mx)/2,mx]:[mn]).map(t=>`<line x1="${pl}" x2="${W}" y1="${y(t)}" y2="${y(t)}" class="seg-grid"/><text x="${pl-6}" y="${y(t)+4}" text-anchor="end" class="seg-eje">$ ${fmt(t)}</text>`).join("")}
+    <polyline points="${pts.map((p,i)=>x(i)+","+y(p.v)).join(" ")}" class="seg-linea"/>
+    ${pts.map((p,i)=>`<g class="seg-bar"><circle cx="${x(i)}" cy="${y(p.v)}" r="4" class="seg-punto"/><circle cx="${x(i)}" cy="${y(p.v)}" r="12" fill="transparent"><title>${p.fecha.split("-").reverse().join("/")}: $ ${fmt(p.v)}</title></circle>
+      ${(n<=12 || i%Math.ceil(n/10)===0 || i===n-1)?`<text x="${x(i)}" y="${H-6}" text-anchor="middle" class="seg-eje">${p.fecha.slice(8)}/${p.fecha.slice(5,7)}</text>`:""}</g>`).join("")}
+  </svg>`;
+}
+
+function segHtmlTendencias(){
+  const cats = [...new Set(seg.prod.map(p=>p.category_id).filter(Boolean))];
+  if(!cats.length) return `<div class="atn-vacio">Seguí algún producto de catálogo para ver qué se está buscando en su categoría.</div>`;
+  return `<p class="seg-nota" style="margin-top:0;">Lo más buscado esta semana en MercadoLibre, en las categorías de los productos que seguís.</p>` + cats.map(c=>{
+    const t = seg.trends[c];
+    return `<div class="card" style="padding:14px;margin-bottom:12px;"><strong>${esc((t&&t.nombre)||c)}</strong>
+      <div style="margin-top:8px;">${!t?"⏳ Consultando…":t.error?`<span style="color:var(--text-soft);">${esc(t.error)}</span>`:t.lista.slice(0,20).map((k,i)=>`<a class="seg-trend" href="${esc(k.url)}" target="_blank" rel="noopener">${i+1}. ${esc(k.keyword)}</a>`).join("")}</div></div>`;
+  }).join("");
+}
+async function segCargarTendencias(){
+  const cats = [...new Set(seg.prod.map(p=>p.category_id).filter(Boolean))].filter(c=>!seg.trends[c]);
+  if(!cats.length) return;
+  await Promise.all(cats.map(async c=>{
+    const [r, n] = await Promise.all([mlGet(`/trends/MLA/${c}`), mlGet(`/categories/${c}`)]);
+    seg.trends[c] = r.ok && Array.isArray(r.data) ? {lista:r.data, nombre:n.ok?n.data.name:c} : {error:"ML no devolvió tendencias para esta categoría.", nombre:n.ok?n.data.name:c};
+  }));
+  if(seg.tab==="tend") segPintar();
+}
+
+// ── Acciones ──
+async function segAgregarVend(id){
+  if(checkViewer("Seguir vendedores")) return;
+  const inp = document.getElementById("segVendId");
+  id = String(id || (inp && inp.value) || "").replace(/\D/g,"");
+  if(!id){ toast("Escribí el número de vendedor.","err"); return; }
+  if(seg.vend.some(v=>String(v.seller_id)===id)){ toast("Ya seguís a ese vendedor.","ok"); return; }
+  const r = await mlGet(`/users/${id}`);
+  if(!r.ok || !r.data || !r.data.id){ toast("ML no encontró ese vendedor.","err"); return; }
+  try{
+    await sbInsert("nexo_seg_vendedores", {seller_id:Number(id), nickname:r.data.nickname||null});
+    seg.nick[id] = r.data.nickname;
+    toast(`Siguiendo a ${r.data.nickname} ✅`,"ok");
+    if(inp) inp.value = "";
+    await segActualizarAhora(true);
+  }catch(e){ toast("No se pudo guardar: "+e.message,"err"); }
+}
+function segIdProducto(txt){
+  const s = String(txt||"").toUpperCase();
+  const m = s.match(/\/P\/(MLA\d+)/) || s.match(/\b(MLA\d{5,})\b/) || s.match(/^(\d{5,})$/);
+  return m ? (m[1].startsWith("MLA") ? m[1] : "MLA"+m[1]) : null;
+}
+async function segAgregarProd(id){
+  if(checkViewer("Seguir productos")) return;
+  const inp = document.getElementById("segProdId");
+  id = id || segIdProducto(inp && inp.value);
+  if(!id){ toast("Pegá el link del producto de catálogo (el que tiene /p/MLA…) o su código.","err"); return; }
+  if(seg.prod.some(p=>p.product_id===id)){ toast("Ya seguís ese producto.","ok"); return; }
+  const r = await mlGet(`/products/${id}`);
+  if(!r.ok || !r.data || !r.data.id){ toast("No es un producto de catálogo de ML. Si es una publicación común, ML no deja seguirla.","err",6000); return; }
+  try{
+    await sbInsert("nexo_seg_productos", {product_id:id, nombre:r.data.name||null, thumb:(r.data.pictures&&r.data.pictures[0]&&r.data.pictures[0].url)||null});
+    toast("Producto agregado ✅","ok");
+    if(inp) inp.value = "";
+    await segActualizarAhora(true);
+  }catch(e){ toast("No se pudo guardar: "+e.message,"err"); }
+}
+// Mis publicaciones de catálogo, para elegir rápido qué seguir
+async function segMisCatalogo(){
+  const box = document.getElementById("segMisCat"); if(!box) return;
+  box.innerHTML = `<div class="atn-vacio">⏳ Buscando tus publicaciones de catálogo…</div>`;
+  const uid = await mercUserId();
+  if(!uid){ box.innerHTML = `<div class="atn-alerta">No se pudo conectar con MercadoLibre.</div>`; return; }
+  const ids = []; let off = 0, tot = 0;
+  do{ const r = await mlGet(`/users/${uid}/items/search?status=active&catalog_listing=true&limit=50&offset=${off}`); if(!r.ok) break; ids.push(...(r.data.results||[])); tot = (r.data.paging&&r.data.paging.total)||0; off += 50; }while(off<tot && off<500);
+  const det = [];
+  for(let i=0;i<ids.length;i+=20){ const r = await mlGet(`/items?ids=${ids.slice(i,i+20).join(",")}&attributes=id,title,catalog_product_id,price,sold_quantity`); if(r.ok && Array.isArray(r.data)) r.data.forEach(x=>{ if(x.code===200 && x.body && x.body.catalog_product_id) det.push(x.body); }); }
+  const unicos = {}; det.forEach(d=>{ if(!unicos[d.catalog_product_id] || d.sold_quantity>unicos[d.catalog_product_id].sold_quantity) unicos[d.catalog_product_id] = d; });
+  const lista = Object.values(unicos).sort((a,b)=>(b.sold_quantity||0)-(a.sold_quantity||0));
+  seg.misCat = lista;
+  if(!lista.length){ box.innerHTML = `<div class="atn-vacio">No encontré publicaciones de catálogo activas.</div>`; return; }
+  box.innerHTML = `<div class="card" style="padding:12px;margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><strong>Tus publicaciones de catálogo</strong><button class="btn btn-primary btn-sm" onclick="segSeguirMarcados()">➕ Seguir marcados</button></div>
+    <div class="table-wrap" style="max-height:300px;overflow:auto;"><table><thead><tr><th></th><th>Producto</th><th class="num">Tus ventas</th></tr></thead><tbody>
+    ${lista.map(d=>{ const ya = seg.prod.some(p=>p.product_id===d.catalog_product_id); return `<tr><td><input type="checkbox" class="segMisChk" value="${d.catalog_product_id}" ${ya?"checked disabled":""}></td><td>${esc(d.title)}${ya?` <span class="seg-chip">ya lo seguís</span>`:""}</td><td class="num">${fmtN(d.sold_quantity)}</td></tr>`; }).join("")}
+    </tbody></table></div></div>`;
+}
+async function segSeguirMarcados(){
+  if(checkViewer("Seguir productos")) return;
+  const ids = [...document.querySelectorAll(".segMisChk:checked:not(:disabled)")].map(x=>x.value);
+  if(!ids.length){ toast("Marcá al menos un producto.","err"); return; }
+  const filas = ids.map(id=>{ const d = (seg.misCat||[]).find(x=>x.catalog_product_id===id); return {product_id:id, nombre:d?d.title:null}; });
+  try{ await sbInsert("nexo_seg_productos", filas); toast(`${ids.length} producto${ids.length===1?"":"s"} agregado${ids.length===1?"":"s"} ✅`,"ok"); await segActualizarAhora(true); }
+  catch(e){ toast("No se pudo guardar: "+e.message,"err"); }
+}
+async function segGuardarTicket(id, val){
+  if(checkViewer("Editar el ticket")) return;
+  const n = val==="" ? null : Number(val);
+  try{ await sbUpdate("nexo_seg_vendedores", `seller_id=eq.${id}`, {ticket:n}); const v = seg.vend.find(x=>Number(x.seller_id)===Number(id)); if(v) v.ticket = n; segPintar(); }
+  catch(e){ toast("No se pudo guardar: "+e.message,"err"); }
+}
+async function segDejarVend(id){
+  if(checkViewer("Dejar de seguir")) return;
+  if(!confirm(`¿Dejar de seguir a ${seg.nick[id]||id}? El historial que ya se juntó se conserva.`)) return;
+  try{ await sbDelete("nexo_seg_vendedores", `seller_id=eq.${id}`); seg.vend = seg.vend.filter(v=>Number(v.seller_id)!==Number(id)); seg.abierto=null; segPintar(); }
+  catch(e){ toast("No se pudo: "+e.message,"err"); }
+}
+async function segDejarProd(id){
+  if(checkViewer("Dejar de seguir")) return;
+  if(!confirm("¿Dejar de seguir este producto? El historial que ya se juntó se conserva.")) return;
+  try{ await sbDelete("nexo_seg_productos", `product_id=eq.${encodeURIComponent(id)}`); seg.prod = seg.prod.filter(p=>p.product_id!==id); seg.abierto=null; segPintar(); }
+  catch(e){ toast("No se pudo: "+e.message,"err"); }
+}
+// Pide al servidor la foto ahora (si ya hay foto de hoy, solo agrega lo nuevo)
+async function segActualizarAhora(silencioso){
+  if(checkViewer("Actualizar el seguimiento")) return;
+  const btn = document.getElementById("btnSegAhora"); if(btn){ btn.disabled = true; btn.textContent = "⏳ Consultando ML…"; }
+  try{
+    const r = await fetch(SB_URL+"/functions/v1/nexo-sync", {method:"POST", headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+sbAuth()}, body:JSON.stringify({accion:"seguimiento"})});
+    const d = await r.json().catch(()=>({}));
+    const s = (d.salida||[])[0] || {};
+    if(!r.ok || s.error) throw new Error(s.error || d.message || d.error || ("HTTP "+r.status));
+    if(!silencioso) toast("Seguimiento actualizado ✅","ok");
+  }catch(e){ toast("No se pudo actualizar: "+e.message,"err",6000); }
+  finally{ if(btn){ btn.disabled = false; btn.textContent = "🔄 Actualizar ahora"; } seg.cargado = false; await segCargar(); }
+}
 
 // ================================================================
 // SUPERADMIN NEXO
@@ -10219,6 +10604,7 @@ async function mostrarSeccion(id){
   if(id==="atencion") renderAtencion();
   if(id==="ventas" || id==="ml") renderSyncAuto();
   if(id==="promos") renderPromos();
+  if(id==="seguimiento") renderSeguimiento();
   if(id==="movimientos") renderMovimientos();
   if(id==="cuentacorriente") renderCC();
   if(id==="compras"){ renderCompras(); actualizarSkuListCompras(); }
