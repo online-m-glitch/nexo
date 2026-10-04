@@ -182,6 +182,8 @@ html[data-theme="dark"] .atn-mia{background:rgba(56,189,248,.15);}
 .seg-trend{display:inline-block;margin:3px 4px 3px 0;padding:4px 10px;border:1px solid var(--border);border-radius:14px;font-size:12.5px;text-decoration:none;color:inherit;}
 .seg-trend:hover{border-color:var(--brand-primario, var(--ml-blue));}
 .seg-tabla td{vertical-align:middle;}
+.ml-sitio{padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:transparent;color:inherit;}
+#btnConectarML[style*="none"] + .ml-sitio{display:none;}
 #sec-seguimiento input.form-control{padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:transparent;color:inherit;box-sizing:border-box;width:100%;}
 .fml-tabs button{padding:9px 16px;border-radius:9px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-weight:600;font-size:13px;cursor:pointer;}
 .fml-tabs button.active{background:var(--brand-primario, var(--ml-blue));border-color:transparent;color:#fff;}
@@ -2664,6 +2666,10 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
               <button class="btn btn-primary" id="btnConectarML" onclick="conectarML()" style="display:none;">
                 🔗 Conectar con MercadoLibre
               </button>
+              <select id="mlSitioConectar" class="ml-sitio" title="País de la cuenta de MercadoLibre">
+                <option value="MLA">🇦🇷 Argentina</option>
+                <option value="MLU">🇺🇾 Uruguay</option>
+              </select>
               <button class="btn btn-ghost" id="btnDesconectarML" onclick="desconectarML()" style="display:none;">
                 Desconectar
               </button>
@@ -14063,7 +14069,8 @@ async function verificarTokenML(){
 async function conectarML(){
   if(!esAdmin()){ toast("Solo el administrador puede conectar MercadoLibre.","err"); return; }
   try{
-    const r = await mlApi({grant_type:"auth_url"});
+    const sel = document.getElementById("mlSitioConectar");
+    const r = await mlApi({grant_type:"auth_url", site:(sel && sel.value) || "MLA"});
     if(!r.ok || !r.data.url){ toast("No se pudo iniciar la conexión: "+(r.data.message||r.data.error||""),"err"); return; }
     window.location.href = r.data.url;
   }catch(e){ toast("Error: "+e.message,"err"); }
