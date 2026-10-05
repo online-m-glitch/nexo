@@ -2819,11 +2819,15 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
         <input type="text" id="pNombre" placeholder="Nombre del producto">
       </div>
       <div class="form-group">
-        <label>Costo unitario ($)</label>
-        <input type="number" id="pCosto" placeholder="0" oninput="calcMargenModal()">
+        <label>Costo unitario</label>
+        <div style="display:flex;gap:6px;">
+          <input type="number" id="pCosto" placeholder="0" style="flex:1;" oninput="calcMargenModal();nexoFormEquivalente()">
+          <select id="pCostoMoneda" onchange="calcMargenModal();nexoFormEquivalente()" style="width:auto;" title="Moneda del costo"><option value="">$ (pesos)</option><option value="USD">US$ (dólares)</option></select>
+        </div>
+        <div id="pCostoEquiv" style="font-size:11px;color:var(--text-soft);margin-top:4px;"></div>
       </div>
       <div class="form-group">
-        <label>Precio Venta ML ($)</label>
+        <label>Precio Venta ML <span id="pPrecioMoneda" style="font-weight:400;color:var(--text-soft);"></span></label>
         <div style="display:flex;gap:6px;">
           <input type="number" id="pPrecio" placeholder="0" style="flex:1;" oninput="calcMargenModal()">
           <button type="button" id="pBtnActualizarML" class="btn btn-ghost" style="white-space:nowrap;display:none;" onclick="actualizarPrecioModal()" title="Actualizar este precio en MercadoLibre">💲 Actualizar en ML</button>
@@ -3806,12 +3810,29 @@ function fFecha(v){
 // ================================================================
 // Normaliza IDs de publicación: "MLA-123", "mla 123", links de ML → "MLA123"
 // ================================================================
+// País de la cuenta de ML conectada (MLA Argentina, MLU Uruguay, …): define dominios, API por sitio y moneda.
+const NEXO_DOMINIOS = {MLA:"mercadolibre.com.ar", MLU:"mercadolibre.com.uy", MLB:"mercadolivre.com.br", MLM:"mercadolibre.com.mx", MLC:"mercadolibre.cl", MCO:"mercadolibre.com.co", MPE:"mercadolibre.com.pe", MEC:"mercadolibre.com.ec"};
+const NEXO_MONEDAS = {MLA:"ARS", MLU:"UYU", MLB:"BRL", MLM:"MXN", MLC:"CLP", MCO:"COP", MPE:"PEN", MEC:"USD"};
+function nexoSitio(){ return (typeof MERC_SITE!=="undefined" && MERC_SITE) || "MLA"; }
+function mlDom(){ return NEXO_DOMINIOS[nexoSitio()] || NEXO_DOMINIOS.MLA; }
+function nexoMoneda(){ return NEXO_MONEDAS[nexoSitio()] || "ARS"; }
+function mlArticulo(id){ return "https://articulo."+mlDom()+"/"+String(id||"").replace(/^([A-Z]{3})(\d)/,"$1-$2"); }
+// Se llama al verificar la conexión con ML: adapta el panel al país de la cuenta
+function nexoAplicarSitio(site){
+  site = NEXO_DOMINIOS[site] ? site : "MLA";
+  if(typeof MERC_SITE==="undefined" || MERC_SITE===site) return;
+  MERC_SITE = site;
+  try{ if(typeof _mercDimCache!=="undefined") Object.keys(_mercDimCache).forEach(k=>delete _mercDimCache[k]); }catch(e){}
+  try{ if(typeof mercDolar!=="undefined"){ mercDolar.cotiz = null; mercDolar.at = null; } }catch(e){}
+  document.body.dataset.sitio = site;
+}
+
 function normalizarMLA(v){
   const s = String(v||"").trim().toUpperCase();
   if(!s) return "";
   const m = s.match(/\b(MLA|MLB|MLM|MLC|MCO|MLU|MPE)[\s\-_]*(\d{6,})/);
   if(m) return m[1] + m[2];
-  if(/^\d{6,}$/.test(s)) return "MLA" + s;
+  if(/^\d{6,}$/.test(s)) return nexoSitio() + s;
   return s.replace(/[\s\-]/g, "");
 }
 
@@ -3899,7 +3920,7 @@ async function guardarCambioClave(){
 // MERCADO ML — más vendidos, tendencias y lista de proveedor vs ML
 // Todo pasa por ml-api (proxy GET) con la cuenta de ML del cliente.
 // ================================================================
-const MERC_SITE = "MLA";
+let MERC_SITE = "MLA";
 let mercCategoria = null;          // {id, name, path:[{id,name}]}
 let mercFilas = [];                // más vendidos de la consulta actual
 let mercFotoAnterior = null;       // {fecha, items}
@@ -4167,7 +4188,7 @@ async function mercConsultar(){
       if(p.ok && p.data){
         f.nombre = p.data.name || "";
         f.thumb = _https(p.data.pictures && p.data.pictures[0] && (p.data.pictures[0].secure_url || p.data.pictures[0].url));
-        f.link = p.data.permalink || ("https://www.mercadolibre.com.ar/p/"+c.id);
+        f.link = p.data.permalink || ("https://www."+mlDom()+"/p/"+c.id);
         if(p.data.buy_box_winner && p.data.buy_box_winner.price) f.precio = p.data.buy_box_winner.price;
       }
       if(its.ok && its.data && Array.isArray(its.data.results) && its.data.results.length){
@@ -4358,7 +4379,7 @@ async function mercCompararProveedor(){
       if(!s.ok){ out.estado = "Error"; out.error = _mlError(s); return out; }
       const prod = s.data && Array.isArray(s.data.results) && s.data.results[0];
       if(!prod){ out.estado = "No está en ML"; return out; }
-      out.mlId = prod.id; out.mlNombre = prod.name; out.link = "https://www.mercadolibre.com.ar/p/"+prod.id;
+      out.mlId = prod.id; out.mlNombre = prod.name; out.link = "https://www."+mlDom()+"/p/"+prod.id;
       const its = await mlGet("/products/"+prod.id+"/items?limit=50");
       const lista = (its.ok && its.data && Array.isArray(its.data.results)) ? its.data.results : [];
       if(!lista.length){ out.estado = "Sin vendedores"; return out; }
@@ -4453,7 +4474,7 @@ function mercDetectarModo(q){
   const t = q.trim(), sku = t.toUpperCase();
   if((productos||[]).some(p=>String(p.sku||"").trim().toUpperCase()===sku)) return "sku";
   if(/^\d{8,14}$/.test(t.replace(/[\s-]/g,""))) return "ean";
-  if(/^MLA\d{5,}$/i.test(t)) return "codigo";
+  if(/^(MLA|MLU|MLB|MLM|MLC|MCO|MPE)\d{5,}$/i.test(t)) return "codigo";
   return "titulo";
 }
 // Del Catálogo de NEXO: SKU → producto de catálogo de ML (catalog_product_id, o el de su publicación, o por nombre)
@@ -4476,7 +4497,7 @@ async function mercResolverSku(q){
 async function _mercFilaDe(p, extra){
   let monDef = "ars"; try{ monDef = localStorage.getItem("nexo_merc_moneda")==="usd" ? "usd" : "ars"; }catch(e){}
   const f = Object.assign({moneda: (extra && extra.costo) ? "ars" : monDef, id:p.id, nombre:p.name||p.id, marca:_mercMarca(p), thumb:_https(p.pictures && p.pictures[0] && (p.pictures[0].secure_url||p.pictures[0].url)),
-    link:"https://www.mercadolibre.com.ar/p/"+p.id, costo:null}, extra||{});
+    link:"https://www."+mlDom()+"/p/"+p.id, costo:null}, extra||{});
   const its = await mlGet("/products/"+p.id+"/items?limit=50");
   const r = (its.ok && its.data && Array.isArray(its.data.results)) ? its.data.results : [];
   if(!r.length){ f.sinVendedores = true; return f; }
@@ -4634,7 +4655,7 @@ function mercModoPlaceholder(){
 // ── Dólar del día (dolarapi.com, cotización de venta) para costos en US$ ──
 const MERC_DOLAR_TIPOS = {oficial:"Oficial", blue:"Blue", bolsa:"MEP", contadoconliqui:"CCL", mayorista:"Mayorista", tarjeta:"Tarjeta"};
 let mercDolar = {cotiz:null, at:null, manual:null, cargando:false};
-function mercDolarTipo(){ const t = appConfig && appConfig.dolar_tipo; return MERC_DOLAR_TIPOS[t] ? t : "oficial"; }
+function mercDolarTipo(){ if(nexoSitio()!=="MLA") return "oficial"; const t = appConfig && appConfig.dolar_tipo; return MERC_DOLAR_TIPOS[t] ? t : "oficial"; }
 function mercDolarValor(){
   if(mercDolar.manual > 0) return mercDolar.manual;
   const c = mercDolar.cotiz && mercDolar.cotiz[mercDolarTipo()];
@@ -4650,6 +4671,13 @@ async function mercDolarCargar(forzar){
 async function _mercDolarTraer(forzar){
   mercDolar.cargando = true; mercDolarPintar();
   try{
+    if(nexoSitio()!=="MLA"){
+      // Fuera de Argentina: cotización de MercadoLibre (USD → moneda local)
+      const r = await mlGet(`/currency_conversions/search?from=USD&to=${nexoMoneda()}`);
+      const v = r.ok && r.data ? Number(r.data.ratio||r.data.rate) : 0;
+      if(v > 0){ mercDolar.cotiz = {oficial:{venta:v, compra:null, fecha:r.data.creation_date, fuente:"MercadoLibre"}}; mercDolar.at = Date.now(); }
+      throw "listo";
+    }
     const r = await fetch("https://dolarapi.com/v1/dolares");
     const d = await r.json();
     const c = {};
@@ -4664,6 +4692,7 @@ function mercDolarIniciar(){
   const sel = document.getElementById("mercDolarTipo");
   if(sel && !sel.dataset.ini){ sel.dataset.ini = "1"; sel.innerHTML = Object.entries(MERC_DOLAR_TIPOS).map(([k,v])=>`<option value="${k}">${v}</option>`).join(""); }
   if(sel) sel.value = mercDolarTipo();
+  if(sel) sel.style.display = nexoSitio()==="MLA" ? "" : "none";
   mercDolarPintar();
   mercDolarCargar(false);
 }
@@ -4673,6 +4702,7 @@ function mercDolarPintar(){
   if(!info) return;
   const c = mercDolar.cotiz && mercDolar.cotiz[mercDolarTipo()];
   info.innerHTML = mercDolar.cargando ? "⏳" : mercDolar.manual > 0 ? `<span title="Valor cargado a mano. Tocá 🔄 para volver a la cotización del día.">a mano</span>`
+    : c && c.fuente ? `<span title="Cotización de ${esc(c.fuente)} (USD → ${nexoMoneda()})">${esc(c.fuente)}</span>`
     : c ? `<span title="Cotización de venta · dolarapi.com">venta ${c.fecha ? new Date(c.fecha).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "hoy"}</span>`
     : `<span style="color:var(--orange);" title="No se pudo traer la cotización. Cargala a mano.">sin cotización</span>`;
 }
@@ -4695,7 +4725,7 @@ function mercDolarManual(v){
 // - Principal: activa antes que pausada; tradicional antes que de catálogo; más vendida.
 // ================================================================
 let impML = null; // {uid, pubs, grupos, sinSku, inicio}
-const IMPML_ATRIBUTOS = "id,title,price,status,listing_type_id,catalog_listing,catalog_product_id,category_id,permalink,thumbnail,available_quantity,sold_quantity,seller_custom_field,attributes,variations,shipping";
+const IMPML_ATRIBUTOS = "id,title,price,currency_id,status,listing_type_id,catalog_listing,catalog_product_id,category_id,permalink,thumbnail,available_quantity,sold_quantity,seller_custom_field,attributes,variations,shipping";
 
 function _skuDe(attrs, scf){
   const a = (attrs||[]).find(x=>x && x.id==="SELLER_SKU");
@@ -4775,7 +4805,8 @@ async function abrirImportarML(){
         listing_type_id: it.listing_type_id || "", es_catalogo: it.catalog_listing === true,
         catalog_product_id: it.catalog_product_id || null, category_id: it.category_id || null,
         permalink: it.permalink || "", thumbnail: _https(it.thumbnail), stock_disponible: Number(it.available_quantity)||0,
-        vendidos: Number(it.sold_quantity)||0, logistic_type: (it.shipping && it.shipping.logistic_type) || null
+        vendidos: Number(it.sold_quantity)||0, logistic_type: (it.shipping && it.shipping.logistic_type) || null,
+        moneda: it.currency_id || null
       };
       const skuItem = _skuDe(it.attributes, it.seller_custom_field);
       const vars = varInfo[it.id] || it.variations || [];
@@ -4844,7 +4875,7 @@ function renderImportarML(){
     else {
       const cambios = [];
       if((e.nombre||"") !== p.titulo) cambios.push("nombre");
-      if(Math.round(e.precio||0) !== Math.round(p.precio||0)) cambios.push("precio $"+fmt(e.precio||0)+" → $"+fmt(p.precio));
+      if(Math.round(precioOrig(e)) !== Math.round(p.precio||0)) cambios.push("precio "+simMoneda(e.precio_moneda)+fmt(precioOrig(e))+" → "+simMoneda(p.moneda)+fmt(p.precio));
       if((e.ml_item_id||"") !== p.ml_item_id) cambios.push("publicación "+(e.ml_item_id||"—")+" → "+p.ml_item_id);
       accion = `<span class="badge badge-blue">Actualiza</span>` + (cambios.length ? `<div style="font-size:10px;color:var(--text-soft);margin-top:3px;">${esc(cambios.join(" · "))}</div>` : `<div style="font-size:10px;color:var(--text-soft);">sin cambios</div>`);
     }
@@ -4860,7 +4891,8 @@ function renderImportarML(){
   impMLActualizarContador();
   document.getElementById("impMLSinSku").innerHTML = sinSku.length ? `
     <div style="font-weight:700;margin:16px 0 6px;">⚠️ Publicaciones sin SKU (${sinSku.length}) — no entran al catálogo</div>
-    <div style="font-size:12px;color:var(--text-soft);margin-bottom:6px;">Cargales el SKU en MercadoLibre (campo "SKU" de la publicación) y volvé a importar, o vinculalas a mano desde el producto.</div>
+    <div style="font-size:12px;color:var(--text-soft);margin-bottom:6px;">Cargales el SKU en MercadoLibre (campo "SKU" de la publicación) y volvé a importar, o importalas usando el código de la publicación como SKU (después lo podés cambiar en el Catálogo).</div>
+    <button class="btn btn-ghost btn-sm" style="margin-bottom:8px;" onclick="impMLSinSkuConCodigo()">➕ Importarlas con el código de la publicación como SKU</button>
     <div class="table-wrap"><table><thead><tr><th>Publicación</th><th>Título</th><th>Estado</th><th>Precio</th></tr></thead><tbody>
     ${sinSku.map(p=>`<tr><td>${link(p)}${p.variacion_id?` <span style="font-size:10px;color:var(--text-soft);">var. ${esc(p.variacion_id)}</span>`:""}</td><td>${esc(p.titulo)}</td><td>${est(p)}</td><td class="num">$${fmt(p.precio)}</td></tr>`).join("")}
     </tbody></table></div>` : "";
@@ -4906,7 +4938,7 @@ async function confirmarImportarML(){
     // 1) Productos nuevos (en bloque)
     const altas = filas.filter(f=>!f.existente).map(f=>{
       const p = f.principal;
-      return {sku:f.sku, nombre:p.titulo, precio:p.precio, img:_imgGrande(p.thumbnail), ml_item_id:p.ml_item_id,
+      return {sku:f.sku, nombre:p.titulo, precio:p.precio, precio_moneda: esMonedaExt(p.moneda) ? p.moneda : null, img:_imgGrande(p.thumbnail), ml_item_id:p.ml_item_id,
         es_catalogo:p.es_catalogo, catalog_product_id:p.catalog_product_id, estado_ml:p.estado, costo:0, proveedor:""};
     });
     if(altas.length){ _setImpEstado(`⏳ Creando ${altas.length} productos…`); await sbInsertBulk("productos", altas, 200); nuevos = altas.length; }
@@ -4916,7 +4948,7 @@ async function confirmarImportarML(){
     await _pool(cambios, 4, async f=>{
       const p = f.principal;
       await sbUpdate("productos", "sku=eq."+encodeURIComponent(f.existente.sku), {
-        nombre:p.titulo, precio:p.precio, img:_imgGrande(p.thumbnail) || f.existente.img || "", ml_item_id:p.ml_item_id,
+        nombre:p.titulo, precio:p.precio, precio_moneda: esMonedaExt(p.moneda) ? p.moneda : null, img:_imgGrande(p.thumbnail) || f.existente.img || "", ml_item_id:p.ml_item_id,
         es_catalogo:p.es_catalogo, catalog_product_id:p.catalog_product_id, estado_ml:p.estado, updated_at:new Date().toISOString()});
       n++; if(n % 10 === 0) _setImpEstado(`⏳ Actualizando productos… ${n} de ${cambios.length}`);
     });
@@ -4956,6 +4988,29 @@ async function confirmarImportarML(){
   }
 }
 function cerrarImportarML(){ document.getElementById("modalImportarML").classList.remove("show"); }
+
+// Publicaciones sin SKU: se suman al listado usando su código (ej. MLU890056776) como SKU del Catálogo
+function impMLSinSkuConCodigo(){
+  if(!impML || !impML.sinSku.length) return;
+  const catalogo = {};
+  productos.forEach(p=>{ catalogo[String(p.sku||"").trim().toUpperCase()] = p; });
+  // Productos que ya están vinculados a esa publicación (aunque tengan otro SKU) no se duplican
+  const porItem = {};
+  productos.forEach(p=>{ if(p.ml_item_id) porItem[String(p.ml_item_id).toUpperCase()] = p; });
+  let n = 0;
+  impML.sinSku.forEach(p=>{
+    const ya = !p.variacion_id && porItem[String(p.ml_item_id).toUpperCase()];
+    const sku = ya ? ya.sku : (p.ml_item_id + (p.variacion_id ? "-" + p.variacion_id : ""));
+    p.sku = sku;
+    const k = sku.toUpperCase();
+    impML.filas.push({clave:k, sku, principal:p, otras:[], existente: catalogo[k] || ya || null, sel:true});
+    n++;
+  });
+  impML.sinSku = [];
+  impML.filas.sort((a,b)=>a.clave.localeCompare(b.clave));
+  renderImportarML();
+  toast(`${n} publicación${n===1?"":"es"} agregada${n===1?"":"s"} al listado. Revisá y tocá "Importar".`,"ok",5000);
+}
 
 // ================================================================
 // ANÁLISIS ML POR PUBLICACIÓN (una fila por publicación; SKU repetidos)
@@ -5107,7 +5162,7 @@ async function sincronizarFeesPublicaciones(){
       if(logistic) qs.append("logistic_type", logistic);
       if(mode) qs.append("shipping_mode", mode);
       if(peso!=null) qs.append("billable_weight", peso);
-      const fe = await mlGet("/sites/MLA/listing_prices?"+qs.toString());
+      const fe = await mlGet("/sites/"+nexoSitio()+"/listing_prices?"+qs.toString());
       let opt = fe.ok ? fe.data : null;
       if(Array.isArray(opt)) opt = opt.find(o=>o.listing_type_id===it.listing_type_id) || opt[0];
       if(!opt || opt.sale_fee_amount==null){ fail++; errores.push(pub.ml_item_id+": "+_mlError(fe)); return; }
@@ -6038,7 +6093,7 @@ function compRender(){
       <div class="stat-card"><div class="label">Vendedores</div><div class="value">${s.vendedores||0}</div><div class="sub">${s.full||0} con Full${s.se_fueron?` · ${s.se_fueron} ya no está(n)`:""}</div></div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--text-soft);">
-      Producto de catálogo <a href="https://www.mercadolibre.com.ar/p/${encodeURIComponent(cat)}" target="_blank" rel="noopener">${esc(cat)}</a>
+      Producto de catálogo <a href="https://www.${mlDom()}/p/${encodeURIComponent(cat)}" target="_blank" rel="noopener">${esc(cat)}</a>
       · actualizado ${compHace(c.actualizado_at)}
       <button class="btn btn-ghost btn-sm admin-only" id="btnCompActualizar" onclick="compActualizarActual()">🔄 Actualizar ahora</button>
       <button class="btn btn-ghost btn-sm admin-only" onclick="compMostrarVincular(productos.find(x=>x.sku===_compSku))">🔗 Cambiar producto vinculado</button>
@@ -6060,7 +6115,7 @@ function compRender(){
         <td style="font-size:11px;">${o.logistica==="fulfillment"?'<span class="badge badge-green" style="font-size:9px;">⚡ Full</span>':esc(COMP_LOG[o.logistica]||o.logistica||"—")}${o.envio_gratis?'<div style="font-size:10px;color:var(--green);">envío gratis</div>':''}</td>
         <td style="font-size:11px;">${o.tipo==="gold_pro"?"Premium":o.tipo==="gold_special"?"Clásica":esc(o.tipo)}</td>
         <td style="font-size:11px;white-space:nowrap;">${fFecha(o.precio_desde)}${o.precio_anterior!=null&&o.precio_anterior!==o.precio?`<div style="font-size:10px;color:var(--text-soft);">antes $${fmt(o.precio_anterior)}</div>`:""}</td>
-        <td><a href="https://articulo.mercadolibre.com.ar/${esc(o.item_id.replace(/^MLA/,"MLA-"))}" target="_blank" rel="noopener" title="Ver publicación">↗</a></td>
+        <td><a href="${esc(mlArticulo(o.item_id))}" target="_blank" rel="noopener" title="Ver publicación">↗</a></td>
       </tr>`; }).join("") || `<tr><td colspan="9" style="text-align:center;padding:18px;color:var(--text-soft);">Nadie más vende este producto de catálogo.</td></tr>`}</tbody></table></div>
     <div style="font-size:11px;color:var(--text-soft);margin-top:8px;">Se muestran los vendedores del producto de catálogo de ML (hasta ${COMP_MAX_OFERTAS}). "Precio desde" es la fecha en que NEXO vio ese precio por primera vez: cuanto más seguido actualices, más precisa. ML no permite ver publicaciones tradicionales de otros vendedores.</div>`;
   compRol();
@@ -6081,7 +6136,7 @@ async function compBuscarCatalogo(){
   const out = document.getElementById("compResultados");
   out.innerHTML = `<div style="padding:10px;color:var(--text-soft);">⏳ Buscando en el catálogo de ML…</div>`;
   const esCodigo = /^\d{8,14}$/.test(q);
-  const r = await mlGet(esCodigo ? `/products/search?status=active&site_id=MLA&product_identifier=${q}` : `/products/search?status=active&site_id=MLA&q=${encodeURIComponent(q)}&limit=12`);
+  const r = await mlGet(esCodigo ? `/products/search?status=active&site_id=${nexoSitio()}&product_identifier=${q}` : `/products/search?status=active&site_id=${nexoSitio()}&q=${encodeURIComponent(q)}&limit=12`);
   if(!r.ok){ out.innerHTML = `<div style="padding:10px;color:var(--red);">No se pudo buscar: ${esc(_mlError(r))}</div>`; return; }
   const res = (r.data.results||[]).slice(0,12);
   out.innerHTML = res.length ? res.map(x=>{
@@ -6090,7 +6145,7 @@ async function compBuscarCatalogo(){
     return `<div style="display:flex;gap:10px;align-items:center;padding:8px;border-bottom:1px solid var(--border);">
       ${img?`<img src="${esc(img)}" style="width:44px;height:44px;object-fit:contain;background:#fff;border-radius:6px;">`:""}
       <div style="flex:1;font-size:12px;"><strong>${esc(x.name||"")}</strong><div style="color:var(--text-soft);font-size:11px;">${esc([attr("BRAND"),attr("MODEL")].filter(Boolean).join(" · "))} · ${esc(x.id)}</div></div>
-      <a href="https://www.mercadolibre.com.ar/p/${encodeURIComponent(x.id)}" target="_blank" rel="noopener" style="font-size:12px;">ver ↗</a>
+      <a href="https://www.${mlDom()}/p/${encodeURIComponent(x.id)}" target="_blank" rel="noopener" style="font-size:12px;">ver ↗</a>
       <button class="btn btn-primary btn-sm admin-only" onclick="compVincularA('${esc(x.id)}','${esc((x.name||"").replace(/'/g,""))}')">Vincular</button>
     </div>`; }).join("") : `<div style="padding:10px;color:var(--text-soft);">No se encontró nada. Probá con la marca y el modelo, o con el código de barras (EAN).</div>`;
   compRol();
@@ -6899,7 +6954,7 @@ function atnMinTxt(m){
 function atnHace(iso){ const t = Date.parse(iso); return t ? atnMinTxt((Date.now()-t)/60000) : ""; }
 function atnFechaHora(iso){ const t = Date.parse(iso); return t ? new Date(t).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : ""; }
 function atnSoloAdmin(el){ if(typeof esAdmin==="function" && !esAdmin()) (el||document).querySelectorAll(".admin-only").forEach(x=>x.style.display="none"); }
-function atnVenta(orderId){ return "https://www.mercadolibre.com.ar/ventas/"+encodeURIComponent(orderId)+"/detalle"; }
+function atnVenta(orderId){ return "https://www."+mlDom()+"/ventas/"+encodeURIComponent(orderId)+"/detalle"; }
 
 // ── Navegación ──
 function renderAtencion(){
@@ -6967,7 +7022,7 @@ function atnItemHtml(itemId, extra){
   const it = atn.items[itemId] || {}, sku = atnSkuDe(itemId);
   const img = it.secure_thumbnail || it.thumbnail;
   return `<div class="atn-item">${img?`<img src="${esc(_https(img))}" alt="">`:""}<div>
-    <a href="${esc(it.permalink||("https://articulo.mercadolibre.com.ar/"+String(itemId).replace(/^MLA/,"MLA-")))}" target="_blank" rel="noopener">${esc(it.title||itemId)}</a>
+    <a href="${esc(it.permalink||(mlArticulo(itemId)))}" target="_blank" rel="noopener">${esc(it.title||itemId)}</a>
     <div class="atn-sub">${esc(itemId)}${sku?` · <strong>SKU ${esc(sku)}</strong>`:""}${it.price?` · $${fmt(it.price)}`:""}${it.available_quantity!=null?` · Stock ML: <strong style="color:${it.available_quantity>0?"var(--green)":"var(--red)"};">${it.available_quantity}</strong>`:""}${it.status&&it.status!=="active"?` · <span style="color:var(--orange);">${esc(it.status)}</span>`:""}${extra||""}</div></div></div>`;
 }
 
@@ -7459,7 +7514,7 @@ async function prmCargar(forzar){
 async function prmCargarInfo(ids){
   const faltan = [...new Set(ids.filter(id=>id && !prm.info[id]))];
   for(let i=0;i<faltan.length;i+=20){
-    const r = await mlGet("/items?ids="+faltan.slice(i,i+20).join(",")+"&attributes=id,title,thumbnail,secure_thumbnail,price,available_quantity,permalink,seller_custom_field,category_id,listing_type_id,shipping,status");
+    const r = await mlGet("/items?ids="+faltan.slice(i,i+20).join(",")+"&attributes=id,title,thumbnail,secure_thumbnail,price,available_quantity,permalink,seller_custom_field,category_id,listing_type_id,shipping,status,currency_id");
     (r.ok && Array.isArray(r.data) ? r.data : []).forEach(x=>{ if(x && x.body && x.body.id) prm.info[x.body.id] = x.body; });
   }
   if(!prm.pubs){ try{ prm.pubs = await sbGet("nexo_ml_publicaciones","select=sku,ml_item_id"); }catch(e){ prm.pubs = []; } }
@@ -7483,7 +7538,9 @@ async function prmEnvio(itemId, precio){
   if(it.shipping.logistic_type) qs.append("logistic_type", it.shipping.logistic_type);
   const r = await mlGet(`/users/${uid}/shipping_options/free?`+qs.toString());
   const cov = r.ok && r.data && r.data.coverage && r.data.coverage.all_country;
-  return (_prmEnvioCache[k] = cov ? Number(cov.list_cost)||0 : 0);
+  const costoEnv = cov ? Number(cov.list_cost)||0 : 0;
+  const monEnv = cov && cov.currency_id || monedaLocal();
+  return (_prmEnvioCache[k] = (monEnv === (it.currency_id||monEnv)) ? costoEnv : deLocal(aLocal(costoEnv, monEnv), it.currency_id));
 }
 async function prmCalcular(itemId, precioComprador, ingresoVendedor){
   const it = prm.info[itemId] || {};
@@ -7494,7 +7551,7 @@ async function prmCalcular(itemId, precioComprador, ingresoVendedor){
   const comision = fee ? fee.monto : null;
   const impuestos = ingresoVendedor*(imp+per)/100;
   const neto = comision==null ? null : ingresoVendedor - comision - envio - impuestos;
-  const costo = p ? Number(p.costo)||0 : 0;
+  const costo = p ? deLocal(Number(p.costo)||0, it.currency_id) : 0;
   const ganancia = (neto!=null && costo>0) ? neto - costo : null;
   return {comision, envio, impuestos, neto, costo, ganancia, pct: ganancia!=null ? ganancia/ingresoVendedor*100 : null};
 }
@@ -7553,6 +7610,7 @@ async function prmTabla(cid){
   if(typeof esAdmin==="function" && !esAdmin()) box.querySelectorAll(".admin-only").forEach(e=>e.style.display="none");
 }
 async function prmFila(c, x, i, precioElegido){
+  const __sim = simMoneda((prm.info[x.id]||{}).currency_id);
   const tr = document.getElementById(`prmR_${c.id}_${i}`); if(!tr) return;
   const it = prm.info[x.id] || {}, p = prmProducto(x.id), t = PRM_TIPOS[c.type] || {};
   const pr = prmPrecios(c, x, precioElegido);
@@ -7570,14 +7628,14 @@ async function prmFila(c, x, i, precioElegido){
     <td style="min-width:220px;"><div class="atn-item" style="margin:0;">${img?`<img src="${esc(_https(img))}" alt="">`:""}<div><a href="${esc(it.permalink||"#")}" target="_blank" rel="noopener">${esc(it.title||x.id)}</a>
       <div class="atn-sub">${esc(x.id)}${p?` · <strong>SKU ${esc(p.sku)}</strong>`:` · <span style="color:var(--orange);">sin SKU en el Catálogo</span>`}</div></div></div></td>
     <td class="num">${it.available_quantity!=null?it.available_quantity:"—"}${x.stock?`<div class="atn-sub">pide ${x.stock.min}–${x.stock.max}</div>`:""}</td>
-    <td class="num">$${fmt(x.original_price||it.price||0)}${actual.ganancia!=null?`<div class="atn-sub">gana $${fmt(actual.ganancia)}</div>`:""}</td>
+    <td class="num">${__sim}${fmt(x.original_price||it.price||0)}${actual.ganancia!=null?`<div class="atn-sub">gana ${__sim}${fmt(actual.ganancia)}</div>`:""}</td>
     <td class="num">${editable?`<input type="number" step="any" value="${Math.round(pr.comprador*100)/100}" min="${x.min_discounted_price||0}" max="${x.max_discounted_price||""}" onchange="prmCambiarPrecio('${esc(c.id)}',${i},this.value)" style="width:96px;padding:5px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;background:transparent;color:inherit;">
-      <div class="atn-sub">sugerido $${fmt(x.suggested_discounted_price||0)} · rango $${fmt(x.min_discounted_price||0)}–$${fmt(x.max_discounted_price||0)}</div>`
-      : `$${fmt(pr.comprador)}`}<div class="atn-sub">−${desc}%</div></td>
-    <td class="num">$${fmt(pr.vendedor)}${pr.mlPone?`<div class="atn-sub" style="color:var(--green);">ML pone $${fmt(pr.mlPone)}</div>`:""}</td>
-    <td class="num" style="color:var(--orange);">${cargos!=null?"$"+fmt(cargos):"—"}<div class="atn-sub">${calc.comision!=null?`com. $${fmt(calc.comision)} · env. $${fmt(calc.envio)}`:""}</div></td>
+      <div class="atn-sub">sugerido ${__sim}${fmt(x.suggested_discounted_price||0)} · rango ${__sim}${fmt(x.min_discounted_price||0)}–${__sim}${fmt(x.max_discounted_price||0)}</div>`
+      : `${__sim}${fmt(pr.comprador)}`}<div class="atn-sub">−${desc}%</div></td>
+    <td class="num">${__sim}${fmt(pr.vendedor)}${pr.mlPone?`<div class="atn-sub" style="color:var(--green);">ML pone ${__sim}${fmt(pr.mlPone)}</div>`:""}</td>
+    <td class="num" style="color:var(--orange);">${cargos!=null?"$"+fmt(cargos):"—"}<div class="atn-sub">${calc.comision!=null?`com. ${__sim}${fmt(calc.comision)} · env. ${__sim}${fmt(calc.envio)}`:""}</div></td>
     <td class="num">${calc.costo?"$"+fmt(calc.costo):"—"}</td>
-    <td class="num" style="font-weight:700;">${calc.ganancia!=null?`<span class="${calc.ganancia>=0?"num-pos":"num-neg"}">$${fmt(calc.ganancia)}</span>`:"—"}</td>
+    <td class="num" style="font-weight:700;">${calc.ganancia!=null?`<span class="${calc.ganancia>=0?"num-pos":"num-neg"}">${__sim}${fmt(calc.ganancia)}</span>`:"—"}</td>
     <td class="num">${calc.pct!=null?calc.pct.toFixed(1)+"%":"—"}</td>
     <td><span class="badge ${x.status==="started"?"badge-green":x.status==="pending"?"badge-blue":"badge-gray"}">${PRM_EST[x.status]||x.status}</span>${calc.pct!=null?` <span class="badge ${rm.cls}">${rm.rec}</span>`:""}</td>
     <td style="white-space:nowrap;">${t.unir ? (x.status==="candidate"
@@ -7593,11 +7651,12 @@ async function prmCambiarPrecio(cid, i, v){
 }
 function prmItemsOrdenados(cid){ return (prm.items[cid]||[]).slice().sort((a,b)=>(a.status==="candidate"?1:0)-(b.status==="candidate"?1:0)); }
 function prmSumar(cid, i){
+  const __sim = simMoneda((prm.info[(prmItemsOrdenados(cid)[i]||{}).id]||{}).currency_id);
   if(checkViewer("Sumar productos a promociones")) return;
   const c = prm.camps.find(x=>x.id===cid), x = prmItemsOrdenados(cid)[i]; if(!c || !x) return;
   const k = prm.calc[cid+"|"+x.id] || {}, pr = k.pr || prmPrecios(c, x, x._precio), calc = k.calc || {};
   if(c.type==="DEAL" && (pr.comprador < (x.min_discounted_price||0) || (x.max_discounted_price && pr.comprador > x.max_discounted_price))){
-    toast(`El precio tiene que estar entre $${fmt(x.min_discounted_price||0)} y $${fmt(x.max_discounted_price||0)}.`,"err",6000); return;
+    toast(`El precio tiene que estar entre ${__sim}${fmt(x.min_discounted_price||0)} y ${__sim}${fmt(x.max_discounted_price||0)}.`,"err",6000); return;
   }
   const it = prm.info[x.id] || {};
   confirmCb = async()=>{
@@ -7609,13 +7668,14 @@ function prmSumar(cid, i){
     prm.items[cid] = null; await prmCargar(false);
   };
   document.getElementById("confirmMsg").innerHTML = `<strong>¿Sumar a "${esc(c.name||c.id)}"?</strong><br><br>${esc(it.title||x.id)}<br>
-    <span style="font-size:13px;">Precio para el comprador: <strong>$${fmt(pr.comprador)}</strong> (antes $${fmt(x.original_price)})<br>Cobrás: $${fmt(pr.vendedor)}${pr.mlPone?` (ML pone $${fmt(pr.mlPone)})`:""}<br>
-    ${calc.ganancia!=null?`Ganancia estimada por unidad: <strong style="color:${calc.ganancia>=0?"var(--green)":"var(--red)"};">$${fmt(calc.ganancia)} (${calc.pct.toFixed(1)}%)</strong>`:"Sin costo cargado: no se puede calcular la ganancia."}</span><br><br>
+    <span style="font-size:13px;">Precio para el comprador: <strong>${__sim}${fmt(pr.comprador)}</strong> (antes ${__sim}${fmt(x.original_price)})<br>Cobrás: ${__sim}${fmt(pr.vendedor)}${pr.mlPone?` (ML pone ${__sim}${fmt(pr.mlPone)})`:""}<br>
+    ${calc.ganancia!=null?`Ganancia estimada por unidad: <strong style="color:${calc.ganancia>=0?"var(--green)":"var(--red)"};">${__sim}${fmt(calc.ganancia)} (${calc.pct.toFixed(1)}%)</strong>`:"Sin costo cargado: no se puede calcular la ganancia."}</span><br><br>
     <span style="font-size:12px;color:var(--text-soft);">La promoción se aplica en MercadoLibre del ${prmFecha(c.start_date)} al ${prmFecha(c.finish_date)}.</span>`;
   document.getElementById("confirmBtn").textContent = "➕ Sumar";
   document.getElementById("modalConfirm").classList.add("show");
 }
 function prmQuitar(cid, i){
+  const __sim = simMoneda((prm.info[(prmItemsOrdenados(cid)[i]||{}).id]||{}).currency_id);
   if(checkViewer("Quitar productos de promociones")) return;
   const c = prm.camps.find(x=>x.id===cid), x = prmItemsOrdenados(cid)[i]; if(!c || !x) return;
   const it = prm.info[x.id] || {};
@@ -7627,7 +7687,7 @@ function prmQuitar(cid, i){
     toast("Producto quitado de la promoción","ok");
     prm.items[cid] = null; await prmCargar(false);
   };
-  document.getElementById("confirmMsg").innerHTML = `<strong>¿Quitar de "${esc(c.name||c.id)}"?</strong><br><br>${esc(it.title||x.id)}<br><span style="font-size:13px;">Vuelve a su precio normal de $${fmt(x.original_price||it.price||0)} en MercadoLibre.</span>`;
+  document.getElementById("confirmMsg").innerHTML = `<strong>¿Quitar de "${esc(c.name||c.id)}"?</strong><br><br>${esc(it.title||x.id)}<br><span style="font-size:13px;">Vuelve a su precio normal de ${__sim}${fmt(x.original_price||it.price||0)} en MercadoLibre.</span>`;
   document.getElementById("confirmBtn").textContent = "Quitar";
   document.getElementById("modalConfirm").classList.add("show");
 }
@@ -7702,8 +7762,8 @@ async function prmMasivo(cid, accion){
   }
   const sinPrecio = filas.filter(f=>accion==="sumar" && t.precio && !f.precio);
   const perdida = filas.filter(f=>f.calc && f.calc.ganancia!=null && f.calc.ganancia<0);
-  const gan = filas.reduce((a,f)=>a+((f.calc&&f.calc.ganancia)||0),0), conCosto = filas.filter(f=>f.calc && f.calc.ganancia!=null).length;
-  const det = filas.slice(0,12).map(f=>`<tr><td>${esc((f.it.title||f.x.id).slice(0,48))}</td>${accion==="sumar"?`<td class="num">$${fmt(f.pr.comprador)}</td><td class="num">${f.calc.ganancia!=null?`<span style="color:${f.calc.ganancia>=0?"var(--green)":"var(--red)"};">$${fmt(f.calc.ganancia)}</span>`:"—"}</td>`:""}</tr>`).join("");
+  const gan = filas.reduce((a,f)=>a+aLocal((f.calc&&f.calc.ganancia)||0, f.it.currency_id),0), conCosto = filas.filter(f=>f.calc && f.calc.ganancia!=null).length;
+  const det = filas.slice(0,12).map(f=>`<tr><td>${esc((f.it.title||f.x.id).slice(0,48))}</td>${accion==="sumar"?`<td class="num">${simMoneda(f.it.currency_id)}${fmt(f.pr.comprador)}</td><td class="num">${f.calc.ganancia!=null?`<span style="color:${f.calc.ganancia>=0?"var(--green)":"var(--red)"};">${simMoneda(f.it.currency_id)}${fmt(f.calc.ganancia)}</span>`:"—"}</td>`:""}</tr>`).join("");
   confirmCb = async()=>{
     let bien = 0; const errores = [];
     const aplicar = filas.filter(f=>!(accion==="sumar" && t.precio && !f.precio));
@@ -7902,7 +7962,7 @@ function segDetalleVend(v, r){
       <strong>Ventas por día</strong>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <label class="admin-only" style="font-size:12px;">Ticket promedio $ <input type="number" class="form-control" style="width:110px;display:inline-block;" value="${v.ticket!=null?Number(v.ticket):""}" placeholder="${r.ticketObs?Math.round(r.ticketObs):"sin dato"}" onchange="segGuardarTicket(${v.seller_id}, this.value)" onclick="event.stopPropagation()"></label>
-        <a class="btn btn-ghost btn-sm" href="https://www.mercadolibre.com.ar/perfil/${encodeURIComponent(seg.nick[v.seller_id]||v.nickname||"")}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Ver perfil en ML ↗</a>
+        <a class="btn btn-ghost btn-sm" href="https://www.${mlDom()}/perfil/${encodeURIComponent(seg.nick[v.seller_id]||v.nickname||"")}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Ver perfil en ML ↗</a>
         <button class="btn btn-ghost btn-sm admin-only" onclick="event.stopPropagation();segDejarVend(${v.seller_id})">Dejar de seguir</button>
       </div>
     </div>
@@ -7914,7 +7974,7 @@ function segDetalleVend(v, r){
 
 function segHtmlProductos(){
   const alta = `<div class="seg-alta admin-only">
-      <input id="segProdId" class="form-control" placeholder="Link del producto de catálogo o código (ej. MLA19678210)" style="max-width:380px;" onkeydown="if(event.key==='Enter')segAgregarProd()">
+      <input id="segProdId" class="form-control" placeholder="Link del producto de catálogo o código (ej. MLA19678210 o MLU…)" style="max-width:380px;" onkeydown="if(event.key==='Enter')segAgregarProd()">
       <button class="btn btn-primary btn-sm" onclick="segAgregarProd()">➕ Seguir producto</button>
       <button class="btn btn-ghost btn-sm" onclick="segMisCatalogo()">📋 Elegir de mis publicaciones de catálogo</button>
     </div><div id="segMisCat"></div>`;
@@ -7981,7 +8041,7 @@ async function segCargarTendencias(){
   const cats = [...new Set(seg.prod.map(p=>p.category_id).filter(Boolean))].filter(c=>!seg.trends[c]);
   if(!cats.length) return;
   await Promise.all(cats.map(async c=>{
-    const [r, n] = await Promise.all([mlGet(`/trends/MLA/${c}`), mlGet(`/categories/${c}`)]);
+    const [r, n] = await Promise.all([mlGet(`/trends/${nexoSitio()}/${c}`), mlGet(`/categories/${c}`)]);
     seg.trends[c] = r.ok && Array.isArray(r.data) ? {lista:r.data, nombre:n.ok?n.data.name:c} : {error:"ML no devolvió tendencias para esta categoría.", nombre:n.ok?n.data.name:c};
   }));
   if(seg.tab==="tend") segPintar();
@@ -8006,8 +8066,8 @@ async function segAgregarVend(id){
 }
 function segIdProducto(txt){
   const s = String(txt||"").toUpperCase();
-  const m = s.match(/\/P\/(MLA\d+)/) || s.match(/\b(MLA\d{5,})\b/) || s.match(/^(\d{5,})$/);
-  return m ? (m[1].startsWith("MLA") ? m[1] : "MLA"+m[1]) : null;
+  const m = s.match(/\/P\/([A-Z]{3}\d+)/) || s.match(/\b([A-Z]{3}\d{5,})\b/) || s.match(/^(\d{5,})$/);
+  return m ? (/^[A-Z]{3}/.test(m[1]) ? m[1] : nexoSitio()+m[1]) : null;
 }
 async function segAgregarProd(id){
   if(checkViewer("Seguir productos")) return;
@@ -8081,6 +8141,129 @@ async function segActualizarAhora(silencioso){
     if(!silencioso) toast("Seguimiento actualizado ✅","ok");
   }catch(e){ toast("No se pudo actualizar: "+e.message,"err",6000); }
   finally{ if(btn){ btn.disabled = false; btn.textContent = "🔄 Actualizar ahora"; } seg.cargado = false; await segCargar(); }
+}
+// ================================================================
+// Monedas
+// · Costo de cada producto: en moneda local (ARS / UYU) o en US$  → productos.costo_moneda
+// · Precio de venta en ML: Argentina siempre en pesos; Uruguay en pesos o US$ → productos.precio_moneda
+// En la base queda el valor ORIGINAL con su moneda. En memoria el panel trabaja todo en moneda
+// local, convertido con el dólar del día (el que elegís en Mercado ML; en Uruguay, el de MercadoLibre).
+// Los valores originales quedan en p.__costoDB / p.__precioDB.
+// ================================================================
+function monedaLocal(){ return nexoMoneda(); }
+function esMonedaExt(m){ return !!m && m !== monedaLocal(); }
+function cotizUSD(){ try{ return Number(mercDolarValor())||0; }catch(e){ return 0; } }
+// Pasa un monto de la moneda m a moneda local (0 si es US$ y todavía no hay cotización)
+function aLocal(v, m){
+  v = Number(v)||0;
+  if(!esMonedaExt(m)) return v;
+  if(m === "USD"){ const c = cotizUSD(); return c ? v*c : 0; }
+  return v;
+}
+// Pasa un monto en moneda local a la moneda m
+function deLocal(v, m){
+  v = Number(v)||0;
+  if(!esMonedaExt(m)) return v;
+  if(m === "USD"){ const c = cotizUSD(); return c ? v/c : 0; }
+  return v;
+}
+function simMoneda(m){ return m === "USD" ? "US$" : "$"; }
+function monedaTxt(m){ return m === "USD" ? "US$" : (monedaLocal()==="UYU" ? "$U" : "$"); }
+
+// Normaliza un producto: valores originales → moneda local en memoria
+function nexoNormalizarProducto(p){
+  if(!p) return p;
+  if(p.__costoDB === undefined) p.__costoDB = Number(p.costo)||0;
+  if(p.__precioDB === undefined) p.__precioDB = Number(p.precio)||0;
+  p.costo = Math.round(aLocal(p.__costoDB, p.costo_moneda)*100)/100;
+  p.precio = Math.round(aLocal(p.__precioDB, p.precio_moneda)*100)/100;
+  const f = (typeof feesML !== "undefined") && feesML[p.sku];
+  if(f){
+    if(f.__raw === undefined) f.__raw = {ml_price:f.ml_price, fee_amount:f.fee_amount, fee_fixed:f.fee_fixed};
+    if(esMonedaExt(p.precio_moneda)){
+      f.ml_price = aLocal(f.__raw.ml_price, p.precio_moneda);
+      f.fee_amount = aLocal(f.__raw.fee_amount, p.precio_moneda);
+      f.fee_fixed = aLocal(f.__raw.fee_fixed, p.precio_moneda);
+    } else Object.assign(f, f.__raw);
+  }
+  return p;
+}
+function nexoNormalizarProductos(){ (productos||[]).forEach(nexoNormalizarProducto); }
+function nexoHayMonedaExt(){ return (productos||[]).some(p=>esMonedaExt(p.costo_moneda) || esMonedaExt(p.precio_moneda)); }
+// Valor original de costo / precio, para mostrar o editar
+function costoOrig(p){ return p ? (p.__costoDB !== undefined ? p.__costoDB : Number(p.costo)||0) : 0; }
+function precioOrig(p){ return p ? (p.__precioDB !== undefined ? p.__precioDB : Number(p.precio)||0) : 0; }
+// Cuando el código cambia el costo en moneda local (compras, listas de precios)
+function nexoSetCostoLocal(p, v){ p.costo = Number(v)||0; p.__costoDB = p.costo; p.costo_moneda = null; }
+// Cuando llega un precio nuevo desde ML (en la moneda de la publicación)
+function nexoSetPrecioML(p, v){ p.__precioDB = Number(v)||0; nexoNormalizarProducto(p); }
+
+// Precio/comisión que llega de ML (moneda de la publicación) para feesML
+function nexoFeeRaw(sku, campo, v){
+  const f = feesML[sku]; if(!f) return;
+  f.__raw = f.__raw || {ml_price:f.ml_price, fee_amount:f.fee_amount, fee_fixed:f.fee_fixed};
+  f.__raw[campo] = v;
+  const p = (productos||[]).find(x=>x.sku===sku);
+  f[campo] = p && esMonedaExt(p.precio_moneda) ? aLocal(v, p.precio_moneda) : v;
+}
+function feeRaw(sku){ const f = feesML[sku]||{}; return f.__raw || f; }
+
+// Fila que se guarda en la base: valores originales y sin campos internos
+function nexoFilaProducto(data){
+  const d = Object.assign({}, data);
+  if(d.__costoDB !== undefined){
+    if(Math.abs((Number(d.costo)||0) - aLocal(d.__costoDB, d.costo_moneda)) < 0.01) d.costo = d.__costoDB;
+    else d.costo_moneda = null;          // el costo se cambió en moneda local
+  }
+  if(d.__precioDB !== undefined){
+    if(Math.abs((Number(d.precio)||0) - aLocal(d.__precioDB, d.precio_moneda)) < 0.01) d.precio = d.__precioDB;
+    else d.precio_moneda = null;
+  }
+  Object.keys(d).forEach(k=>{ if(k.startsWith("__")) delete d[k]; });
+  return d;
+}
+// Después de guardar: el objeto en memoria toma los valores originales guardados
+function nexoTrasGuardarProducto(fila){
+  const p = (productos||[]).find(x=>x.sku === fila.sku); if(!p) return;
+  if("costo" in fila) p.__costoDB = Number(fila.costo)||0;
+  if("costo_moneda" in fila) p.costo_moneda = fila.costo_moneda;
+  if("precio" in fila) p.__precioDB = Number(fila.precio)||0;
+  if("precio_moneda" in fila) p.precio_moneda = fila.precio_moneda;
+  nexoNormalizarProducto(p);
+}
+
+// Arranque: trae el dólar del día y convierte. Si cambia la cotización, se recalcula y se redibuja.
+let _nexoMonedasCotiz = null;
+async function nexoMonedasIniciar(){
+  nexoNormalizarProductos();
+  if(!nexoHayMonedaExt()) return;
+  try{ await mercDolarCargar(false); }catch(e){}
+  const c = cotizUSD();
+  if(c && c !== _nexoMonedasCotiz){
+    _nexoMonedasCotiz = c;
+    nexoNormalizarProductos();
+    try{ const s = document.querySelector(".section.active"); if(s && typeof mostrarSeccion==="function") mostrarSeccion(s.id.replace(/^sec-/,"")); }catch(e){}
+  }
+}
+
+// ── Formulario de producto: moneda del costo y del precio ──
+function nexoFormMonedas(p){
+  const sel = document.getElementById("pCostoMoneda");
+  if(sel){
+    sel.innerHTML = `<option value="">${monedaLocal()==="UYU"?"$U (pesos uruguayos)":"$ (pesos)"}</option><option value="USD">US$ (dólares)</option>`;
+    sel.value = p && p.costo_moneda === "USD" ? "USD" : "";
+  }
+  const pm = document.getElementById("pPrecioMoneda");
+  if(pm) pm.textContent = p && esMonedaExt(p.precio_moneda) ? "(US$, como está publicado en ML)" : "";
+  nexoFormEquivalente();
+}
+function nexoFormEquivalente(){
+  const el = document.getElementById("pCostoEquiv"); if(!el) return;
+  const m = (document.getElementById("pCostoMoneda")||{}).value || "";
+  const v = parseFloat((document.getElementById("pCosto")||{}).value)||0;
+  if(m !== "USD" || !v){ el.textContent = ""; return; }
+  const c = cotizUSD();
+  el.textContent = c ? `≈ $${fmt(v*c)} con el dólar de hoy ($${fmt(c)})` : "Sin cotización del dólar todavía: abrí Mercado ML o cargala a mano.";
 }
 
 // ================================================================
@@ -8478,6 +8661,7 @@ async function cargarDatos(){
       return Object.assign({},c,{lineas: typeof c.lineas==="string"?JSON.parse(c.lineas):(c.lineas||[])});
     });
     ventas = vents||[];
+    if(typeof nexoNormalizarProductos==="function"){ nexoNormalizarProductos(); setTimeout(()=>nexoMonedasIniciar(), 0); }
     // Gastos operativos (no asociados a un producto: monotributo, personal, insumos, factura ML, etc.)
     try{
       const gts = await sbGet("gastos","order=fecha.desc");
@@ -8533,7 +8717,7 @@ function guardarLS(tipo){ /* migrado a Supabase — ver sbGuardar */ }
 
 async function sbGuardar(tipo, data){
   try{
-    if(tipo==="producto")      { await sbUpsert("productos", data); }
+    if(tipo==="producto")      { const fila = nexoFilaProducto(data); await sbUpsert("productos", fila); nexoTrasGuardarProducto(fila); }
     if(tipo==="deleteProd")    { await sbDelete("productos","sku=eq."+encodeURIComponent(data)); }
     if(tipo==="movimiento")    { const r=await sbInsert("movimientos", data); return r; }
     if(tipo==="deleteMovimiento"){ await sbDelete("movimientos","id=eq."+data); }
@@ -8768,7 +8952,7 @@ function renderProductos(){
       <td data-col="producto" style="max-width:180px;">${esc(p.nombre)}${p.tipo==='combo'?' <span class="badge badge-orange" title="Combo de '+((p.componentes||[]).length)+' componente(s)" style="font-size:10px;padding:2px 5px;">🧩</span>':''}${p.precio_dinamico?' <span class="badge badge-orange" title="Tiene la etiqueta de &quot;Automatización de precios&quot; — puede estar Activa o Pausada" style="font-size:10px;padding:2px 5px;">🎯</span>':''}${p.es_catalogo?' <span class="badge badge-blue" title="Es una publicación de Catálogo de MercadoLibre" style="font-size:10px;padding:2px 5px;">📘</span>':''}${estadoMLInfo(p.estado_ml)?` <span style="font-size:9px;padding:2px 6px;border-radius:10px;font-weight:700;color:${estadoMLInfo(p.estado_ml).color};background:${estadoMLInfo(p.estado_ml).bg};" title="Estado de la publicación en ML">${estadoMLInfo(p.estado_ml).label}</span>`:''}</td>
       <td data-col="proveedor">${esc(p.proveedor||"")}</td>
       <td data-col="rubro" style="font-size:12px;">${esc(p.rubro||"")}</td>
-      <td data-col="costo" class="num">$${fmt(p.costo)}</td>
+      <td data-col="costo" class="num">$${fmt(p.costo)}${p.costo_moneda==="USD"?`<div style="font-size:10.5px;color:var(--text-soft);" title="Costo cargado en dólares, convertido con el dólar del día">US$ ${costoOrig(p).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>`:""}</td>
       <td data-col="precioml" class="num">$${fmt(p.precio)}</td>
       <td data-col="preciotienda" class="num">$${fmt(p.precioTienda||0)}</td>
       <td data-col="margenml" class="num ${margenCls}">${margen}</td>
@@ -9088,6 +9272,7 @@ async function publicarSeleccionadosMasivo(){
 
 function abrirModalProducto(){
   editandoProdIdx=-1;
+  if(typeof nexoFormMonedas==="function") nexoFormMonedas(null);
   document.getElementById("modalProdTitle").textContent="Nuevo producto";
   ["pSku","pNombre","pProveedor","pCategoria","pRubro","pCosto","pPrecio","pPrecioTienda","pStockInicial","pMlItemId"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("pImgFile").value="";
@@ -9122,8 +9307,9 @@ function editarProducto(idx){
   document.getElementById("pProveedor").value=p.proveedor||"";
   document.getElementById("pCategoria").value=p.categoria||"";
   document.getElementById("pRubro").value=p.rubro||"";
-  document.getElementById("pCosto").value=p.costo||"";
-  document.getElementById("pPrecio").value=(feesML[p.sku]&&feesML[p.sku].ml_price>0)?feesML[p.sku].ml_price:(p.precio||"");
+  document.getElementById("pCosto").value=costoOrig(p)||"";
+  document.getElementById("pPrecio").value=(feesML[p.sku]&&feesML[p.sku].ml_price>0)?feeRaw(p.sku).ml_price:(precioOrig(p)||"");
+  nexoFormMonedas(p);
   toggleBtnActualizarML();
   document.getElementById("pPrecioTienda").value=p.precioTienda||"";
   document.getElementById("pStockMin").value=p.stockMin||15;
@@ -9220,11 +9406,11 @@ async function actualizarPrecioModal(){
     calcMargenModal();
     // Reflejamos también en feesML (para que Análisis ML lo vea actualizado sin tener que re-sincronizar)
     if(!feesML[sku]) feesML[sku]={fee_amount:0,fee_pct:0,shipping_cost:0,fee_fixed:0,ml_price:0};
-    feesML[sku].ml_price=precioFinal;
-    await sbGuardar("mlfee",{sku, ml_item_id:mlItemId, fee_amount:feesML[sku].fee_amount, fee_pct:feesML[sku].fee_pct, shipping_cost:feesML[sku].shipping_cost, fee_fixed:feesML[sku].fee_fixed, ml_price:precioFinal, raw:{}}).catch(()=>{});
+    nexoFeeRaw(sku,"ml_price",precioFinal);
+    await sbGuardar("mlfee",{sku, ml_item_id:mlItemId, fee_amount:feeRaw(sku).fee_amount, fee_pct:feesML[sku].fee_pct, shipping_cost:feesML[sku].shipping_cost, fee_fixed:feeRaw(sku).fee_fixed, ml_price:precioFinal, raw:{}}).catch(()=>{});
     // Si el producto ya existe (edición), alineamos también el precio guardado en catálogo
     if(editandoProdIdx>=0){
-      productos[editandoProdIdx].precio=precioFinal;
+      nexoSetPrecioML(productos[editandoProdIdx], precioFinal);
       await sbUpdate("productos","sku=eq."+encodeURIComponent(sku),{precio:precioFinal}).catch(()=>{});
     }
     toast("Precio actualizado en MercadoLibre ✅","ok");
@@ -9271,8 +9457,9 @@ function cargarFotosProd(input){
 function quitarFoto(i){ productoImagenesEditor.splice(i,1); renderFotosGrid(); }
 function hacerPortadaFoto(i){ const [foto]=productoImagenesEditor.splice(i,1); productoImagenesEditor.unshift(foto); renderFotosGrid(); }
 function calcMargenModal(){
-  const costo=parseFloat(document.getElementById("pCosto").value)||0;
-  const precio=parseFloat(document.getElementById("pPrecio").value)||0;
+  const _pm = (editandoProdIdx>=0 && productos[editandoProdIdx]) ? productos[editandoProdIdx].precio_moneda : null;
+  const costo=aLocal(parseFloat(document.getElementById("pCosto").value)||0, (document.getElementById("pCostoMoneda")||{}).value||null);
+  const precio=aLocal(parseFloat(document.getElementById("pPrecio").value)||0, _pm);
   const el=document.getElementById("pMargen");
   if(costo&&precio){
     const m=((precio-costo)/precio*100).toFixed(1);
@@ -9305,7 +9492,9 @@ async function guardarProducto(){
     categoria:document.getElementById("pCategoria").value.trim(),
     rubro:document.getElementById("pRubro").value.trim(),
     costo:parseFloat(document.getElementById("pCosto").value)||0,
+    costo_moneda:(document.getElementById("pCostoMoneda")||{}).value||null,
     precio:parseFloat(document.getElementById("pPrecio").value)||0,
+    precio_moneda:(editandoProdIdx>=0 && productos[editandoProdIdx]) ? (productos[editandoProdIdx].precio_moneda||null) : null,
     precioTienda:parseFloat(document.getElementById("pPrecioTienda").value)||0,
     stockMin:parseInt(document.getElementById("pStockMin").value)||15,
     stockOn:parseInt(document.getElementById("pStockOn").value),
@@ -9333,6 +9522,7 @@ async function guardarProducto(){
     } else {
       productos[editandoProdIdx]=obj;
     }
+    nexoNormalizarProducto(obj);
     cerrarModalProducto();
     actualizarProvLists(); actualizarSkuList(); actualizarSkuListCompras();
     renderProductos(); renderPanel(); renderStock(); renderAlertas(); renderAnalisis();
@@ -9976,11 +10166,11 @@ async function actualizarPrecioAnalisis(sku){
     }
     // Actualizamos el precio real guardado localmente para que el análisis lo refleje ya mismo
     if(!feesML[sku]) feesML[sku]={fee_amount:0,fee_pct:0,shipping_cost:0,fee_fixed:0,ml_price:0};
-    feesML[sku].ml_price = res.data.price||nuevoPrecio;
-    await sbGuardar("mlfee",{sku, ml_item_id:p.ml_item_id, fee_amount:feesML[sku].fee_amount, fee_pct:feesML[sku].fee_pct, shipping_cost:feesML[sku].shipping_cost, fee_fixed:feesML[sku].fee_fixed, ml_price:feesML[sku].ml_price, raw:{}}).catch(()=>{});
+    const __rawP = res.data.price||nuevoPrecio; nexoFeeRaw(sku,"ml_price",__rawP);
+    await sbGuardar("mlfee",{sku, ml_item_id:p.ml_item_id, fee_amount:feeRaw(sku).fee_amount, fee_pct:feesML[sku].fee_pct, shipping_cost:feesML[sku].shipping_cost, fee_fixed:feeRaw(sku).fee_fixed, ml_price:__rawP, raw:{}}).catch(()=>{});
     // También alineamos el precio de catálogo, para que no quede marcado como desactualizado
-    p.precio = feesML[sku].ml_price;
-    await sbUpdate("productos","sku=eq."+encodeURIComponent(sku),{precio:feesML[sku].ml_price}).catch(()=>{});
+    nexoSetPrecioML(p, __rawP);
+    await sbUpdate("productos","sku=eq."+encodeURIComponent(sku),{precio:__rawP}).catch(()=>{});
     toast("Precio actualizado en MercadoLibre ✅","ok");
     renderAnalisis();
   }catch(e){
@@ -10251,12 +10441,13 @@ async function sincronizarFeesML(){
       for(const res of resultados){
         if(res.fail){ fail++; console.warn("Fee no disponible para",res.sku,res.motivo); continue; }
         feesML[res.sku]={fee_amount:res.feeAmount, fee_pct:res.feePct, shipping_cost:res.shippingCost||0, fee_fixed:res.feeFixed||0, ml_price:res.mlPrice||0};
+        { const _pp=productos.find(x=>x.sku===res.sku); if(_pp) nexoNormalizarProducto(_pp); }
         await sbGuardar("mlfee",{sku:res.sku, ml_item_id:res.ml_item_id, fee_amount:res.feeAmount, fee_pct:res.feePct, shipping_cost:res.shippingCost||0, fee_fixed:res.feeFixed||0, ml_price:res.mlPrice||0, raw:res.raw}).catch(()=>{});
         // Mantener el precio de catálogo alineado con el precio real de ML, para que no
         // quede marcado como "desactualizado" después de sincronizar.
         const idxProd=productos.findIndex(x=>x.sku===res.sku);
-        if(idxProd>=0 && res.mlPrice>0 && Math.abs((productos[idxProd].precio||0)-res.mlPrice)>0.5){
-          productos[idxProd].precio=res.mlPrice;
+        if(idxProd>=0 && res.mlPrice>0 && Math.abs(precioOrig(productos[idxProd])-res.mlPrice)>0.5){
+          nexoSetPrecioML(productos[idxProd], res.mlPrice);
           await sbUpdate("productos","sku=eq."+encodeURIComponent(res.sku),{precio:res.mlPrice}).catch(()=>{});
         }
         ok++;
@@ -10368,8 +10559,8 @@ function ofrecerActualizarCostosCompra(lineasCopia, seguir){
   const filas = cambios.map(c=>`• ${esc(c.p.sku)}: $${fmt(c.costoViejo)} → <strong>$${fmt(c.costoNuevo)}</strong>`).join("<br>");
   confirmCb = async()=>{
     for(const c of cambios){
-      c.p.costo = c.costoNuevo;
-      try{ await sbUpdate("productos","sku=eq."+encodeURIComponent(c.p.sku),{costo:c.costoNuevo}); }catch(e){}
+      nexoSetCostoLocal(c.p, c.costoNuevo);
+      try{ await sbUpdate("productos","sku=eq."+encodeURIComponent(c.p.sku),{costo:c.costoNuevo, costo_moneda:null}); }catch(e){}
     }
     renderProductos();
     toast(`Costo actualizado en Catálogo para ${cambios.length} producto(s) ✅`,"ok");
@@ -12311,8 +12502,8 @@ async function _actualizarCostosDesdeFilas(filas){
   let ok=0, err=0;
   for(const f of filas){
     try{
-      await sbUpdate('productos','sku=eq.'+encodeURIComponent(f.p.sku),{costo:f.item.precio_neto});
-      f.p.costo = f.item.precio_neto;
+      await sbUpdate('productos','sku=eq.'+encodeURIComponent(f.p.sku),{costo:f.item.precio_neto, costo_moneda:null});
+      nexoSetCostoLocal(f.p, f.item.precio_neto);
       ok++;
     }catch(e){ err++; }
   }
@@ -12368,7 +12559,7 @@ function abrirEdicionPublicacionML(sku){
   // (Mercado Libre genera un token de sesión dinámico al entrar desde su propia lista de publicaciones).
   // En cambio, te llevamos a "Mis publicaciones" ya buscado por SKU (confirmado que el buscador indexa
   // por SKU, no por el número de MLA) — desde ahí entrás con un clic y usás "Modificar" como siempre.
-  const url = "https://vendedores.mercadolibre.com.ar/publicaciones?page=1&sort=DEFAULT&search="+encodeURIComponent(p.sku);
+  const url = "https://vendedores."+mlDom()+"/publicaciones?page=1&sort=DEFAULT&search="+encodeURIComponent(p.sku);
   window.open(url, "_blank");
   toast("Te llevamos a tus publicaciones, ya buscado por SKU "+p.sku+" — entrá al resultado y apretá \"Modificar\".","ok",6000);
 }
@@ -12421,7 +12612,7 @@ async function verAutomatizacionPrecio(mlItemId, sku){
       const rPtw=await fetch(SB_URL+"/functions/v1/ml-api", {
         method:"POST",
         headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+sbAuth()},
-        body:JSON.stringify({grant_type:"proxy", path:"/items/"+encodeURIComponent(mlItemId)+"/price_to_win?siteId=MLA&version=v2", access_token:mlToken})
+        body:JSON.stringify({grant_type:"proxy", path:"/items/"+encodeURIComponent(mlItemId)+"/price_to_win?siteId="+nexoSitio()+"&version=v2", access_token:mlToken})
       });
       const dataPtw=await rPtw.json();
       if(rPtw.ok && dataPtw.price_to_win!=null){
@@ -12472,10 +12663,10 @@ async function actualizarRangoAutomatizacion(){
       });
       const dataItem=await rItem.json();
       if(rItem.ok && dataItem.price!=null){
-        if(feesML[sku]) feesML[sku].ml_price = dataItem.price;
         const p=productos.find(x=>x.sku.toUpperCase()===(sku||"").toUpperCase());
+        if(feesML[sku]) nexoFeeRaw(sku,"ml_price",dataItem.price);
         if(p){
-          p.precio = dataItem.price;
+          nexoSetPrecioML(p, dataItem.price);
           try{ await sbUpdate("productos","sku=eq."+encodeURIComponent(p.sku),{precio:dataItem.price}); }catch(e){}
         }
         renderAnalisis(); renderProductos();
@@ -14170,6 +14361,7 @@ async function verificarTokenML(){
   // mlToken ya no guarda el token real: solo indica que hay conexión activa
   mlToken = "servidor";
   mlUserId = est.data.user_id;
+  if(typeof nexoAplicarSitio==="function") nexoAplicarSitio(est.data.site_id || "MLA");
 
   try{
     const r = await mlApi({grant_type:"proxy", path:"/users/me"});
