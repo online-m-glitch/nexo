@@ -14212,6 +14212,9 @@ function procesarTextoFullML(){
   if(!texto.trim()){ toast("Pegá el texto del PDF primero.","err"); return; }
 
   const parseadas = parsearLineasFullMLTexto(texto);
+  // Número de envío: "Envío #78475103" en el PDF, o el nombre del archivo (Inbound-78475103-…)
+  { const m = texto.match(/Env[ií]o\s*(?:N[°º]\s*)?#\s*(\d{6,12})/i) || (document.getElementById("fullMLArchivoNombre").textContent||"").match(/Inbound-(\d{6,12})/i);
+    const inp = document.getElementById("fullMLNro"); if(m && inp) inp.value = m[1]; }
   fullMLLineas = parseadas.map(({sku,unidades})=>{
     const prod = productos.find(p => p.sku.toUpperCase() === sku.toUpperCase());
     return { sku, unidades, nombrePDF:"", producto: prod ? prod.nombre : "", enCatalogo: !!prod, incluir: true };
