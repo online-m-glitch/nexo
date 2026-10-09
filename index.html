@@ -2310,6 +2310,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
                 <option value="paused">🟠 Pausada</option>
                 <option value="inactiva">🔴 Inactiva (cerrada/otro)</option>
                 <option value="sin_sincronizar">Sin sincronizar</option>
+                <option value="promo">🏷️ En promoción</option>
               </select>
             </div>
             <div class="toolbar" style="padding-top:8px;border-top:1px dashed var(--border);">
@@ -8513,6 +8514,73 @@ async function rpzCargarLog(){
       <td class="num">${l.competidor!=null?"$"+fmt(l.competidor):""}</td><td class="num">${l.margen!=null?l.margen+"%":""}</td><td style="color:var(--text-soft);">${esc(l.motivo||"")}</td></tr>`).join("")}</tbody></table></div>`;
   }catch(e){ el.innerHTML = `<div style="color:var(--red);font-size:12px;">No se pudo leer el historial: ${esc(e.message)}</div>`; }
 }
+// ================================================================
+// 🏷️ Promociones en Análisis ML
+// Para cada publicación activa trae de ML en qué promoción está (/seller-promotions/items/{id}):
+// la que está corriendo (precio con descuento y %) y la próxima programada. Se muestra debajo del
+// precio en Análisis ML. Mientras hay una promoción activa, ML no deja cambiar el precio normal.
+// ================================================================
+const PROMO_NOMBRES = {DEAL:"Campaña", MARKETPLACE_CAMPAIGN:"Campaña ML", PRICE_DISCOUNT:"Descuento propio", LIGHTNING:"Oferta relámpago", DOD:"Oferta del día", VOLUME:"Descuento por volumen", PRE_NEGOTIATED:"Pre-negociada", SELLER_CAMPAIGN:"Campaña propia", SMART:"Co-fondeada", PRICE_MATCHING:"Precio competitivo", UNHEALTHY_STOCK:"Liquidación de stock", SELLER_COUPON_CAMPAIGN:"Cupón"};
+let promoML = {}, _promoAt = 0, _promoCorriendo = false;
+function promoInfo(sku){ return promoML[sku] || null; }
+async function nexoRefrescarPromosML(forzar){
+  if(_promoCorriendo) return 0;
+  if(!forzar && Date.now() - _promoAt < 30*60*1000) return 0;
+  if(typeof mlToken === "undefined" || !mlToken) return 0;
+  const prods = (productos||[]).filter(p=>p.ml_item_id && /^[A-Z]{3}\d+$/.test(String(p.ml_item_id)) && p.estado_ml !== "closed");
+  if(!prods.length) return 0;
+  _promoCorriendo = true; _promoAt = Date.now();
+  const nuevo = {};
+  try{
+    let i = 0;
+    const trabajar = async()=>{ while(i < prods.length){ const p = prods[i++];
+      try{
+        const r = await mlGet(`/seller-promotions/items/${encodeURIComponent(p.ml_item_id)}?app_version=v2`);
+        if(!r.ok || !Array.isArray(r.data)) continue;
+        const info = promoResumir(r.data);
+        if(info) nuevo[p.sku] = info;
+      }catch(e){}
+    } };
+    await Promise.all([trabajar(), trabajar(), trabajar(), trabajar(), trabajar()]);
+    promoML = nuevo;
+  }finally{ _promoCorriendo = false; }
+  try{ const s=document.querySelector(".section.active"); if(s && s.id==="sec-analisis") renderAnalisis(); }catch(e){}
+  return Object.keys(nuevo).length;
+}
+// De la lista de promociones de una publicación: la activa (started) y la próxima programada (pending)
+function promoResumir(lista){
+  const arm = x => {
+    const orig = Number(x.original_price)||0, pr = Number(x.price)||0;
+    return {tipo:x.type, nombre:x.name || PROMO_NOMBRES[x.type] || x.type, precio:pr, original:orig,
+      pct: orig > 0 && pr > 0 ? Math.round((1 - pr/orig)*1000)/10 : null, hasta:x.finish_date||null, desde:x.start_date||null, id:x.id||null};
+  };
+  const act = lista.filter(x=>x.status==="started" && Number(x.price) > 0).sort((a,b)=>Number(a.price)-Number(b.price))[0];
+  const prog = lista.filter(x=>x.status==="pending").sort((a,b)=>Date.parse(a.start_date||0)-Date.parse(b.start_date||0))[0];
+  if(!act && !prog) return null;
+  return {activa: act ? arm(act) : null, programada: prog ? arm(prog) : null};
+}
+function promoFecha(iso){ const t = Date.parse(iso); return t ? new Date(t).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit"}) : ""; }
+// Etiqueta debajo del precio en Análisis ML
+function promoEtiqueta(p){
+  const i = promoInfo(p.sku); if(!i) return "";
+  let h = "";
+  if(i.activa){
+    const a = i.activa;
+    const tip = `En promoción: ${a.nombre}. Precio con descuento $${fmt(a.precio)} (precio normal $${fmt(a.original)})${a.hasta?` hasta el ${promoFecha(a.hasta)}`:""}. Mientras dure, ML no deja cambiar el precio normal: para cambiarlo, sacalo primero de la promoción en la sección Promociones.`;
+    h += `<div style="margin-top:3px;text-align:right;"><span title="${esc(tip)}" style="display:inline-block;font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px;background:#fde8f1;color:#be185d;cursor:help;white-space:nowrap;">🏷️ ${a.pct!=null?"−"+String(a.pct).replace(".",",")+"% · ":""}$${fmt(a.precio)}</span><div style="font-size:9px;color:var(--text-soft);">${esc(a.nombre)}${a.hasta?" · hasta "+promoFecha(a.hasta):""}</div></div>`;
+  }
+  if(i.programada){
+    const g = i.programada;
+    h += `<div style="font-size:9px;color:var(--text-soft);text-align:right;margin-top:2px;" title="Promoción programada: empieza ${promoFecha(g.desde)}">⏳ ${esc(g.nombre)}${g.desde?" desde "+promoFecha(g.desde):""}${g.pct!=null&&g.precio>0?" (−"+String(g.pct).replace(".",",")+"%)":""}</div>`;
+  }
+  return h;
+}
+// Aviso claro si se intenta cambiar el precio de una publicación en promoción
+function promoAvisoCambioPrecio(sku){
+  const i = promoInfo(sku); if(!i || !i.activa) return "";
+  return ` Está en la promoción "${i.activa.nombre}" (−${String(i.activa.pct??"").replace(".",",")}%): ML no deja cambiar el precio normal mientras dure. Sacalo primero de la promoción en la sección Promociones, cambiá el precio y volvé a sumarlo.`;
+}
+setInterval(()=>{ try{ const s=document.querySelector(".section.active"); if(s && s.id==="sec-analisis" && document.visibilityState==="visible") nexoRefrescarPromosML(false); }catch(e){} }, 60*1000);
 
 // ================================================================
 // SUPERADMIN NEXO
@@ -10336,7 +10404,8 @@ function renderAnalisis(){
     if(filtro && calcAnaliML(p).rec!==filtro) return false;
     if(provFiltro && p.proveedor!==provFiltro) return false;
     if(filtroEstadoML){
-      if(filtroEstadoML==="sin_sincronizar"){ if(p.estado_ml) return false; }
+      if(filtroEstadoML==="promo"){ if(!(promoInfo(p.sku)||{}).activa) return false; }
+      else if(filtroEstadoML==="sin_sincronizar"){ if(p.estado_ml) return false; }
       else if(filtroEstadoML==="inactiva"){ if(!p.estado_ml || p.estado_ml==="active" || p.estado_ml==="paused") return false; }
       else { if(p.estado_ml!==filtroEstadoML) return false; }
     }
@@ -10369,7 +10438,7 @@ function renderAnalisis(){
           <input type="number" id="precioAn_${esc(p.sku)}" value="${a.precio||''}" style="width:82px;padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:right;" ${p.ml_item_id?'':'disabled title="Vinculá una Publicación ML en Catálogo primero"'}>
           ${p.ml_item_id?`<button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="actualizarPrecioAnalisis('${esc(p.sku)}')" title="${p.precio_dinamico?'Tiene la etiqueta de precio dinámico — si está PAUSADA en ML podés actualizarlo igual; si está ACTIVA, va a fallar con el motivo exacto':'Actualizar este precio en MercadoLibre'}">💲</button>`:''}${rpzBotonFila(p)}
         </div>
-        <div style="font-size:10px;color:${a.desactualizado?'var(--red)':'var(--text-soft)'};text-align:right;">${a.precioMLReal?(a.desactualizado?'⚠️ desactualizado':'✓ real ML'):'* sin sincronizar'}</div>
+        <div style="font-size:10px;color:${a.desactualizado?'var(--red)':'var(--text-soft)'};text-align:right;">${a.precioMLReal?(a.desactualizado?'⚠️ desactualizado':'✓ real ML'):'* sin sincronizar'}</div>${promoEtiqueta(p)}
       </td>
       ${celdaCompetencia(p)}
       <td class="num" style="color:var(--orange);cursor:help;" title="${a.comisionReal?('Cargo por vender: $'+fmt(a.comisionPct)+(a.comisionFixed>0?' + Costo por unidad: $'+fmt(a.comisionFixed):'')):'Comisión estimada (10%) — sincronizá para tener el dato real'}">$${fmt(a.comision)}${a.comisionReal?' ✓':' *'}</td>
@@ -10408,7 +10477,7 @@ async function actualizarPrecioAnalisis(sku){
     const res=await pushPrecioML(p.ml_item_id, nuevoPrecio);
     console.log("🔍 Respuesta cruda de ML al actualizar precio:", res);
     if(!res.ok){
-      toast("No se pudo actualizar: "+(res.detalle||"error desconocido"),"err",6000);
+      toast("No se pudo actualizar: "+(res.detalle||"error desconocido")+promoAvisoCambioPrecio(sku),"err",promoAvisoCambioPrecio(sku)?12000:6000);
       mostrarCargando(false);
       return;
     }
@@ -11195,7 +11264,7 @@ async function mostrarSeccion(id){
     _mlPubsCargadas=false; if(vistaAnalisis()==="publicacion") await cargarMlPubs();
   }
   if(id==="mercado"){ renderMercado(); }
-  if(id==="analisis"){ await cargarCompetencia(true); renderAnalisis(); nexoRefrescarPreciosML(false); mostrarUltimaSync("fees","ultimaSyncFees"); mostrarUltimaSync("dinamico","ultimaSyncDinamico"); }
+  if(id==="analisis"){ await cargarCompetencia(true); renderAnalisis(); nexoRefrescarPreciosML(false); nexoRefrescarPromosML(false); mostrarUltimaSync("fees","ultimaSyncFees"); mostrarUltimaSync("dinamico","ultimaSyncDinamico"); }
 }
 
 // ================================================================
