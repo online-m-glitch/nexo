@@ -8328,7 +8328,8 @@ function nexoFormEquivalente(){
 // Con "Precio automático" (automatización de precios de ML), MercadoLibre cambia el precio solo y
 // puede tardar varios minutos después de ajustar el mínimo / máximo. NEXO trae el precio real de
 // todas las publicaciones vinculadas (de a 20 por consulta) al abrir Análisis ML y cada 10 minutos,
-// y actualiza precio, comisión estimada y la base si cambió.
+// y actualiza precio, comisión estimada y la base si cambió. También trae el estado de la publicación
+// (Activa / Pausada / Cerrada), que ML cambia solo, por ejemplo al pausarla por falta de stock.
 // ================================================================
 let _pmlAt = 0, _pmlCorriendo = false;
 async function nexoRefrescarPreciosML(forzar){
@@ -8342,19 +8343,23 @@ async function nexoRefrescarPreciosML(forzar){
   try{
     for(let i=0; i<prods.length; i+=20){
       const lote = prods.slice(i, i+20);
-      const r = await mlGet("/items?ids="+lote.map(p=>p.ml_item_id).join(",")+"&attributes=id,price");
+      const r = await mlGet("/items?ids="+lote.map(p=>p.ml_item_id).join(",")+"&attributes=id,price,status");
       if(!r.ok || !Array.isArray(r.data)) continue;
       for(const x of r.data){
-        const it = x && x.code===200 && x.body; if(!it || it.price==null) continue;
+        const it = x && x.code===200 && x.body; if(!it) continue;
         const p = lote.find(q=>String(q.ml_item_id).toUpperCase()===String(it.id).toUpperCase()); if(!p) continue;
         if(await nexoAplicarPrecioML(p, Number(it.price))) cambios++;
+        if(it.status && it.status !== p.estado_ml){
+          p.estado_ml = it.status; cambios++;
+          try{ await sbUpdate("productos", "sku=eq."+encodeURIComponent(p.sku), {estado_ml: it.status}); }catch(e){}
+        }
       }
     }
   }catch(e){ console.warn("Precios ML:", e); }
   finally{ _pmlCorriendo = false; }
   if(cambios){
     try{ if(typeof renderAnalisis==="function") renderAnalisis(); if(typeof renderProductos==="function") renderProductos(); }catch(e){}
-    toast(`💲 ${cambios} precio${cambios===1?"":"s"} actualizado${cambios===1?"":"s"} desde MercadoLibre`,"ok",4000);
+    toast(`💲 ${cambios} dato${cambios===1?"":"s"} (precio o estado) actualizado${cambios===1?"":"s"} desde MercadoLibre`,"ok",4000);
   }
   return cambios;
 }
