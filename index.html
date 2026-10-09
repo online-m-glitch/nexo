@@ -7906,9 +7906,9 @@ function segTab(t){ seg.tab = t; seg.abierto = null; segPintar(); }
 
 function segHtmlVendedores(){
   const alta = `<div class="seg-alta admin-only">
-      <input id="segVendId" class="form-control" placeholder="Número de vendedor (ej. 422230073)" style="max-width:260px;" onkeydown="if(event.key==='Enter')segAgregarVend()">
+      <input id="segVendId" class="form-control" placeholder="Link de una publicación, nombre o número del vendedor" style="max-width:380px;" onkeydown="if(event.key==='Enter')segAgregarVend()">
       <button class="btn btn-primary btn-sm" onclick="segAgregarVend()">➕ Seguir vendedor</button>
-      <span style="font-size:12px;color:var(--text-soft);">También podés seguirlos desde la pestaña <a href="#" onclick="segTab('prod');return false;">Productos</a>, con el botón ➕ de cada vendedor.</span>
+      <span style="font-size:12px;color:var(--text-soft);">Pegá el link de cualquier publicación del vendedor. También podés seguirlos desde <a href="#" onclick="segTab('prod');return false;">Productos de catálogo</a> con el ➕.</span>
     </div>`;
   if(!seg.vend.length) return alta + `<div class="atn-vacio">Todavía no seguís a ningún vendedor.</div>`;
   const filas = seg.vend.map(v=>{
@@ -8051,8 +8051,14 @@ async function segCargarTendencias(){
 async function segAgregarVend(id){
   if(checkViewer("Seguir vendedores")) return;
   const inp = document.getElementById("segVendId");
-  id = String(id || (inp && inp.value) || "").replace(/\D/g,"");
-  if(!id){ toast("Escribí el número de vendedor.","err"); return; }
+  if(id) id = String(id);
+  else{
+    const txt = String((inp && inp.value) || "").trim();
+    if(!txt){ toast("Pegá el link de una publicación del vendedor, o escribí su nombre o número.","err"); return; }
+    const res = await segResolverVendedor(txt);
+    if(res.error){ toast(res.error,"err",8000); return; }
+    id = String(res.id);
+  }
   if(seg.vend.some(v=>String(v.seller_id)===id)){ toast("Ya seguís a ese vendedor.","ok"); return; }
   const r = await mlGet(`/users/${id}`);
   if(!r.ok || !r.data || !r.data.id){ toast("ML no encontró ese vendedor.","err"); return; }
@@ -8063,6 +8069,29 @@ async function segAgregarVend(id){
     if(inp) inp.value = "";
     await segActualizarAhora(true);
   }catch(e){ toast("No se pudo guardar: "+e.message,"err"); }
+}
+// Encuentra el vendedor a partir de: número, link/código de una publicación, o nombre ya conocido
+async function segResolverVendedor(txt){
+  const s = String(txt).trim();
+  if(/^\d+$/.test(s)) return {id:s};
+  const S = s.toUpperCase();
+  const mItem = S.match(/ITEM_ID[:=%3A]*([A-Z]{3})-?(\d{6,})/) || S.match(/\b([A-Z]{3})-(\d{6,})/) || S.match(/(?:^|[^A-Z])([A-Z]{3})(\d{8,})(?!\d)/);
+  const mProd = S.match(/\/P\/([A-Z]{3}\d+)/);
+  if(mItem && !(mProd && mItem[1]+mItem[2]===mProd[1])){
+    const itemId = mItem[1] + mItem[2];
+    // ML no deja leer publicaciones ajenas, pero las preguntas de la publicación traen el vendedor
+    const r = await mlGet(`/questions/search?item=${itemId}&api_version=4&limit=1`);
+    const q = r.ok && r.data && (r.data.questions||[])[0];
+    if(q && q.seller_id) return {id:q.seller_id};
+    if(!mProd) return {error:"MercadoLibre no informa el vendedor de esa publicación (todavía no tiene preguntas). Probá con otra publicación del mismo vendedor."};
+  }
+  if(mProd) return {error:"Ese es un link de catálogo: seguilo en la pestaña \"Productos de catálogo\" y ahí tocá ➕ en el vendedor que quieras seguir."};
+  // Nombre: solo entre los vendedores que NEXO ya vio (ML no permite buscar vendedores por nombre)
+  const q = s.toLowerCase();
+  const hits = Object.entries(seg.nick||{}).filter(([id,n])=>n && String(n).toLowerCase().includes(q));
+  if(hits.length === 1) return {id:hits[0][0]};
+  if(hits.length > 1) return {error:"Hay varios vendedores con ese nombre: "+hits.slice(0,6).map(h=>h[1]).join(", ")+". Escribilo más completo."};
+  return {error:"MercadoLibre no permite buscar vendedores por nombre. Pegá el link de una publicación de ese vendedor."};
 }
 function segIdProducto(txt){
   const s = String(txt||"").toUpperCase();
@@ -8265,6 +8294,73 @@ function nexoFormEquivalente(){
   const c = cotizUSD();
   el.textContent = c ? `≈ $${fmt(v*c)} con el dólar de hoy ($${fmt(c)})` : "Sin cotización del dólar todavía: abrí Mercado ML o cargala a mano.";
 }
+// ================================================================
+// Precios reales de ML al día
+// Con "Precio automático" (automatización de precios de ML), MercadoLibre cambia el precio solo y
+// puede tardar varios minutos después de ajustar el mínimo / máximo. NEXO trae el precio real de
+// todas las publicaciones vinculadas (de a 20 por consulta) al abrir Análisis ML y cada 10 minutos,
+// y actualiza precio, comisión estimada y la base si cambió.
+// ================================================================
+let _pmlAt = 0, _pmlCorriendo = false;
+async function nexoRefrescarPreciosML(forzar){
+  if(_pmlCorriendo) return 0;
+  if(!forzar && Date.now() - _pmlAt < 10*60*1000) return 0;
+  if(typeof mlToken === "undefined" || !mlToken) return 0;
+  const prods = (productos||[]).filter(p=>p.ml_item_id && /^[A-Z]{3}\d+$/.test(String(p.ml_item_id)));
+  if(!prods.length) return 0;
+  _pmlCorriendo = true; _pmlAt = Date.now();
+  let cambios = 0;
+  try{
+    for(let i=0; i<prods.length; i+=20){
+      const lote = prods.slice(i, i+20);
+      const r = await mlGet("/items?ids="+lote.map(p=>p.ml_item_id).join(",")+"&attributes=id,price");
+      if(!r.ok || !Array.isArray(r.data)) continue;
+      for(const x of r.data){
+        const it = x && x.code===200 && x.body; if(!it || it.price==null) continue;
+        const p = lote.find(q=>String(q.ml_item_id).toUpperCase()===String(it.id).toUpperCase()); if(!p) continue;
+        if(await nexoAplicarPrecioML(p, Number(it.price))) cambios++;
+      }
+    }
+  }catch(e){ console.warn("Precios ML:", e); }
+  finally{ _pmlCorriendo = false; }
+  if(cambios){
+    try{ if(typeof renderAnalisis==="function") renderAnalisis(); if(typeof renderProductos==="function") renderProductos(); }catch(e){}
+    toast(`💲 ${cambios} precio${cambios===1?"":"s"} actualizado${cambios===1?"":"s"} desde MercadoLibre`,"ok",4000);
+  }
+  return cambios;
+}
+// Aplica un precio real de ML a un producto (si cambió): memoria + comisión estimada + base
+async function nexoAplicarPrecioML(p, precio){
+  const f = feesML[p.sku];
+  const actual = f && Number(feeRaw(p.sku).ml_price) > 0 ? Number(feeRaw(p.sku).ml_price) : precioOrig(p);
+  if(!(precio > 0) || Math.abs(actual - precio) < 0.5) return false;
+  const upd = {ml_price: precio};
+  if(f){
+    // Comisión: mismo % y cargo fijo que ML informó, aplicado al precio nuevo
+    const pct = Number(f.fee_pct)||0, fijo = Number(feeRaw(p.sku).fee_fixed)||0;
+    if(pct > 0){ upd.fee_amount = Math.round((precio*pct/100 + fijo)*100)/100; nexoFeeRaw(p.sku, "fee_amount", upd.fee_amount); }
+    nexoFeeRaw(p.sku, "ml_price", precio);
+    try{ await sbUpdate("ml_fees", "sku=eq."+encodeURIComponent(p.sku), upd); }catch(e){}
+  }
+  nexoSetPrecioML(p, precio);
+  try{ await sbUpdate("productos", "sku=eq."+encodeURIComponent(p.sku), {precio}); }catch(e){}
+  return true;
+}
+// Después de cambiar el rango del precio automático: ML tarda en reajustar, así que se consulta varias veces
+async function nexoEsperarPrecioML(sku, mlItemId){
+  const p = (productos||[]).find(x=>x.sku.toUpperCase()===String(sku||"").toUpperCase()); if(!p) return;
+  for(const seg of [3, 8, 20, 45, 90]){
+    await new Promise(r=>setTimeout(r, seg*1000));
+    const r = await mlGet("/items/"+encodeURIComponent(mlItemId)+"?attributes=id,price");
+    if(r.ok && r.data && r.data.price != null && await nexoAplicarPrecioML(p, Number(r.data.price))){
+      try{ renderAnalisis(); renderProductos(); }catch(e){}
+      toast(`Precio real actualizado: $${fmt(r.data.price)} ✅`,"ok",5000);
+      return;
+    }
+  }
+  toast("MercadoLibre todavía no cambió el precio. Puede tardar unos minutos: NEXO lo actualiza solo al abrir Análisis ML.","ok",7000);
+}
+setInterval(()=>{ try{ const s=document.querySelector(".section.active"); if(s && s.id==="sec-analisis" && document.visibilityState==="visible") nexoRefrescarPreciosML(false); }catch(e){} }, 60*1000);
 
 // ================================================================
 // SUPERADMIN NEXO
@@ -10947,7 +11043,7 @@ async function mostrarSeccion(id){
     _mlPubsCargadas=false; if(vistaAnalisis()==="publicacion") await cargarMlPubs();
   }
   if(id==="mercado"){ renderMercado(); }
-  if(id==="analisis"){ await cargarCompetencia(true); renderAnalisis(); mostrarUltimaSync("fees","ultimaSyncFees"); mostrarUltimaSync("dinamico","ultimaSyncDinamico"); }
+  if(id==="analisis"){ await cargarCompetencia(true); renderAnalisis(); nexoRefrescarPreciosML(false); mostrarUltimaSync("fees","ultimaSyncFees"); mostrarUltimaSync("dinamico","ultimaSyncDinamico"); }
 }
 
 // ================================================================
@@ -12654,25 +12750,8 @@ async function actualizarRangoAutomatizacion(){
     // ML reajusta el precio real de la publicación al cambiar el rango — esperamos un instante y
     // lo traemos de nuevo, para que Análisis ML no se quede mostrando el precio viejo.
     const sku = _autoPrecioActual.sku;
-    await new Promise(res=>setTimeout(res,1500));
-    try{
-      const rItem=await fetch(SB_URL+"/functions/v1/ml-api", {
-        method:"POST",
-        headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+sbAuth()},
-        body:JSON.stringify({grant_type:"proxy", path:"/items/"+encodeURIComponent(mlItemId), access_token:mlToken})
-      });
-      const dataItem=await rItem.json();
-      if(rItem.ok && dataItem.price!=null){
-        const p=productos.find(x=>x.sku.toUpperCase()===(sku||"").toUpperCase());
-        if(feesML[sku]) nexoFeeRaw(sku,"ml_price",dataItem.price);
-        if(p){
-          nexoSetPrecioML(p, dataItem.price);
-          try{ await sbUpdate("productos","sku=eq."+encodeURIComponent(p.sku),{precio:dataItem.price}); }catch(e){}
-        }
-        renderAnalisis(); renderProductos();
-        toast(`Precio real actualizado: $${fmt(dataItem.price)} ✅`,"ok",4000);
-      }
-    }catch(e){ /* si falla el refresco, el precio viejo se corrige con el próximo "Sincronizar comisiones ML" */ }
+    // ML reajusta el precio solo y puede tardar minutos: se consulta varias veces sin bloquear el panel
+    nexoEsperarPrecioML(sku, mlItemId);
   }catch(e){
     toast("Error actualizando el rango: "+e.message,"err");
   }
