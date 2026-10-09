@@ -2313,6 +2313,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
               </select>
             </div>
             <div class="toolbar" style="padding-top:8px;border-top:1px dashed var(--border);">
+              <button type="button" class="btn btn-primary" style="white-space:nowrap;" onclick="abrirRepricer()" title="Precio automático: $1 menos que el competidor más barato, sin bajar del margen mínimo">🤖 Precio automático</button>
               <label style="font-size:12px;color:var(--text-soft);white-space:nowrap;">Impuesto est. % (IIBB):
                 <input type="number" id="impuestoPctInput" step="0.1" min="0" style="width:56px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;margin-left:4px;" onchange="guardarImpuestoPct()">
               </label>
@@ -3495,6 +3496,34 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
       <button class="btn btn-ghost" onclick="cerrarEtiquetasFull()">Cerrar</button>
       <button class="btn btn-ghost" id="btnEtqZPL" onclick="etqDescargarZPL()" disabled title="Archivo .txt con comandos ZPL, igual al que descarga MercadoLibre (Zebra y compatibles, 5 × 2,5 cm)">⬇️ Descargar ZPL (.txt)</button>
       <button class="btn btn-primary" id="btnEtqImprimir" onclick="etqImprimir()" disabled title="Abre la impresión. Para PDF elegí «Guardar como PDF» como impresora.">🖨️ Imprimir / PDF</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modalRepricer">
+  <div class="modal" style="max-width:980px;width:96vw;max-height:92vh;overflow-y:auto;">
+    <h3>🤖 Precio automático NEXO</h3>
+    <div style="font-size:12px;color:var(--text-soft);margin-bottom:12px;line-height:1.5;">
+      Cada hora, para los productos que actives con 🤖, NEXO busca el <strong>competidor más barato</strong> del mismo producto en MercadoLibre y pone tu precio <strong>$1 por debajo</strong> (sube o baja).
+      Nunca deja tu margen final por debajo del mínimo: si el competidor está demasiado barato, pone el precio más bajo que todavía respeta ese margen.
+      El margen se calcula igual que en Análisis: comisión real de ML + envío + impuesto + percepción + costo.
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+      <label style="font-size:13px;font-weight:700;">Margen mínimo de seguridad
+        <input type="number" id="rpzMargen" step="0.5" min="0" style="width:64px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;margin-left:6px;"> %
+      </label>
+      <button class="btn btn-ghost btn-sm admin-only" onclick="rpzGuardarMargen()">Guardar</button>
+      <span style="flex:1;"></span>
+      <button class="btn btn-ghost admin-only" id="rpzBtnSimular" onclick="rpzEjecutar(true)">🔍 Simular todos</button>
+      <button class="btn btn-primary admin-only" id="rpzBtnEjecutar" onclick="if(confirm('¿Ajustar ahora los precios en MercadoLibre de todos los productos activados?')) rpzEjecutar(false)">▶ Ejecutar ahora</button>
+    </div>
+    <div style="font-weight:700;margin-bottom:6px;">Productos activados</div>
+    <div id="rpzActivos"></div>
+    <div id="rpzResultado"></div>
+    <div style="font-weight:700;margin:14px 0 6px;">Historial de cambios</div>
+    <div id="rpzLog"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="cerrarRepricer()">Cerrar</button>
     </div>
   </div>
 </div>
@@ -8361,6 +8390,124 @@ async function nexoEsperarPrecioML(sku, mlItemId){
   toast("MercadoLibre todavía no cambió el precio. Puede tardar unos minutos: NEXO lo actualiza solo al abrir Análisis ML.","ok",7000);
 }
 setInterval(()=>{ try{ const s=document.querySelector(".section.active"); if(s && s.id==="sec-analisis" && document.visibilityState==="visible") nexoRefrescarPreciosML(false); }catch(e){} }, 60*1000);
+// ================================================================
+// 🤖 Precio automático NEXO
+// Para cada producto activado, el servidor (nexo-sync, acción "precios", cada hora) busca el competidor
+// más barato del catálogo de ML (o de las referencias de precios de ML) y pone el precio $1 por debajo,
+// subiendo o bajando. Nunca deja el margen final por debajo del mínimo (por defecto 9%): si el competidor
+// está demasiado barato, pone el precio más bajo que todavía respeta ese margen.
+// Si la publicación tiene el precio automático de ML activo, NEXO ajusta su mínimo en vez del precio.
+// ================================================================
+const rpz = { activos: {}, cargado: false, log: [] };
+function rpzMargenGlobal(){ const v = Number(appConfig && appConfig.repricer && appConfig.repricer.margen_min); return v > 0 ? v : 9; }
+async function rpzCargar(forzar){
+  if(rpz.cargado && !forzar) return;
+  try{
+    const filas = await sbGet("nexo_repricer", "select=sku,activo,margen_min");
+    rpz.activos = {}; (filas||[]).forEach(f=>{ if(f.activo) rpz.activos[f.sku] = f; });
+    rpz.cargado = true;
+  }catch(e){ console.warn("Repricer:", e); }
+}
+function rpzEsActivo(sku){ return !!rpz.activos[sku]; }
+// Botón 🤖 de cada fila de Análisis
+function rpzBotonFila(p){
+  if(!p.ml_item_id) return "";
+  if(!rpz.cargado && !rpz._pidiendo){ rpz._pidiendo = true; rpzCargar().then(()=>{ if(Object.keys(rpz.activos).length) try{ renderAnalisis(); }catch(e){} }); }
+  const on = rpzEsActivo(p.sku);
+  return `<button class="btn btn-ghost admin-only rpz-btn" style="padding:4px 6px;font-size:11px;${on?'background:#e8f7ee;border-color:var(--green);':'opacity:.55;'}" onclick="rpzToggle('${esc(p.sku)}')" title="${on?'Precio automático NEXO ACTIVO: cada hora pone $1 menos que el competidor más barato sin bajar del '+(rpz.activos[p.sku].margen_min||rpzMargenGlobal())+'% de margen. Clic para desactivar.':'Activar precio automático NEXO ($1 menos que el competidor más barato, sin bajar del margen mínimo)'}">🤖</button>`;
+}
+async function rpzToggle(sku){
+  if(checkViewer("Precio automático NEXO")) return;
+  const on = !rpzEsActivo(sku);
+  if(on && !confirm(`¿Activar el precio automático NEXO para ${sku}?\n\nCada hora NEXO va a poner el precio $1 por debajo del competidor más barato (subiendo o bajando), sin dejar el margen por debajo del ${rpzMargenGlobal()}%.`)) return;
+  try{
+    await sbUpsert("nexo_repricer", {sku, activo:on, updated_at:new Date().toISOString()});
+    if(on) rpz.activos[sku] = {sku, activo:true, margen_min:null}; else delete rpz.activos[sku];
+    try{ renderAnalisis(); }catch(e){}
+    if(on){
+      toast(`🤖 ${sku}: precio automático activado. Calculando el primer ajuste…`,"ok",5000);
+      rpzEjecutar(false, sku);
+    } else toast(`${sku}: precio automático desactivado.`,"ok");
+  }catch(e){ toast("No se pudo: "+e.message,"err",6000); }
+}
+// Corre el ajuste en el servidor (simular = solo calcula)
+async function rpzEjecutar(simular, sku){
+  if(checkViewer("Precio automático NEXO")) return null;
+  const btn = document.getElementById(simular?"rpzBtnSimular":"rpzBtnEjecutar"); const txt = btn && btn.textContent;
+  if(btn){ btn.disabled = true; btn.textContent = "⏳ Consultando ML…"; }
+  try{
+    const r = await fetch(SB_URL+"/functions/v1/nexo-sync", {method:"POST", headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+sbAuth()}, body:JSON.stringify({accion:"precios", simularPrecios:!!simular, sku:sku||undefined})});
+    const d = await r.json().catch(()=>({}));
+    const s = (d.salida||[])[0] || {};
+    if(!r.ok || s.error) throw new Error(s.error || d.message || d.error || ("HTTP "+r.status));
+    const det = s.detalle || [];
+    if(!simular){
+      for(const x of det) if((x.accion==="subió"||x.accion==="bajó") && x.precio_nuevo){ const p=(productos||[]).find(q=>q.sku===x.sku); if(p) await nexoAplicarPrecioML(p, Number(x.precio_nuevo)); }
+      if(det.some(x=>x.accion==="mínimo de ML")) det.filter(x=>x.accion==="mínimo de ML").forEach(x=>nexoEsperarPrecioML(x.sku, x.ml_item_id));
+      try{ renderAnalisis(); renderProductos(); }catch(e){}
+    }
+    if(sku && det[0]) toast(rpzResumen(det[0]), det[0].ok?"ok":"err", 9000);
+    else if(!sku) toast(simular?`Simulación lista: ${det.filter(x=>x.accion==="simulado").length} cambiarían de precio.`:`Listo: ${s.cambios||0} cambio${s.cambios===1?"":"s"} de precio.`,"ok",6000);
+    rpzPintarResultado(det, simular);
+    if(!simular) rpzCargarLog();
+    return det;
+  }catch(e){ toast("Precio automático: "+e.message,"err",7000); return null; }
+  finally{ if(btn){ btn.disabled = false; btn.textContent = txt; } }
+}
+function rpzResumen(x){
+  const $ = n => "$"+fmt(n);
+  if(x.accion==="simulado") return `${x.sku}: ${$(x.precio_antes)} → ${$(x.precio_nuevo)} (margen ${x.margen}%) · ${x.motivo}`;
+  if(x.accion==="subió"||x.accion==="bajó") return `🤖 ${x.sku}: ${x.accion} de ${$(x.precio_antes)} a ${$(x.precio_nuevo)} (margen ${x.margen}%) · ${x.motivo}`;
+  if(x.accion==="sin cambio") return `🤖 ${x.sku}: ya está en el mejor precio (${$(x.precio_antes)}).`;
+  return `🤖 ${x.sku}: ${x.motivo}`;
+}
+// ---------- Modal ----------
+async function abrirRepricer(){
+  document.getElementById("modalRepricer").classList.add("show");
+  document.getElementById("rpzMargen").value = rpzMargenGlobal();
+  document.getElementById("rpzResultado").innerHTML = "";
+  await rpzCargar(true);
+  rpzPintarActivos();
+  rpzCargarLog();
+}
+function cerrarRepricer(){ document.getElementById("modalRepricer").classList.remove("show"); }
+async function rpzGuardarMargen(){
+  if(checkViewer("Configurar margen mínimo")) return;
+  const v = parseFloat(document.getElementById("rpzMargen").value);
+  if(!(v >= 0 && v < 90)){ toast("Cargá un margen válido (ej. 9).","err"); return; }
+  appConfig.repricer = Object.assign({}, appConfig.repricer||{}, {margen_min:v});
+  await sbGuardar("config", {key:"repricer", value:appConfig.repricer}).catch(()=>{});
+  toast(`Margen mínimo del precio automático: ${v}% ✅`,"ok");
+  rpzPintarActivos();
+}
+function rpzPintarActivos(){
+  const el = document.getElementById("rpzActivos"); if(!el) return;
+  const skus = Object.keys(rpz.activos);
+  if(!skus.length){ el.innerHTML = `<div style="color:var(--text-soft);font-size:12px;padding:8px 0;">Todavía no activaste ningún producto. En la tabla de Análisis tocá 🤖 al lado del 💲 del producto que querés automatizar.</div>`; return; }
+  el.innerHTML = `<div class="table-wrap"><table style="width:100%;font-size:12px;"><thead><tr><th>SKU</th><th>Producto</th><th class="num">Precio actual</th><th class="num">Margen mín.</th><th></th></tr></thead><tbody>${skus.map(s=>{
+    const p = (productos||[]).find(q=>q.sku===s) || {};
+    const pr = typeof feeRaw==="function" && Number(feeRaw(s).ml_price) > 0 ? Number(feeRaw(s).ml_price) : p.precio;
+    return `<tr><td><span class="sku-tag">${esc(s)}</span></td><td>${esc(p.nombre||"")}</td><td class="num">$${fmt(pr||0)}</td><td class="num">${rpz.activos[s].margen_min||rpzMargenGlobal()}%</td>
+      <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="rpzEjecutar(true,'${esc(s)}')" title="Calcular sin cambiar nada">🔍 Simular</button> <button class="btn btn-ghost btn-sm" onclick="rpzToggle('${esc(s)}').then(rpzPintarActivos)">Desactivar</button></td></tr>`;
+  }).join("")}</tbody></table></div>`;
+}
+function rpzPintarResultado(det, simular){
+  const el = document.getElementById("rpzResultado"); if(!el) return;
+  if(!det || !det.length){ el.innerHTML = ""; return; }
+  el.innerHTML = `<div style="font-weight:700;margin:10px 0 6px;">${simular?"🔍 Simulación (no se cambió nada)":"✅ Resultado"}</div>` + det.map(x=>`<div style="font-size:12px;padding:6px 8px;border-left:3px solid ${x.ok?(x.accion==="simulado"||x.accion==="subió"||x.accion==="bajó"||x.accion==="mínimo de ML"?"var(--green)":"var(--border)"):"var(--orange)"};margin-bottom:4px;background:var(--bg-soft,#f7f7f9);">${esc(rpzResumen(x))}</div>`).join("");
+}
+async function rpzCargarLog(){
+  const el = document.getElementById("rpzLog"); if(!el) return;
+  try{
+    rpz.log = await sbGet("nexo_repricer_log", "select=*&order=fecha.desc&limit=40");
+    if(!rpz.log.length){ el.innerHTML = `<div style="color:var(--text-soft);font-size:12px;">Sin movimientos todavía.</div>`; return; }
+    el.innerHTML = `<div class="table-wrap"><table style="width:100%;font-size:11px;"><thead><tr><th>Fecha</th><th>SKU</th><th>Acción</th><th class="num">Antes</th><th class="num">Nuevo</th><th class="num">Competidor</th><th class="num">Margen</th><th>Detalle</th></tr></thead><tbody>${rpz.log.map(l=>`<tr>
+      <td style="white-space:nowrap;">${new Date(l.fecha).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</td><td>${esc(l.sku)}</td>
+      <td style="color:${l.ok?(l.accion==="sin cambio"?"var(--text-soft)":"var(--green)"):"var(--orange)"};font-weight:700;">${esc(l.accion)}</td>
+      <td class="num">${l.precio_antes!=null?"$"+fmt(l.precio_antes):""}</td><td class="num">${l.precio_nuevo!=null?"$"+fmt(l.precio_nuevo):""}</td>
+      <td class="num">${l.competidor!=null?"$"+fmt(l.competidor):""}</td><td class="num">${l.margen!=null?l.margen+"%":""}</td><td style="color:var(--text-soft);">${esc(l.motivo||"")}</td></tr>`).join("")}</tbody></table></div>`;
+  }catch(e){ el.innerHTML = `<div style="color:var(--red);font-size:12px;">No se pudo leer el historial: ${esc(e.message)}</div>`; }
+}
 
 // ================================================================
 // SUPERADMIN NEXO
@@ -10215,7 +10362,7 @@ function renderAnalisis(){
       <td class="num" title="${a.precioMLReal?(a.desactualizado?'⚠️ Distinto al precio cargado en catálogo ($'+fmt(p.precio)+') — actualizá uno de los dos':'Precio real vigente en la publicación de ML'):'Precio de catálogo (sin sincronizar con ML todavía)'}">
         <div style="display:flex;gap:4px;align-items:center;justify-content:flex-end;">
           <input type="number" id="precioAn_${esc(p.sku)}" value="${a.precio||''}" style="width:82px;padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:right;" ${p.ml_item_id?'':'disabled title="Vinculá una Publicación ML en Catálogo primero"'}>
-          ${p.ml_item_id?`<button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="actualizarPrecioAnalisis('${esc(p.sku)}')" title="${p.precio_dinamico?'Tiene la etiqueta de precio dinámico — si está PAUSADA en ML podés actualizarlo igual; si está ACTIVA, va a fallar con el motivo exacto':'Actualizar este precio en MercadoLibre'}">💲</button>`:''}
+          ${p.ml_item_id?`<button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="actualizarPrecioAnalisis('${esc(p.sku)}')" title="${p.precio_dinamico?'Tiene la etiqueta de precio dinámico — si está PAUSADA en ML podés actualizarlo igual; si está ACTIVA, va a fallar con el motivo exacto':'Actualizar este precio en MercadoLibre'}">💲</button>`:''}${rpzBotonFila(p)}
         </div>
         <div style="font-size:10px;color:${a.desactualizado?'var(--red)':'var(--text-soft)'};text-align:right;">${a.precioMLReal?(a.desactualizado?'⚠️ desactualizado':'✓ real ML'):'* sin sincronizar'}</div>
       </td>
