@@ -5531,7 +5531,7 @@ verTiendaCliente = async function(){
 // - Atrás / Adelante del navegador cambian de sección.
 // ================================================================
 function navSeccionDelHash(){
-  const id = decodeURIComponent((location.hash||"").replace(/^#/, "")).trim();
+  const id = decodeURIComponent((location.hash||"").replace(/^#/, "")).split("?")[0].trim();
   return /^[a-z]+$/.test(id) ? id : "";
 }
 function navMarcarActivo(id){
@@ -5566,6 +5566,7 @@ iniciar = async function(){
     if(navPuedeVer(id)) mostrarSeccion(id);
     else history.replaceState(null, "", location.pathname+location.search);
   }
+  try{ if(typeof nexoAbrirLinkDirecto==="function") nexoAbrirLinkDirecto(); }catch(e){}
   return r;
 };
 // ================================================================
@@ -8629,7 +8630,7 @@ function nexoPaisSitio(p){ return (NEXO_PAISES[p]||NEXO_PAISES.AR).site; }
 function nexoAplicarPais(p){
   clientePais = NEXO_PAISES[p] ? p : "AR";
   nexoAplicarSitio(nexoPaisSitio(clientePais));
-  setTimeout(()=>{ try{ nexoDolarBadgeIniciar(); }catch(e){} }, 0);
+  setTimeout(()=>{ try{ nexoDolarBadgeIniciar(); nexoEtiquetasImpuestos(); }catch(e){} }, 0);
 }
 function nexoPaisOpciones(sel){ return Object.entries(NEXO_PAISES).map(([k,v])=>`<option value="${k}" ${k===sel?"selected":""}>${v.f} ${v.n}</option>`).join(""); }
 async function saCambiarPais(id, p){
@@ -8662,6 +8663,27 @@ async function nexoDolarBadgeIniciar(){
   nexoDolarBadgePintar();
 }
 setInterval(()=>{ if(document.visibilityState==="visible" && document.getElementById("nexoDolarBadge")) nexoDolarBadgeIniciar(); }, 30*60*1000);
+
+// ── Nombres de los impuestos según el país (Análisis ML) ──
+// Argentina: IIBB + percepciones IVA/Ganancias. Uruguay: retención Decreto 94/002 + reducción de IVA Ley 19.210.
+const NEXO_IMP_NOMBRES = {
+  AR: {imp:"Impuesto est. % (IIBB):", perc:"Percepción est. % (IVA+Gan.):", thImp:"Impuesto (est.)", thPerc:"Percepción (est.)"},
+  UY: {imp:"Retención % (Dec. 94/002):", perc:"Red. IVA % (Ley 19.210):", thImp:"Retención (est.)", thPerc:"Red. IVA (est.)"}
+};
+function nexoEtiquetasImpuestos(){
+  const n = NEXO_IMP_NOMBRES[clientePais] || NEXO_IMP_NOMBRES.AR, ar = NEXO_IMP_NOMBRES.AR;
+  const lbl = (id, txt)=>{ const inp = document.getElementById(id); const l = inp && inp.closest("label"); if(l && l.firstChild && l.firstChild.nodeType===3) l.firstChild.nodeValue = txt+"\n"; };
+  lbl("impuestoPctInput", n.imp); lbl("percepcionPctInput", n.perc);
+  document.querySelectorAll("#analisisThead th").forEach(th=>{
+    const t = th.textContent.trim();
+    if(t===ar.thImp || t===NEXO_IMP_NOMBRES.UY.thImp) th.textContent = n.thImp;
+    if(t===ar.thPerc || t===NEXO_IMP_NOMBRES.UY.thPerc) th.textContent = n.thPerc;
+  });
+}
+if(typeof renderAnalisis === "function"){
+  const _renderAnalisisSinPais = renderAnalisis;
+  renderAnalisis = function(){ const r = _renderAnalisisSinPais.apply(this, arguments); try{ nexoEtiquetasImpuestos(); }catch(e){} return r; };
+}
 // ================================================================
 // 🔔 Avisos por Telegram (Atención ML)
 // Cada cliente conecta su propio Telegram al bot de NEXO y recibe solo los avisos de su cuenta:
@@ -8727,6 +8749,52 @@ async function tgQuitar(id){
   if(!confirm("¿Desconectar este Telegram? Deja de recibir los avisos de esta cuenta.")) return;
   try{ await sbDelete("nexo_avisos_destinos", "id=eq."+id); toast("Telegram desconectado","ok"); tgListar(); }
   catch(e){ toast("No se pudo: "+e.message,"err"); }
+}
+// ================================================================
+// Links directos desde los avisos de Telegram
+// #atencion?c=<cliente>&t=preguntas&q=<id pregunta>  → abre esa pregunta lista para responder
+// #atencion?c=<cliente>&t=mensajes&p=<pack>          → abre esa conversación
+// #atencion?c=<cliente>&t=reclamos                   → abre la pestaña de reclamos
+// Si el aviso es de otra cuenta y el usuario es superadmin, cambia a esa cuenta primero.
+// ================================================================
+function nexoLinkParams(){
+  const h = decodeURIComponent((location.hash||"").replace(/^#/, ""));
+  const i = h.indexOf("?"); if(i < 0) return null;
+  const p = {}; new URLSearchParams(h.slice(i+1)).forEach((v,k)=>p[k]=v);
+  return Object.keys(p).length ? p : null;
+}
+async function nexoEsperar(fn, ms){
+  const fin = Date.now() + (ms||20000);
+  while(Date.now() < fin){ try{ const r = fn(); if(r) return r; }catch(e){} await new Promise(r=>setTimeout(r, 300)); }
+  return null;
+}
+function nexoResaltar(el){
+  if(!el) return;
+  el.scrollIntoView({behavior:"smooth", block:"center"});
+  const antes = el.style.boxShadow; el.style.transition = "box-shadow .3s"; el.style.boxShadow = "0 0 0 3px var(--brand-primario, #7c3aed)";
+  setTimeout(()=>{ el.style.boxShadow = antes; }, 4000);
+}
+async function nexoAbrirLinkDirecto(){
+  const p = nexoLinkParams(); if(!p) return;
+  if(p.c && typeof clienteId!=="undefined" && clienteId && p.c !== clienteId){
+    if(typeof esSuperadmin!=="undefined" && esSuperadmin && typeof saCambiarCliente==="function"){ toast("Cambiando a la cuenta del aviso…","ok",3000); await saCambiarCliente(p.c); return; }
+    toast("Este aviso es de otra cuenta de NEXO.","err",6000); return;
+  }
+  if(navSeccionDelHash() !== "atencion") return;
+  const tab = ["preguntas","mensajes","reclamos"].includes(p.t) ? p.t : "preguntas";
+  await nexoEsperar(()=>document.getElementById("sec-atencion")?.classList.contains("active"), 8000);
+  try{ atnTab(tab); }catch(e){}
+  if(tab === "preguntas" && p.q){
+    const el = await nexoEsperar(()=>document.getElementById("atnQ"+p.q), 20000);
+    if(el){ nexoResaltar(el); setTimeout(()=>{ const ta = document.getElementById("atnR"+p.q); if(ta) ta.focus({preventScroll:true}); }, 600); }
+    else toast("Esa pregunta ya no está pendiente (puede que ya se haya respondido).","ok",6000);
+  }
+  if(tab === "mensajes" && p.p){
+    const i = await nexoEsperar(()=>{ const k = (atn.convs||[]).findIndex(c=>String(c.packId)===String(p.p)); return k >= 0 ? k+1 : 0; }, 25000);
+    if(i) atnAbrirConv(i-1); else toast("Esa conversación ya no tiene mensajes sin leer.","ok",6000);
+  }
+  // Se limpia el link para que recargar no lo repita
+  history.replaceState(null, "", location.pathname + location.search + "#atencion");
 }
 
 // ================================================================
