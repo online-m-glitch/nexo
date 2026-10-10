@@ -647,6 +647,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
       <img id="sidebarLogo" alt="" style="display:none;max-width:100%;max-height:64px;object-fit:contain;background:#fff;border-radius:8px;padding:6px;margin-bottom:10px;">
       <div class="name">NEXO</div>
       <div class="sub" id="sidebarCliente">MercadoLibre</div>
+      <div id="nexoDolarBadge" onclick="if(typeof mostrarSeccion==='function') mostrarSeccion('mercado')" style="margin-top:8px;font-size:11px;font-weight:600;padding:4px 8px;border-radius:8px;background:rgba(255,255,255,.12);color:#f1f5f9;cursor:pointer;line-height:1.35;">💵 Dólar: cargando…</div>
     </div>
     <div id="saNav" style="display:none;">
       <div class="nav-section">NEXO · Superadmin</div>
@@ -4732,6 +4733,7 @@ function mercDolarIniciar(){
   mercDolarCargar(false);
 }
 function mercDolarPintar(){
+  try{ if(typeof nexoDolarBadgePintar==="function") setTimeout(nexoDolarBadgePintar, 0); }catch(e){}
   const inp = document.getElementById("mercDolarValor"), info = document.getElementById("mercDolarInfo");
   if(inp && document.activeElement!==inp){ const v = mercDolarValor(); inp.value = v ? Math.round(v*100)/100 : ""; }
   if(!info) return;
@@ -8611,6 +8613,7 @@ function nexoPaisSitio(p){ return (NEXO_PAISES[p]||NEXO_PAISES.AR).site; }
 function nexoAplicarPais(p){
   clientePais = NEXO_PAISES[p] ? p : "AR";
   nexoAplicarSitio(nexoPaisSitio(clientePais));
+  setTimeout(()=>{ try{ nexoDolarBadgeIniciar(); }catch(e){} }, 0);
 }
 function nexoPaisOpciones(sel){ return Object.entries(NEXO_PAISES).map(([k,v])=>`<option value="${k}" ${k===sel?"selected":""}>${v.f} ${v.n}</option>`).join(""); }
 async function saCambiarPais(id, p){
@@ -8620,6 +8623,29 @@ async function saCambiarPais(id, p){
     if(id === clienteId){ nexoAplicarPais(p); }
   }catch(e){ toast("No se pudo cambiar el país: "+e.message,"err"); renderClientes(); }
 }
+
+// ── Dólar en uso, siempre visible (debajo del nombre del cliente) ──
+function nexoDolarBadgePintar(){
+  const el = document.getElementById("nexoDolarBadge"); if(!el) return;
+  let v = 0; try{ v = mercDolarValor(); }catch(e){}
+  const sitio = nexoSitio(), uy = nexoMoneda() === "UYU";
+  const sim = uy ? "$U" : "$";
+  const manual = typeof mercDolar!=="undefined" && mercDolar.manual > 0;
+  const c = typeof mercDolar!=="undefined" && mercDolar.cotiz && mercDolar.cotiz[mercDolarTipo()];
+  const fuente = manual ? "a mano" : sitio === "MLA" ? (MERC_DOLAR_TIPOS[mercDolarTipo()] || "Oficial") : "MercadoLibre";
+  const cuando = c && c.fecha ? new Date(c.fecha).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
+  if(!(v > 0)){ el.innerHTML = `💵 Dólar: ${typeof mercDolar!=="undefined" && mercDolar.cargando ? "cargando…" : "sin cotización"}`; el.title = "Todavía no se pudo traer la cotización del dólar."; return; }
+  el.innerHTML = `💵 US$1 = ${sim}${v.toLocaleString("es-AR",{maximumFractionDigits:2})} <span style="opacity:.75;">· ${esc(fuente)}</span>`;
+  el.title = (sitio === "MLA"
+    ? `Dólar ${fuente} de dolarapi.com (cotización de venta)${cuando?" · actualizado "+cuando:""}. Se usa para pasar a pesos los costos cargados en US$. El tipo de dólar se cambia en Mercado ML.`
+    : `Cotización de MercadoLibre (US$ → ${nexoMoneda()})${cuando?" · "+cuando:""}. Se usa para pasar a pesos uruguayos los costos y los precios en US$.`)
+    + (manual ? " Ahora está cargado a mano: vale solo hasta recargar el panel." : "") + " Clic para ver el detalle.";
+}
+async function nexoDolarBadgeIniciar(){
+  try{ await mercDolarCargar(false); }catch(e){}
+  nexoDolarBadgePintar();
+}
+setInterval(()=>{ if(document.visibilityState==="visible" && document.getElementById("nexoDolarBadge")) nexoDolarBadgeIniciar(); }, 30*60*1000);
 
 // ================================================================
 // SUPERADMIN NEXO
