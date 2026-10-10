@@ -2513,7 +2513,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
           <div class="card-header"><h3>Clientes</h3></div>
           <div style="overflow-x:auto;">
             <table>
-              <thead><tr><th>Cliente</th><th>Estado</th><th>Usuarios</th><th>Cuentas ML</th><th>Productos</th><th>Ventas</th><th>Última venta</th><th></th></tr></thead>
+              <thead><tr><th>Cliente</th><th>País</th><th>Estado</th><th>Usuarios</th><th>Cuentas ML</th><th>Productos</th><th>Ventas</th><th>Última venta</th><th></th></tr></thead>
               <tbody id="saTabla"><tr><td colspan="8" style="padding:16px;">Cargando…</td></tr></tbody>
             </table>
           </div>
@@ -2530,6 +2530,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
             <div class="card-header"><h3>➕ Nuevo cliente</h3></div>
             <div style="padding:20px;" class="form-grid">
               <div class="form-group span2"><label>Nombre</label><input id="saNuevoNombre" placeholder="Ej: Distrielectro"></div>
+              <div class="form-group span2"><label>País</label><select id="saNuevoPais"><option value="AR">🇦🇷 Argentina</option><option value="UY">🇺🇾 Uruguay</option><option value="BR">🇧🇷 Brasil</option><option value="MX">🇲🇽 México</option><option value="CL">🇨🇱 Chile</option><option value="CO">🇨🇴 Colombia</option><option value="PE">🇵🇪 Perú</option></select><div style="font-size:11px;color:var(--text-soft);margin-top:4px;">Define la moneda y el dólar: Argentina usa el de dolarapi; los demás, el de MercadoLibre de ese país.</div></div>
               <div class="form-group span2"><label>Tienda online (opcional)</label><input id="saNuevoTienda" placeholder="https://…"></div>
               <div class="span2"><button class="btn btn-primary" onclick="saCrearCliente()">Crear cliente</button></div>
             </div>
@@ -3798,11 +3799,12 @@ async function cargarCliente(){
       document.getElementById("saNav").style.display = "";
       saCargarSelector(sa[0].cliente_activo);
     }
-    const r = await fetch(SB_URL+"/rest/v1/nexo_clientes?select=id,nombre,tienda_url,logo,color_primario,color_oscuro,color_acento"+filtro, {headers:{"apikey":SB_KEY}});
+    const r = await fetch(SB_URL+"/rest/v1/nexo_clientes?select=id,nombre,tienda_url,logo,color_primario,color_oscuro,color_acento,pais"+filtro, {headers:{"apikey":SB_KEY}});
     const d = await r.json();
     clienteId = (d && d[0] && d[0].id) || null;
     clienteTiendaUrl = (d && d[0] && d[0].tienda_url) || "";
     clienteNombre = (d && d[0] && d[0].nombre) || "";
+    if(typeof nexoAplicarPais==="function") nexoAplicarPais((d && d[0] && d[0].pais) || "AR");
     clienteMarca = {
       logo: (d && d[0] && d[0].logo) || "",
       primario: (d && d[0] && d[0].color_primario) || "",
@@ -3853,8 +3855,11 @@ function nexoAplicarSitio(site){
   if(typeof MERC_SITE==="undefined" || MERC_SITE===site) return;
   MERC_SITE = site;
   try{ if(typeof _mercDimCache!=="undefined") Object.keys(_mercDimCache).forEach(k=>delete _mercDimCache[k]); }catch(e){}
-  try{ if(typeof mercDolar!=="undefined"){ mercDolar.cotiz = null; mercDolar.at = null; } }catch(e){}
+  try{ if(typeof mercDolar!=="undefined"){ mercDolar.cotiz = null; mercDolar.at = null; mercDolar.manual = null; } }catch(e){}
+  try{ if(typeof _mercDolarProm!=="undefined") _mercDolarProm = null; if(typeof _nexoMonedasCotiz!=="undefined") _nexoMonedasCotiz = null; }catch(e){}
   document.body.dataset.sitio = site;
+  // Si los productos ya estaban cargados, se vuelven a convertir con el dólar del país correcto
+  try{ if(typeof productos!=="undefined" && productos.length && typeof nexoMonedasIniciar==="function") nexoMonedasIniciar(); }catch(e){}
 }
 
 function normalizarMLA(v){
@@ -8351,7 +8356,8 @@ async function nexoRefrescarPreciosML(forzar){
         const p = lote.find(q=>String(q.ml_item_id).toUpperCase()===String(it.id).toUpperCase()); if(!p) continue;
         if(await nexoAplicarPrecioML(p, Number(it.price))) cambios++;
         if(it.status && it.status !== p.estado_ml){
-          p.estado_ml = it.status; cambios++;
+          const antes = p.estado_ml; p.estado_ml = it.status; cambios++;
+          if(it.status === "active" && antes && antes !== "active" && typeof rpzAlActivarse === "function") rpzAlActivarse(p);
           try{ await sbUpdate("productos", "sku=eq."+encodeURIComponent(p.sku), {estado_ml: it.status}); }catch(e){}
         }
       }
@@ -8409,7 +8415,7 @@ function rpzMargenGlobal(){ const v = Number(appConfig && appConfig.repricer && 
 async function rpzCargar(forzar){
   if(rpz.cargado && !forzar) return;
   try{
-    const filas = await sbGet("nexo_repricer", "select=sku,activo,margen_min");
+    const filas = await sbGet("nexo_repricer", "select=sku,activo,margen_min,precio_pendiente,pendiente_at");
     rpz.activos = {}; (filas||[]).forEach(f=>{ if(f.activo) rpz.activos[f.sku] = f; });
     rpz.cargado = true;
   }catch(e){ console.warn("Repricer:", e); }
@@ -8490,10 +8496,10 @@ function rpzPintarActivos(){
   const el = document.getElementById("rpzActivos"); if(!el) return;
   const skus = Object.keys(rpz.activos);
   if(!skus.length){ el.innerHTML = `<div style="color:var(--text-soft);font-size:12px;padding:8px 0;">Todavía no activaste ningún producto. En la tabla de Análisis tocá 🤖 al lado del 💲 del producto que querés automatizar.</div>`; return; }
-  el.innerHTML = `<div class="table-wrap"><table style="width:100%;font-size:12px;"><thead><tr><th>SKU</th><th>Producto</th><th class="num">Precio actual</th><th class="num">Margen mín.</th><th></th></tr></thead><tbody>${skus.map(s=>{
+  el.innerHTML = `<div class="table-wrap"><table style="width:100%;font-size:12px;"><thead><tr><th>SKU</th><th>Producto</th><th class="num">Precio actual</th><th class="num">Margen mín.</th><th>Pendiente</th><th></th></tr></thead><tbody>${skus.map(s=>{
     const p = (productos||[]).find(q=>q.sku===s) || {};
     const pr = typeof feeRaw==="function" && Number(feeRaw(s).ml_price) > 0 ? Number(feeRaw(s).ml_price) : p.precio;
-    return `<tr><td><span class="sku-tag">${esc(s)}</span></td><td>${esc(p.nombre||"")}</td><td class="num">$${fmt(pr||0)}</td><td class="num">${rpz.activos[s].margen_min||rpzMargenGlobal()}%</td>
+    return `<tr><td><span class="sku-tag">${esc(s)}</span></td><td>${esc(p.nombre||"")}</td><td class="num">$${fmt(pr||0)}</td><td class="num">${rpz.activos[s].margen_min||rpzMargenGlobal()}%</td><td>${rpz.activos[s].precio_pendiente?`<span style="color:#b45309;font-weight:700;" title="La publicación está pausada y ML no deja cambiar el precio. Se aplica sola cuando se active.">⏳ $${fmt(rpz.activos[s].precio_pendiente)}</span>`:""}</td>
       <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="rpzEjecutar(true,'${esc(s)}')" title="Calcular sin cambiar nada">🔍 Simular</button> <button class="btn btn-ghost btn-sm" onclick="rpzToggle('${esc(s)}').then(rpzPintarActivos)">Desactivar</button></td></tr>`;
   }).join("")}</tbody></table></div>`;
 }
@@ -8513,6 +8519,17 @@ async function rpzCargarLog(){
       <td class="num">${l.precio_antes!=null?"$"+fmt(l.precio_antes):""}</td><td class="num">${l.precio_nuevo!=null?"$"+fmt(l.precio_nuevo):""}</td>
       <td class="num">${l.competidor!=null?"$"+fmt(l.competidor):""}</td><td class="num">${l.margen!=null?l.margen+"%":""}</td><td style="color:var(--text-soft);">${esc(l.motivo||"")}</td></tr>`).join("")}</tbody></table></div>`;
   }catch(e){ el.innerHTML = `<div style="color:var(--red);font-size:12px;">No se pudo leer el historial: ${esc(e.message)}</div>`; }
+}
+
+// Precio calculado que queda esperando porque la publicación está pausada (ML no deja cambiarlo)
+function rpzEtiquetaPend(p){
+  const r = rpz.activos[p.sku]; if(!r || !r.precio_pendiente) return "";
+  return `<div style="text-align:right;margin-top:3px;"><span title="Publicación pausada: ML no deja cambiar el precio ahora. Cuando se active, NEXO pone este precio solo (regla: competidor − $1 sin bajar del margen mínimo)." style="display:inline-block;font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px;background:#fef3c7;color:#b45309;cursor:help;white-space:nowrap;">🤖 ⏳ $${fmt(r.precio_pendiente)} al activarse</span></div>`;
+}
+// Si una publicación con precio pendiente pasa a activa, se aplica en el momento (sin esperar la corrida de cada hora)
+function rpzAlActivarse(p){
+  const r = rpz.activos[p.sku];
+  if(r && r.precio_pendiente && typeof esAdmin==="function" && esAdmin()) setTimeout(()=>rpzEjecutar(false, p.sku).then(()=>rpzCargar(true)).then(()=>{ try{ renderAnalisis(); }catch(e){} }), 500);
 }
 // ================================================================
 // 🏷️ Promociones en Análisis ML
@@ -8581,6 +8598,28 @@ function promoAvisoCambioPrecio(sku){
   return ` Está en la promoción "${i.activa.nombre}" (−${String(i.activa.pct??"").replace(".",",")}%): ML no deja cambiar el precio normal mientras dure. Sacalo primero de la promoción en la sección Promociones, cambiá el precio y volvé a sumarlo.`;
 }
 setInterval(()=>{ try{ const s=document.querySelector(".section.active"); if(s && s.id==="sec-analisis" && document.visibilityState==="visible") nexoRefrescarPromosML(false); }catch(e){} }, 60*1000);
+// ================================================================
+// País de cada cliente (nexo_clientes.pais)
+// Define desde el arranque el sitio de MercadoLibre, la moneda local y qué dólar se usa:
+// Argentina → dólar de dolarapi (el tipo elegido); Uruguay y otros → cotización de MercadoLibre.
+// Antes el país salía recién al verificar la cuenta de ML, y para entonces los costos en US$
+// ya se habían convertido con el dólar argentino.
+// ================================================================
+const NEXO_PAISES = {AR:{n:"Argentina", f:"🇦🇷", site:"MLA"}, UY:{n:"Uruguay", f:"🇺🇾", site:"MLU"}, BR:{n:"Brasil", f:"🇧🇷", site:"MLB"}, MX:{n:"México", f:"🇲🇽", site:"MLM"}, CL:{n:"Chile", f:"🇨🇱", site:"MLC"}, CO:{n:"Colombia", f:"🇨🇴", site:"MCO"}, PE:{n:"Perú", f:"🇵🇪", site:"MPE"}};
+let clientePais = "AR";
+function nexoPaisSitio(p){ return (NEXO_PAISES[p]||NEXO_PAISES.AR).site; }
+function nexoAplicarPais(p){
+  clientePais = NEXO_PAISES[p] ? p : "AR";
+  nexoAplicarSitio(nexoPaisSitio(clientePais));
+}
+function nexoPaisOpciones(sel){ return Object.entries(NEXO_PAISES).map(([k,v])=>`<option value="${k}" ${k===sel?"selected":""}>${v.f} ${v.n}</option>`).join(""); }
+async function saCambiarPais(id, p){
+  try{
+    await saRpc("nexo_sa_set_pais", {cli:id, p});
+    toast(`País actualizado: ${NEXO_PAISES[p].f} ${NEXO_PAISES[p].n}`,"ok");
+    if(id === clienteId){ nexoAplicarPais(p); }
+  }catch(e){ toast("No se pudo cambiar el país: "+e.message,"err"); renderClientes(); }
+}
 
 // ================================================================
 // SUPERADMIN NEXO
@@ -8811,6 +8850,7 @@ async function renderClientes(){
   const tb = document.getElementById("saTabla");
   try{
     const filas = await saRpc("nexo_sa_resumen");
+    let _paises = {}; try{ (await sbGet("nexo_clientes","select=id,pais")).forEach(x=>_paises[x.id]=x.pais); }catch(e){}
     const tot = (k)=>filas.reduce((a,f)=>a+Number(f[k]||0),0);
     document.getElementById("saStats").innerHTML =
       `<div class="stat-card"><div class="label">Clientes</div><div class="value">${filas.length}</div></div>`+
@@ -8819,6 +8859,7 @@ async function renderClientes(){
       `<div class="stat-card"><div class="label">Ventas</div><div class="value">${tot("ventas").toLocaleString("es-AR")}</div></div>`;
     tb.innerHTML = filas.map(f => `<tr>
         <td><strong>${esc(f.nombre)}</strong>${f.id===clienteId?' <span style="font-size:11px;color:var(--green);">● activo ahora</span>':''}</td>
+        <td><select onchange="saCambiarPais('${f.id}', this.value)" title="Define la moneda y qué dólar se usa para convertir costos y precios en US$" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;">${nexoPaisOpciones(_paises[f.id]||"AR")}</select></td>
         <td>${f.activo?"🟢 Activo":"⚪ Inactivo"}</td>
         <td>${f.usuarios}</td>
         <td>${esc(f.cuentas_ml||"—")}</td>
@@ -8829,7 +8870,7 @@ async function renderClientes(){
           ${f.id===clienteId?"":`<button class="btn btn-primary btn-sm" onclick="saCambiarCliente('${f.id}')">Entrar</button>`}
           <button class="btn btn-ghost btn-sm" onclick="saVerUsuarios('${f.id}','${esc(f.nombre).replace(/'/g,"")}')">Usuarios</button>
           <button class="btn btn-ghost btn-sm" onclick="saEstadoCliente('${f.id}',${!f.activo})">${f.activo?"Desactivar":"Activar"}</button>
-        </td></tr>`).join("") || `<tr><td colspan="8" style="padding:16px;">Sin clientes</td></tr>`;
+        </td></tr>`).join("") || `<tr><td colspan="9" style="padding:16px;">Sin clientes</td></tr>`;
   }catch(e){
     tb.innerHTML = `<tr><td colspan="8" style="padding:16px;color:var(--red);">Error: ${esc(e.message)}</td></tr>`;
   }
@@ -8857,6 +8898,8 @@ async function saCrearCliente(){
   if(!nombre){ toast("Poné el nombre del cliente.","err"); return; }
   try{
     const d = await saAdmin({action:"crear_cliente", nombre, tienda_url});
+    const _pais = (document.getElementById("saNuevoPais")||{}).value || "AR";
+    if(_pais !== "AR"){ try{ await saRpc("nexo_sa_set_pais", {cli:d.cliente.id, p:_pais}); }catch(e){ toast("Cliente creado, pero no se pudo guardar el país: "+e.message,"err",6000); } }
     toast("✅ Cliente "+d.cliente.nombre+" creado","ok");
     document.getElementById("saNuevoNombre").value = ""; document.getElementById("saNuevoTienda").value = "";
     await saCargarSelector(clienteId);
@@ -10438,7 +10481,7 @@ function renderAnalisis(){
           <input type="number" id="precioAn_${esc(p.sku)}" value="${a.precio||''}" style="width:82px;padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:right;" ${p.ml_item_id?'':'disabled title="Vinculá una Publicación ML en Catálogo primero"'}>
           ${p.ml_item_id?`<button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="actualizarPrecioAnalisis('${esc(p.sku)}')" title="${p.precio_dinamico?'Tiene la etiqueta de precio dinámico — si está PAUSADA en ML podés actualizarlo igual; si está ACTIVA, va a fallar con el motivo exacto':'Actualizar este precio en MercadoLibre'}">💲</button>`:''}${rpzBotonFila(p)}
         </div>
-        <div style="font-size:10px;color:${a.desactualizado?'var(--red)':'var(--text-soft)'};text-align:right;">${a.precioMLReal?(a.desactualizado?'⚠️ desactualizado':'✓ real ML'):'* sin sincronizar'}</div>${promoEtiqueta(p)}
+        <div style="font-size:10px;color:${a.desactualizado?'var(--red)':'var(--text-soft)'};text-align:right;">${a.precioMLReal?(a.desactualizado?'⚠️ desactualizado':'✓ real ML'):'* sin sincronizar'}</div>${promoEtiqueta(p)}${rpzEtiquetaPend(p)}
       </td>
       ${celdaCompetencia(p)}
       <td class="num" style="color:var(--orange);cursor:help;" title="${a.comisionReal?('Cargo por vender: $'+fmt(a.comisionPct)+(a.comisionFixed>0?' + Costo por unidad: $'+fmt(a.comisionFixed):'')):'Comisión estimada (10%) — sincronizá para tener el dato real'}">$${fmt(a.comision)}${a.comisionReal?' ✓':' *'}</td>
