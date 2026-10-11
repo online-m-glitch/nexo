@@ -3933,7 +3933,7 @@ function nexoAplicarSitio(site){
   if(typeof MERC_SITE==="undefined" || MERC_SITE===site) return;
   MERC_SITE = site;
   try{ if(typeof _mercDimCache!=="undefined") Object.keys(_mercDimCache).forEach(k=>delete _mercDimCache[k]); }catch(e){}
-  try{ if(typeof mercDolar!=="undefined"){ mercDolar.cotiz = null; mercDolar.at = null; mercDolar.manual = null; } }catch(e){}
+  try{ if(typeof mercDolar!=="undefined"){ mercDolar.cotiz = null; mercDolar.at = null; mercDolar.manual = null; mercDolar.sitio = null; } }catch(e){}
   try{ if(typeof _mercDolarProm!=="undefined") _mercDolarProm = null; if(typeof _nexoMonedasCotiz!=="undefined") _nexoMonedasCotiz = null; }catch(e){}
   document.body.dataset.sitio = site;
   // Si los productos ya estaban cargados, se vuelven a convertir con el dólar del país correcto
@@ -4771,6 +4771,8 @@ let mercDolar = {cotiz:null, at:null, manual:null, cargando:false};
 function mercDolarTipo(){ if(nexoSitio()!=="MLA") return "oficial"; const t = appConfig && appConfig.dolar_tipo; return MERC_DOLAR_TIPOS[t] ? t : "oficial"; }
 function mercDolarValor(){
   if(mercDolar.manual > 0) return mercDolar.manual;
+  // La cotización guardada tiene que ser del país actual (al cambiar de cliente AR → UY no se usa el dólar argentino)
+  if(mercDolar.sitio && mercDolar.sitio !== nexoSitio()) return 0;
   const c = mercDolar.cotiz && mercDolar.cotiz[mercDolarTipo()];
   return c ? c.venta : 0;
 }
@@ -4783,19 +4785,20 @@ async function mercDolarCargar(forzar){
 }
 async function _mercDolarTraer(forzar){
   mercDolar.cargando = true; mercDolarPintar();
+  const sitio = nexoSitio();   // si mientras tanto se cambia de país, esta respuesta se descarta
   try{
     if(nexoSitio()!=="MLA"){
       // Fuera de Argentina: cotización de MercadoLibre (USD → moneda local)
       const r = await mlGet(`/currency_conversions/search?from=USD&to=${nexoMoneda()}`);
       const v = r.ok && r.data ? Number(r.data.ratio||r.data.rate) : 0;
-      if(v > 0){ mercDolar.cotiz = {oficial:{venta:v, compra:null, fecha:r.data.creation_date, fuente:"MercadoLibre"}}; mercDolar.at = Date.now(); }
+      if(v > 0 && sitio === nexoSitio()){ mercDolar.sitio = sitio; mercDolar.cotiz = {oficial:{venta:v, compra:null, fecha:r.data.creation_date, fuente:"MercadoLibre"}}; mercDolar.at = Date.now(); }
       throw "listo";
     }
     const r = await fetch("https://dolarapi.com/v1/dolares");
     const d = await r.json();
     const c = {};
     (Array.isArray(d)?d:[]).forEach(x=>{ if(x && x.casa && Number(x.venta)>0) c[x.casa] = {venta:Number(x.venta), compra:Number(x.compra)||null, fecha:x.fechaActualizacion}; });
-    if(Object.keys(c).length){ mercDolar.cotiz = c; mercDolar.at = Date.now(); }
+    if(Object.keys(c).length && sitio === nexoSitio()){ mercDolar.sitio = sitio; mercDolar.cotiz = c; mercDolar.at = Date.now(); }
   }catch(e){ /* sin conexión: se puede cargar a mano */ }
   mercDolar.cargando = false;
   if(forzar) mercDolar.manual = null;
@@ -4811,6 +4814,7 @@ function mercDolarIniciar(){
 }
 function mercDolarPintar(){
   try{ if(typeof nexoDolarBadgePintar==="function") setTimeout(nexoDolarBadgePintar, 0); }catch(e){}
+  try{ if(typeof nexoRevisarCotiz==="function") setTimeout(nexoRevisarCotiz, 0); }catch(e){}
   const inp = document.getElementById("mercDolarValor"), info = document.getElementById("mercDolarInfo");
   if(inp && document.activeElement!==inp){ const v = mercDolarValor(); inp.value = v ? Math.round(v*100)/100 : ""; }
   if(!info) return;
@@ -8332,7 +8336,19 @@ function nexoNormalizarProducto(p){
   }
   return p;
 }
-function nexoNormalizarProductos(){ (productos||[]).forEach(nexoNormalizarProducto); }
+function nexoNormalizarProductos(){ (productos||[]).forEach(nexoNormalizarProducto); _nexoCotizUsada = cotizUSD(); _nexoCotizSitio = nexoSitio(); }
+// Dólar con el que están convertidos los productos en memoria. Si cambia el dólar (o el país del cliente),
+// se vuelven a convertir desde los valores originales y se redibuja la sección abierta.
+let _nexoCotizUsada = null, _nexoCotizSitio = null;
+function nexoRevisarCotiz(){
+  if(typeof productos === "undefined" || !productos.length || !nexoHayMonedaExt()) return false;
+  const c = cotizUSD();
+  if(c === _nexoCotizUsada && _nexoCotizSitio === nexoSitio()) return false;
+  nexoNormalizarProductos();
+  _nexoMonedasCotiz = c || null;
+  try{ const s = document.querySelector(".section.active"); if(s && typeof mostrarSeccion==="function") mostrarSeccion(s.id.replace(/^sec-/,"")); }catch(e){}
+  return true;
+}
 function nexoHayMonedaExt(){ return (productos||[]).some(p=>esMonedaExt(p.costo_moneda) || esMonedaExt(p.precio_moneda)); }
 // Valor original de costo / precio, para mostrar o editar
 function costoOrig(p){ return p ? (p.__costoDB !== undefined ? p.__costoDB : Number(p.costo)||0) : 0; }
