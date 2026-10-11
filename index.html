@@ -2,7 +2,15 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1e1b4b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NEXO">
+<link rel="apple-touch-icon" href="nexo-icono-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="nexo-icono-192.png">
 <title>NEXO — Panel de Administración</title>
 <script>
 (function(){
@@ -546,6 +554,59 @@ th:last-child{border-top-right-radius:8px;}
   #toast{bottom:calc(24px + env(safe-area-inset-bottom));}
   input,select,textarea{font-size:16px !important;} /* evita el zoom automático de iOS al enfocar */
   .modal{border-radius:14px 14px 0 0;}
+}
+
+/* ===== 📱 NEXO en el celular ===== */
+#nxBarra{display:none;}
+.nx-solo-movil{display:none !important;}
+.nx-hoy{padding:14px 16px;margin-bottom:16px;}
+.nx-hoy-tit{display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;margin-bottom:10px;}
+.nx-hoy-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
+.nx-hoy-caja{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1.5px solid var(--border);border-radius:12px;background:var(--surface);}
+.nx-hoy-ico{font-size:22px;line-height:1;}
+.nx-hoy-lbl{font-size:11px;color:var(--text-soft);font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
+.nx-hoy-val{font-size:20px;font-weight:800;line-height:1.2;}
+.nx-hoy-sub{font-size:11px;color:var(--text-soft);}
+@media(max-width:768px){
+  /* Barra inferior */
+  #nxBarra{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:140;background:var(--surface);border-top:1.5px solid var(--border);
+    padding:4px 4px calc(4px + env(safe-area-inset-bottom));box-shadow:0 -4px 16px rgba(0,0,0,.08);}
+  #nxBarra button{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:600;
+    color:var(--text-soft);padding:6px 0;min-height:52px;cursor:pointer;border-radius:10px;}
+  #nxBarra button span{font-size:21px;line-height:1;position:relative;}
+  #nxBarra button.on{color:var(--brand-primario);background:color-mix(in srgb, var(--brand-primario) 10%, transparent);}
+  #nxBarra b{position:absolute;top:-6px;right:-14px;background:var(--red);color:#fff;font-size:10px;font-weight:800;border-radius:10px;padding:1px 5px;min-width:16px;text-align:center;}
+  .main-content{padding-bottom:calc(70px + env(safe-area-inset-bottom));}
+  #toast{bottom:calc(84px + env(safe-area-inset-bottom)) !important;}
+  .nx-solo-movil{display:inline-flex !important;}
+  #sec-analisis:not(.nx-ver-herr) .card-header .toolbar ~ .toolbar{display:none !important;}
+  .stats-grid{grid-template-columns:1fr 1fr !important;}
+  .nx-hoy-grid{grid-template-columns:1fr 1fr;}
+  .nx-hoy-caja:first-child{grid-column:span 2;}
+  /* Tablas como tarjetas */
+  table.nx-cards{min-width:0 !important;width:100%;border-collapse:separate;}
+  table.nx-cards thead{display:none;}
+  table.nx-cards tbody tr{display:block;border:1.5px solid var(--border);border-radius:12px;margin:0 0 10px;padding:8px 12px;background:var(--surface);box-shadow:var(--shadow);}
+  table.nx-cards tbody td{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:5px 0 !important;white-space:normal !important;
+    border:none !important;text-align:right;max-width:none !important;font-size:13px;}
+  table.nx-cards tbody td::before{content:attr(data-label);font-size:11px;color:var(--text-soft);font-weight:700;text-align:left;flex-shrink:0;}
+  table.nx-cards tbody td[data-label=""]::before{display:none;}
+  table.nx-cards tbody td.nx-cab{justify-content:flex-start;text-align:left;font-weight:700;}
+  table.nx-cards tbody td.nx-cab::before{display:none;}
+  table.nx-cards tbody td.nx-cab + td.nx-cab{border-bottom:1px dashed var(--border) !important;padding-bottom:8px !important;margin-bottom:4px;}
+  table.nx-cards tbody td[colspan]{display:block;text-align:center;}
+  table.nx-cards tbody td.nx-mini{display:inline-flex;width:auto;padding:0 8px 4px 0 !important;vertical-align:middle;}
+  table.nx-cards tbody td.nx-mini::before{display:none;}
+  /* Catálogo: en el celular se ocultan los datos de menos uso */
+  #productosBody td[data-label="Rubro"],#productosBody td[data-label="Precio Tienda ($)"],#productosBody td[data-label="Margen % Tienda"],
+  #productosBody td[data-label="Stock Mín"],#productosBody td[data-label="Tienda"],#productosBody td[data-label="ML"]{display:none !important;}
+  table.nx-cards tbody td > div{justify-content:flex-end;}
+  .table-wrap:has(table.nx-cards){overflow-x:visible;}
+  .table-wrap:has(table.nx-cards)::after{display:none;}
+  /* Atención ML más cómoda con el dedo */
+  .atn-card textarea{width:100%;min-height:90px;}
+  .atn-rapidas{display:flex;flex-wrap:wrap;gap:6px;}
+  .atn-card .btn-primary{min-height:44px;padding:10px 18px;font-size:14px;}
 }
 
 /* Reducir movimiento para quien lo prefiera (accesibilidad) */
@@ -8796,6 +8857,142 @@ async function nexoAbrirLinkDirecto(){
   // Se limpia el link para que recargar no lo repita
   history.replaceState(null, "", location.pathname + location.search + "#atencion");
 }
+// ================================================================
+// 📱 NEXO en el celular
+// 1) Tablas como tarjetas: en pantallas chicas cada fila de las tablas principales se muestra como una
+//    tarjeta (etiqueta : valor), sin deslizar de costado.
+// 2) Barra inferior fija con lo más usado: Hoy, Atención (con contador), Análisis, Productos y Menú.
+// 3) Resumen de hoy arriba del Panel: ventas de hoy en ML (en vivo), preguntas, mensajes, reclamos y stock.
+// ================================================================
+const NX_TABLAS_TARJETA = ["productosBody","stockBody","analisisBody","ventasBody","mlVentasBody","alertasBody","movimientosBody","comprasBody","panelAlertas","panelTopVentas","tVentasBody","rentBody","fmlStockBody"];
+function nxEsMovil(){ return window.matchMedia("(max-width:768px)").matches; }
+// Copia el título de cada columna a sus celdas (data-label) para mostrarlo en la tarjeta
+function nxEtiquetar(tbody){
+  const tabla = tbody && tbody.closest("table"); if(!tabla) return;
+  tabla.classList.add("nx-cards");
+  const ths = [...tabla.querySelectorAll("thead th")].map(th=>th.textContent.replace(/\s+/g," ").trim());
+  tbody.querySelectorAll(":scope > tr").forEach(tr=>{
+    let col = 0;
+    [...tr.children].forEach((td, i)=>{
+      const span = Number(td.getAttribute("colspan")||1);
+      const lbl = span > 1 ? "" : (ths[col] || "");
+      if(td.dataset.label !== lbl) td.dataset.label = lbl;
+      td.classList.toggle("nx-cab", span === 1 && /^(SKU|Producto|Publicación|Cliente)$/i.test(lbl));
+      td.classList.toggle("nx-mini", span === 1 && (!lbl || /^(Img|Imagen)$/i.test(lbl)));
+      col += span;
+    });
+  });
+}
+const _nxObs = new MutationObserver(muts=>{
+  const vistos = new Set();
+  muts.forEach(m=>{ const tb = m.target.closest ? (m.target.tagName==="TBODY" ? m.target : m.target.closest("tbody")) : null; if(tb && !vistos.has(tb) && NX_TABLAS_TARJETA.includes(tb.id)){ vistos.add(tb); nxEtiquetar(tb); } });
+});
+// Análisis ML: en el celular las herramientas (impuestos, sincronizar comisiones…) quedan detrás de un botón
+function nxHerramientasAnalisis(){
+  const sec = document.getElementById("sec-analisis"); if(!sec || document.getElementById("nxBtnHerr")) return;
+  const tb = sec.querySelector(".toolbar"); if(!tb) return;
+  const b = document.createElement("button");
+  b.id = "nxBtnHerr"; b.type = "button"; b.className = "btn btn-ghost btn-sm nx-solo-movil";
+  b.textContent = "⚙️ Más opciones";
+  b.onclick = ()=>{ sec.classList.toggle("nx-ver-herr"); b.textContent = sec.classList.contains("nx-ver-herr") ? "⚙️ Menos opciones" : "⚙️ Más opciones"; };
+  tb.appendChild(b);
+}
+function nxActivarTarjetas(){
+  try{ nxHerramientasAnalisis(); }catch(e){}
+  NX_TABLAS_TARJETA.forEach(id=>{ const tb = document.getElementById(id); if(tb && !tb.dataset.nxObs){ tb.dataset.nxObs = "1"; nxEtiquetar(tb); _nxObs.observe(tb, {childList:true}); } });
+}
+
+// ── Barra inferior ──
+function nxIrA(sec){
+  if(typeof navClick === "function"){ navClick({preventDefault(){}, ctrlKey:false, metaKey:false, shiftKey:false, altKey:false, button:0}, sec); }
+  else if(typeof mostrarSeccion === "function") mostrarSeccion(sec);
+  window.scrollTo({top:0, behavior:"smooth"});
+  nxBarraMarcar();
+}
+function nxBarraMarcar(){
+  const act = (document.querySelector(".section.active")||{}).id || "";
+  document.querySelectorAll("#nxBarra button[data-sec]").forEach(b=>b.classList.toggle("on", "sec-"+b.dataset.sec === act));
+  const n = (atn.cnt.preg||0)+(atn.cnt.msg||0)+(atn.cnt.rec||0);
+  const bd = document.getElementById("nxBarraCnt"); if(bd){ bd.textContent = n > 99 ? "99+" : n; bd.style.display = n ? "" : "none"; }
+}
+function nxBarraIniciar(){
+  if(document.getElementById("nxBarra")) return;
+  const d = document.createElement("nav");
+  d.id = "nxBarra";
+  d.innerHTML = `
+    <button data-sec="panel" onclick="nxIrA('panel')"><span>🏠</span>Hoy</button>
+    <button data-sec="atencion" onclick="nxIrA('atencion')"><span>💬<b id="nxBarraCnt" style="display:none;"></b></span>Atención</button>
+    <button data-sec="analisis" onclick="nxIrA('analisis')"><span>📈</span>Precios</button>
+    <button data-sec="productos" onclick="nxIrA('productos')"><span>📦</span>Productos</button>
+    <button onclick="openSidebar()"><span>☰</span>Más</button>`;
+  (document.getElementById("adminPanel") || document.body).appendChild(d);
+  nxBarraMarcar();
+}
+
+// ── Resumen de hoy (Panel) ──
+let _nxHoy = {at:0, datos:null, cargando:false};
+function nxFechaAR(off){ return new Date(Date.now() - 3*3600*1000 + (off||0)*86400000).toISOString().slice(0,10); }
+async function nxHoyCargar(forzar){
+  if(_nxHoy.cargando) return;
+  if(!forzar && _nxHoy.datos && Date.now() - _nxHoy.at < 5*60*1000) return;
+  if(typeof mlToken === "undefined" || !mlToken) return;
+  _nxHoy.cargando = true;
+  try{
+    const uid = await atnUid();
+    const desde = nxFechaAR(-1) + "T00:00:00.000-03:00";
+    const r = await mlGet(`/orders/search?seller=${uid}&order.date_created.from=${encodeURIComponent(desde)}&sort=date_desc&limit=50`);
+    const ords = (r.ok && r.data && r.data.results) || [];
+    const hoy = nxFechaAR(0), ayer = nxFechaAR(-1);
+    const dia = iso => new Date(Date.parse(iso) - 3*3600*1000).toISOString().slice(0,10);
+    const sum = f => { const xs = ords.filter(o=>o.status==="paid" && dia(o.date_created)===f); return {n:xs.length, u:xs.reduce((a,o)=>a+(o.order_items||[]).reduce((b,it)=>b+Number(it.quantity||0),0),0), t:xs.reduce((a,o)=>a+(typeof aLocal==="function"?aLocal(Number(o.total_amount)||0, o.currency_id):Number(o.total_amount)||0),0)}; };
+    _nxHoy.datos = {hoy:sum(hoy), ayer:sum(ayer)};
+    _nxHoy.at = Date.now();
+  }catch(e){}
+  finally{ _nxHoy.cargando = false; }
+  nxHoyPintar();
+}
+function nxHoyPintar(){
+  const el = document.getElementById("nxHoy"); if(!el) return;
+  const d = _nxHoy.datos, c = atn.cnt || {};
+  const sinStock = (productos||[]).filter(p=>calcularStockDeposito(p.sku)<=0 && p.stockOn!==0).length;
+  const sim = (typeof monedaLocal==="function" && monedaLocal()==="UYU") ? "$U" : "$";
+  const caja = (ico, txt, val, sub, sec, color) => `<div class="nx-hoy-caja" ${sec?`onclick="nxIrA('${sec}')" style="cursor:pointer;"`:""}>
+      <div class="nx-hoy-ico">${ico}</div><div><div class="nx-hoy-lbl">${txt}</div><div class="nx-hoy-val" style="${color?"color:"+color+";":""}">${val}</div>${sub?`<div class="nx-hoy-sub">${sub}</div>`:""}</div></div>`;
+  const v = d ? d.hoy : null, a = d ? d.ayer : null;
+  el.innerHTML = `
+    <div class="nx-hoy-tit">📅 Hoy en MercadoLibre <span style="font-weight:400;color:var(--text-soft);font-size:11px;">${_nxHoy.at ? "act. "+new Date(_nxHoy.at).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}) : ""}</span>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="nxHoyCargar(true); atnContar && atnContar();">🔄</button></div>
+    <div class="nx-hoy-grid">
+      ${caja("🛒","Ventas de hoy", v ? `${v.n} <span style="font-size:12px;font-weight:600;">(${v.u} u.)</span>` : "—", v ? `${sim}${fmt(v.t)} · ayer ${a.n} (${sim}${fmt(a.t)})` : (typeof mlToken!=="undefined" && mlToken ? "cargando…" : "conectá MercadoLibre"), null, "var(--green)")}
+      ${caja("❓","Preguntas", c.preg==null?"—":c.preg, c.preg?"sin responder":"al día ✅", "atencion", c.preg?"var(--red)":"")}
+      ${caja("💬","Mensajes", c.msg==null?"—":c.msg, c.msg?"sin leer":"al día ✅", "atencion", c.msg?"var(--orange)":"")}
+      ${caja("⚠️","Reclamos", c.rec==null?"—":c.rec, c.rec?"abiertos":"ninguno ✅", "atencion", c.rec?"var(--red)":"")}
+      ${caja("📦","Sin stock", sinStock, "productos en 0 en depósito", "stock", sinStock?"var(--red)":"")}
+    </div>`;
+}
+function nxHoyIniciar(){
+  const ps = document.getElementById("panelStats"); if(!ps || document.getElementById("nxHoy")) return;
+  const d = document.createElement("div"); d.id = "nxHoy"; d.className = "card nx-hoy";
+  ps.parentNode.insertBefore(d, ps);
+  nxHoyPintar();
+}
+
+// ── Enganches ──
+if(typeof atnPintarContadores === "function"){
+  const _atnPintarSinMovil = atnPintarContadores;
+  atnPintarContadores = function(){ const r = _atnPintarSinMovil.apply(this, arguments); try{ nxBarraMarcar(); nxHoyPintar(); }catch(e){} return r; };
+}
+if(typeof mostrarSeccion === "function"){
+  const _mostrarSeccionSinMovil = mostrarSeccion;
+  mostrarSeccion = async function(id){ const r = await _mostrarSeccionSinMovil.apply(this, arguments); try{ nxBarraMarcar(); nxActivarTarjetas(); if(id==="panel"){ nxHoyIniciar(); nxHoyCargar(false); } }catch(e){} return r; };
+}
+if(typeof renderPanel === "function"){
+  const _renderPanelSinMovil = renderPanel;
+  renderPanel = function(){ const r = _renderPanelSinMovil.apply(this, arguments); try{ nxHoyIniciar(); nxHoyPintar(); }catch(e){} return r; };
+}
+document.addEventListener("DOMContentLoaded", ()=>{ try{ nxBarraIniciar(); nxActivarTarjetas(); nxHoyIniciar(); }catch(e){} });
+setTimeout(()=>{ try{ nxBarraIniciar(); nxActivarTarjetas(); nxHoyIniciar(); nxHoyCargar(false); }catch(e){} }, 9000);
+setInterval(()=>{ try{ if(document.visibilityState==="visible" && (document.querySelector(".section.active")||{}).id==="sec-panel") nxHoyCargar(false); }catch(e){} }, 60*1000);
 
 // ================================================================
 // SUPERADMIN NEXO
