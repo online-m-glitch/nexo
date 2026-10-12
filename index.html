@@ -5158,11 +5158,14 @@ async function cambiarVistaAnalisis(){
 }
 function calcAnaliPub(pub){
   const prod = pub.sku ? productos.find(p=>String(p.sku||"").toUpperCase()===String(pub.sku).toUpperCase()) : null;
-  const precio = Number(pub.precio)||0;
+  // Moneda de la publicación (Uruguay: US$ o $U). Precio y comisión vienen de ML en esa moneda → se pasan a moneda local
+  const moneda = pub.moneda || (prod && prod.precio_moneda) || null;
+  const precioPub = Number(pub.precio)||0;
+  const precio = aLocal(precioPub, moneda);
   const costo = prod ? (Number(prod.costo)||0) : null;
   const comisionReal = pub.fee_amount != null;
-  const comision = comisionReal ? Number(pub.fee_amount) : precio*0.10;
-  const comisionFixed = comisionReal ? (Number(pub.fee_fixed)||0) : 0;
+  const comision = comisionReal ? aLocal(Number(pub.fee_amount), moneda) : precio*0.10;
+  const comisionFixed = comisionReal ? aLocal(Number(pub.fee_fixed)||0, moneda) : 0;
   const envio = comisionReal ? (Number(pub.shipping_cost)||0) : 0;
   const impuestoPct = (appConfig.impuesto_pct!=null) ? Number(appConfig.impuesto_pct) : 0;
   const percepcionPct = (appConfig.percepcion_pct!=null) ? Number(appConfig.percepcion_pct) : 0;
@@ -5179,7 +5182,7 @@ function calcAnaliPub(pub){
     else if(margenPct>=10){ rec="Revisar"; cls="badge-orange"; }
     else { rec="Pérdida"; cls="badge-red"; }
   }
-  return {prod, precio, costo, comisionReal, comision, comisionFixed, envio, impuesto, percepcion, recibis, margen, margenPct, rec, cls};
+  return {prod, moneda, precioPub, precio, costo, comisionReal, comision, comisionFixed, envio, impuesto, percepcion, recibis, margen, margenPct, rec, cls};
 }
 function renderAnalisisPublicaciones(){
   const thead = document.getElementById("analisisThead");
@@ -5227,7 +5230,7 @@ function renderAnalisisPublicaciones(){
       </td>
       <td style="max-width:220px;">${esc(pub.titulo)}<div style="font-size:10px;color:var(--text-soft);">${pub.vendidos||0} vendidos · stock ${pub.stock_disponible||0}</div></td>
       <td class="num">${a.costo!=null?"$"+fmt(a.costo):"—"}</td>
-      <td class="num">$${fmt(a.precio)}</td>
+      <td class="num">${esMonedaExt(a.moneda) ? `${simMoneda(a.moneda)} ${a.precioPub.toLocaleString("es-AR",{maximumFractionDigits:2})}<div style="font-size:10px;color:var(--text-soft);">≈ ${monedaTxt(null)}${fmt(a.precio)}</div>` : "$"+fmt(a.precio)}</td>
       <td class="num" style="color:var(--orange);" title="${a.comisionReal?("Comisión real para esta publicación"+(a.comisionFixed>0?" (incluye $"+fmt(a.comisionFixed)+" de costo fijo)":"")):"Estimada 10% — tocá 🔄 Comisiones por publicación"}">$${fmt(a.comision)}${a.comisionReal?" ✓":" *"}</td>
       <td class="num" style="color:var(--orange);">$${fmt(a.envio)}${a.comisionReal?(a.envio>0?" ✓":""):" *"}</td>
       <td class="num" style="color:var(--orange);">$${fmt(a.impuesto)} *</td>
@@ -5254,7 +5257,7 @@ async function sincronizarFeesPublicaciones(){
   const ids = [...new Set(lista.map(p=>p.ml_item_id))];
   const items = {};
   for(let i=0;i<ids.length;i+=20){
-    const r = await mlGet("/items?ids="+ids.slice(i,i+20).join(",")+"&attributes=id,price,listing_type_id,category_id,status,shipping,variations");
+    const r = await mlGet("/items?ids="+ids.slice(i,i+20).join(",")+"&attributes=id,price,currency_id,listing_type_id,category_id,status,shipping,variations");
     if(r.ok && Array.isArray(r.data)) r.data.forEach(x=>{ if(x && x.code===200 && x.body) items[x.body.id] = x.body; });
     else { toast("❌ "+_mlError(r), "err", 6000); if(btn) btn.disabled = false; return; }
   }
@@ -5280,6 +5283,7 @@ async function sincronizarFeesPublicaciones(){
       if(logistic) qs.append("logistic_type", logistic);
       if(mode) qs.append("shipping_mode", mode);
       if(peso!=null) qs.append("billable_weight", peso);
+      if(it.currency_id && esMonedaExt(it.currency_id)) qs.append("currency_id", it.currency_id);
       const fe = await mlGet("/sites/"+nexoSitio()+"/listing_prices?"+qs.toString());
       let opt = fe.ok ? fe.data : null;
       if(Array.isArray(opt)) opt = opt.find(o=>o.listing_type_id===it.listing_type_id) || opt[0];
@@ -5288,7 +5292,7 @@ async function sincronizarFeesPublicaciones(){
         fee_amount:Number(opt.sale_fee_amount)||0, fee_fixed:Number(opt.sale_fee_details && opt.sale_fee_details.fixed_fee)||0,
         shipping_cost:envio, fees_at:new Date().toISOString()};
       await sbUpdate("nexo_ml_publicaciones", "ml_item_id=eq."+encodeURIComponent(pub.ml_item_id)+"&variacion_id=eq."+encodeURIComponent(pub.variacion_id||""), campos);
-      Object.assign(pub, campos);
+      Object.assign(pub, campos, it.currency_id ? {moneda: esMonedaExt(it.currency_id) ? it.currency_id : null} : {});
       ok++;
     }catch(e){ fail++; errores.push(pub.ml_item_id+": "+e.message); }
     finally{ hechos++; if(info) info.innerHTML = `⏳ Comisiones por publicación… ${hechos} de ${lista.length}`; }
@@ -9009,6 +9013,31 @@ if(typeof renderPanel === "function"){
 document.addEventListener("DOMContentLoaded", ()=>{ try{ nxBarraIniciar(); nxActivarTarjetas(); nxHoyIniciar(); }catch(e){} });
 setTimeout(()=>{ try{ nxBarraIniciar(); nxActivarTarjetas(); nxHoyIniciar(); nxHoyCargar(false); }catch(e){} }, 9000);
 setInterval(()=>{ try{ if(document.visibilityState==="visible" && (document.querySelector(".section.active")||{}).id==="sec-panel") nxHoyCargar(false); }catch(e){} }, 60*1000);
+// ================================================================
+// 💱 Precio de venta en la moneda en que está publicado
+// Uruguay: la publicación puede estar en US$ o en $U → el precio se muestra y se edita en esa moneda
+// (con la equivalencia en $U abajo). Argentina: siempre en pesos.
+// Costos, comisiones, márgenes y "Recibís" siguen en moneda local para poder comparar.
+// ================================================================
+function nxPrecioEnPub(p){ return !!(p && esMonedaExt(p.precio_moneda)); }
+// Valor del precio en la moneda de la publicación (a.precio viene en moneda local)
+function nxPrecioPubValor(p, precioLocal){
+  if(!nxPrecioEnPub(p)) return precioLocal;
+  const v = deLocal(precioLocal, p.precio_moneda);
+  return v ? Math.round(v*100)/100 : 0;
+}
+function nxPrecioInput(p, a){ const v = nxPrecioPubValor(p, a && a.precio); return v || ""; }
+function nxPrecioPrefijo(p){ return nxPrecioEnPub(p) ? `<span style="font-size:11px;font-weight:700;color:var(--green);" title="Publicado en dólares en MercadoLibre">${simMoneda(p.precio_moneda)}</span>` : ""; }
+function nxPrecioEquiv(p, a){
+  if(!nxPrecioEnPub(p) || !(a && a.precio)) return "";
+  return `<div style="font-size:10px;color:var(--text-soft);text-align:right;" title="Equivalente en moneda local con el dólar del día; con este valor se calculan comisión, impuestos y margen">≈ ${monedaTxt(null)}${fmt(a.precio)}</div>`;
+}
+// Celda "Precio ML" del Catálogo
+function nxPrecioCelda(p){
+  if(!nxPrecioEnPub(p)) return "$"+fmt(p.precio);
+  const orig = precioOrig(p);
+  return `<span title="Publicado en ${simMoneda(p.precio_moneda)} en MercadoLibre">${simMoneda(p.precio_moneda)} ${orig.toLocaleString("es-AR",{maximumFractionDigits:2})}</span><div style="font-size:10.5px;color:var(--text-soft);" title="Equivalente en moneda local con el dólar del día">≈ ${monedaTxt(null)}${fmt(p.precio)}</div>`;
+}
 
 // ================================================================
 // SUPERADMIN NEXO
@@ -9701,7 +9730,7 @@ function renderProductos(){
       <td data-col="proveedor">${esc(p.proveedor||"")}</td>
       <td data-col="rubro" style="font-size:12px;">${esc(p.rubro||"")}</td>
       <td data-col="costo" class="num">$${fmt(p.costo)}${p.costo_moneda==="USD"?`<div style="font-size:10.5px;color:var(--text-soft);" title="Costo cargado en dólares, convertido con el dólar del día">US$ ${costoOrig(p).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>`:""}</td>
-      <td data-col="precioml" class="num">$${fmt(p.precio)}</td>
+      <td data-col="precioml" class="num">${nxPrecioCelda(p)}</td>
       <td data-col="preciotienda" class="num">$${fmt(p.precioTienda||0)}</td>
       <td data-col="margenml" class="num ${margenCls}">${margen}</td>
       <td data-col="margentienda" class="num ${margenTiendaCls}">${margenTienda}</td>
@@ -10867,10 +10896,10 @@ function renderAnalisis(){
       <td class="num">$${fmt(p.costo)}</td>
       <td class="num" title="${a.precioMLReal?(a.desactualizado?'⚠️ Distinto al precio cargado en catálogo ($'+fmt(p.precio)+') — actualizá uno de los dos':'Precio real vigente en la publicación de ML'):'Precio de catálogo (sin sincronizar con ML todavía)'}">
         <div style="display:flex;gap:4px;align-items:center;justify-content:flex-end;">
-          <input type="number" id="precioAn_${esc(p.sku)}" value="${a.precio||''}" style="width:82px;padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:right;" ${p.ml_item_id?'':'disabled title="Vinculá una Publicación ML en Catálogo primero"'}>
+          ${nxPrecioPrefijo(p)}<input type="number" step="any" id="precioAn_${esc(p.sku)}" data-moneda="${esc(p.precio_moneda||'')}" value="${nxPrecioInput(p,a)}" style="width:82px;padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:right;" ${p.ml_item_id?'':'disabled title="Vinculá una Publicación ML en Catálogo primero"'}>
           ${p.ml_item_id?`<button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="actualizarPrecioAnalisis('${esc(p.sku)}')" title="${p.precio_dinamico?'Tiene la etiqueta de precio dinámico — si está PAUSADA en ML podés actualizarlo igual; si está ACTIVA, va a fallar con el motivo exacto':'Actualizar este precio en MercadoLibre'}">💲</button>`:''}${rpzBotonFila(p)}
         </div>
-        <div style="font-size:10px;color:${a.desactualizado?'var(--red)':'var(--text-soft)'};text-align:right;">${a.precioMLReal?(a.desactualizado?'⚠️ desactualizado':'✓ real ML'):'* sin sincronizar'}</div>${promoEtiqueta(p)}${rpzEtiquetaPend(p)}
+        <div style="font-size:10px;color:${a.desactualizado?'var(--red)':'var(--text-soft)'};text-align:right;">${a.precioMLReal?(a.desactualizado?'⚠️ desactualizado':'✓ real ML'):'* sin sincronizar'}</div>${nxPrecioEquiv(p,a)}${promoEtiqueta(p)}${rpzEtiquetaPend(p)}
       </td>
       ${celdaCompetencia(p)}
       <td class="num" style="color:var(--orange);cursor:help;" title="${a.comisionReal?('Cargo por vender: $'+fmt(a.comisionPct)+(a.comisionFixed>0?' + Costo por unidad: $'+fmt(a.comisionFixed):'')):'Comisión estimada (10%) — sincronizá para tener el dato real'}">$${fmt(a.comision)}${a.comisionReal?' ✓':' *'}</td>
@@ -11160,6 +11189,7 @@ async function sincronizarFeesML(){
     if(shippingMode) qs.append("shipping_mode",shippingMode);
     if(billableWeight!=null) qs.append("billable_weight",billableWeight);
     if(tagCuotas) qs.append("tags",tagCuotas);
+    if(item.currency_id && typeof esMonedaExt==="function" && esMonedaExt(item.currency_id)) qs.append("currency_id",item.currency_id);
     const feeRes = await proxyGet("/sites/"+site+"/listing_prices?"+qs.toString());
     if(!feeRes.ok || !feeRes.data || feeRes.data.error){
       return {sku:p.sku, fail:true, motivo:feeRes.data};
