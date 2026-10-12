@@ -7118,7 +7118,7 @@ async function atnContar(){
     mlGet(`/post-purchase/v1/claims/search?players.user_id=${uid}&players.role=respondent&status=opened&limit=1`)
   ]);
   atn.cnt.preg = q.ok && q.data ? (Number(q.data.total)||0) : atn.cnt.preg;
-  atn.cnt.msg = m.ok && m.data && Array.isArray(m.data.results) ? m.data.results.length : atn.cnt.msg;
+  atn.cnt.msg = m.ok && m.data && Array.isArray(m.data.results) ? atnFiltrarLeidos(m.data.results).length : atn.cnt.msg;
   atn.cnt.rec = c.ok && c.data && c.data.paging ? (Number(c.data.paging.total)||0) : atn.cnt.rec;
   atnPintarContadores();
 }
@@ -7277,7 +7277,7 @@ async function atnCargarMensajes(){
   const uid = await atnUid();
   const r = await mlGet(`/messages/unread?role=seller&tag=post_sale`);
   if(!r.ok || !r.data) throw new Error(_mlError(r));
-  const res = Array.isArray(r.data.results) ? r.data.results : [];
+  const res = atnFiltrarLeidos(Array.isArray(r.data.results) ? r.data.results : []);
   atn.cnt.msg = res.length; atnPintarContadores();
   atn.convs = (await _pool(res.slice(0,40), 4, async x=>{
     const packId = (String(x.resource||"").match(/\/packs\/(\d+)/)||[])[1];
@@ -7379,11 +7379,37 @@ async function atnEnviarMsg(){
   c.msgs.push({text:txt, from:{user_id:c.uid}, message_date:{created:new Date().toISOString()}});
   atnPintarConv(); toast("Mensaje enviado ✅","ok");
 }
+// ML marca como leídos solo los mensajes que devuelve la consulta (los más nuevos primero).
+// Antes se pedía limit=1 y volvía solo el último mensaje (que era tuyo) → los del comprador quedaban sin leer.
+// Ahora se traen todos los de la conversación con mark_as_read=true y se verifica contra /messages/unread.
+const _atnLeidos = {};   // packId → hora en que se marcó (ML tarda unos segundos en reflejarlo)
+function atnFiltrarLeidos(res){
+  const ahora = Date.now();
+  return res.filter(x=>{ const pk = (String(x.resource||"").match(/\/packs\/(\d+)/)||[])[1]; return !(pk && _atnLeidos[pk] && ahora - _atnLeidos[pk] < 3*60*1000); });
+}
 async function atnMarcarLeido(){
   if(checkViewer("Marcar mensajes")) return;
   const c = atn.convs[atn._conv]; if(!c) return;
-  const r = await mlGet(`/messages/packs/${c.packId}/sellers/${c.uid}?tag=post_sale&limit=1`);
-  if(!r.ok){ toast("No se pudo marcar: "+_mlError(r),"err"); return; }
+  const btn = document.querySelector('#modalAtnConv button[onclick="atnMarcarLeido()"]'); if(btn) btn.disabled = true;
+  try{
+    let off = 0, total = 1, ok = true, err = null;
+    while(off < total && off < 500){
+      const r = await mlGet(`/messages/packs/${c.packId}/sellers/${c.uid}?tag=post_sale&mark_as_read=true&limit=50&offset=${off}`);
+      if(!r.ok){ ok = false; err = r; break; }
+      total = Number(r.data && r.data.paging && r.data.paging.total) || 0;
+      off += 50;
+    }
+    if(!ok){ toast("No se pudo marcar: "+_mlError(err),"err"); return; }
+    _atnLeidos[c.packId] = Date.now();
+    // Verificación: ¿ML sigue mostrando esta conversación sin leer?
+    setTimeout(async()=>{
+      try{
+        const u = await mlGet(`/messages/unread?role=seller&tag=post_sale`);
+        const sigue = u.ok && u.data && (u.data.results||[]).some(x=>String(x.resource||"").includes("/packs/"+c.packId+"/"));
+        if(sigue) toast("MercadoLibre todavía muestra esa conversación sin leer. Probá de nuevo en un minuto.","err",7000);
+      }catch(e){}
+    }, 4000);
+  } finally { if(btn) btn.disabled = false; }
   atn.convs.splice(atn._conv, 1); atn.cnt.msg = atn.convs.length; atnPintarContadores();
   document.getElementById("modalAtnConv").classList.remove("show");
   renderAtnMensajes(); toast("Marcado como leído en ML","ok");
