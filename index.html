@@ -581,7 +581,13 @@ th:last-child{border-top-right-radius:8px;}
   .nx-solo-movil{display:inline-flex !important;}
   #sec-analisis:not(.nx-ver-herr) .card-header .toolbar ~ .toolbar{display:none !important;}
   .stats-grid{grid-template-columns:1fr 1fr !important;}
-  .nx-hoy-grid{grid-template-columns:1fr 1fr;}
+  .nx-hoy-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+  .nx-hoy{padding:12px !important;}
+  .nx-hoy-caja{min-width:0;padding:8px 10px;gap:8px;}
+  .nx-hoy-caja > div:last-child{min-width:0;}
+  .nx-hoy-caja:not(:first-child){flex-direction:column;align-items:flex-start;gap:2px;}
+  .nx-hoy-ico{font-size:18px;}
+  .nx-hoy-lbl{font-size:10px;letter-spacing:0;}
   .nx-hoy-caja:first-child{grid-column:span 2;}
   /* Tablas como tarjetas */
   table.nx-cards{min-width:0 !important;width:100%;border-collapse:separate;}
@@ -603,6 +609,36 @@ th:last-child{border-top-right-radius:8px;}
   table.nx-cards tbody td > div{justify-content:flex-end;}
   .table-wrap:has(table.nx-cards){overflow-x:visible;}
   .table-wrap:has(table.nx-cards)::after{display:none;}
+  /* Ajuste fino (v45): que nada se salga del ancho de la pantalla, aun con letra grande en el celular */
+  html,body{overflow-x:hidden;}
+  .section > div[style*="padding:24px"]{padding:10px 8px !important;}
+  .page-header{padding:12px 14px !important;}
+  .card-header{padding:12px !important;}
+  .card-header .toolbar{gap:6px !important;}
+  .card-header .toolbar > input,.card-header .toolbar > .search-input{flex:1 1 100%;min-width:0 !important;width:100% !important;max-width:none !important;font-size:14px !important;}
+  .card-header .toolbar > select{flex:1 1 calc(50% - 6px);min-width:0 !important;width:auto !important;max-width:100% !important;font-size:13px !important;text-overflow:ellipsis;}
+  .card-header .toolbar > .btn,.card-header .toolbar > label.btn,.card-header .toolbar > div > .btn{flex:1 1 calc(50% - 6px);justify-content:center;min-width:0;white-space:normal;font-size:12px;text-align:center;}
+  .card-header .toolbar > div{flex:1 1 calc(50% - 6px);min-width:0;}
+  .card-header .toolbar > div > .btn{width:100%;}
+  table.nx-cards,table.nx-cards tbody{display:block;width:100% !important;}
+  table.nx-cards tbody tr{max-width:100%;box-sizing:border-box;}
+  table.nx-cards tbody td{min-width:0;overflow-wrap:anywhere;}
+  table.nx-cards tbody td::before{font-family:'Segoe UI',system-ui,sans-serif;max-width:48%;font-size:12px;}
+  table.nx-cards tbody td > div{flex-wrap:wrap;}
+  table.nx-cards tbody td.nx-cab{flex-wrap:wrap;}
+  table.nx-cards tbody td::before{overflow-wrap:normal;word-break:normal;}
+  #analisisBody td[data-label^="Precio ML"]{flex-wrap:wrap;row-gap:2px;}
+  #analisisBody td[data-label^="Precio ML"] > div:first-of-type{flex-wrap:nowrap;margin-left:auto;}
+  #analisisBody td[data-label^="Precio ML"] > div ~ div,#analisisBody td[data-label^="Precio ML"] > span{flex-basis:100%;text-align:right;}
+  #analisisBody input[id^="precioAn_"]{width:76px !important;font-size:14px !important;}
+  #analisisBody td .btn{padding:6px 8px !important;}
+  /* Catálogo: las herramientas de menos uso quedan detrás de "Más opciones" */
+  #sec-productos:not(.nx-ver-herr) .card-header .toolbar > button[onclick^="abrirPublicadorMasivo"],
+  #sec-productos:not(.nx-ver-herr) .card-header .toolbar > button[onclick^="abrirSugerenciaStockMinimo"],
+  #sec-productos:not(.nx-ver-herr) .card-header .toolbar > button[onclick^="exportarCSV"],
+  #sec-productos:not(.nx-ver-herr) .card-header .toolbar > label.btn,
+  #sec-productos:not(.nx-ver-herr) .card-header .toolbar > #btnElimSel,
+  #sec-productos:not(.nx-ver-herr) .card-header .toolbar > div{display:none !important;}
   /* Atención ML más cómoda con el dedo */
   .atn-card textarea{width:100%;min-height:90px;}
   .atn-rapidas{display:flex;flex-wrap:wrap;gap:6px;}
@@ -2265,18 +2301,22 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
               <div class="form-group" style="margin:0;">
                 <label>Proveedor</label>
-                <input type="text" id="lpProveedor" list="provListProd" placeholder="Ej: ANTHAY" style="text-transform:uppercase;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:200px;">
+                <input type="text" id="lpProveedor" list="provListProd" placeholder="Ej: ANTHAY" oninput="lpMonedaPorProveedor()" onchange="lpMonedaPorProveedor()" style="text-transform:uppercase;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:200px;">
               </div>
               <div class="form-group" style="margin:0;">
                 <label>Fecha de la lista</label>
                 <input type="date" id="lpFecha" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;">
               </div>
               <div class="form-group" style="margin:0;">
+                <label>Moneda de la lista</label>
+                <select id="lpMoneda" onchange="if(lpLineasPreview.length) renderPreviewListaPrecios()" title="¿En qué moneda vienen los precios del proveedor? Si es en dólares, el costo queda guardado en US$ y se pasa a pesos con el dólar del día." style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;"><option value="">$ pesos</option><option value="USD">US$ dólares</option></select>
+              </div>
+              <div class="form-group" style="margin:0;">
                 <label>Archivo (Excel o CSV)</label>
                 <input type="file" id="lpArchivo" accept=".xlsx,.xls,.csv" onchange="procesarArchivoListaPrecios(this)">
               </div>
             </div>
-            <div style="font-size:11px;color:var(--text-soft);">El archivo debe tener columnas con <strong>SKU</strong>, <strong>Título/Producto</strong>, <strong>Precio de lista</strong>, y una o más columnas que digan <strong>"Descuento"</strong> (se aplican en cadena, ej: -10% y después -5%). Si el archivo ya trae una columna "Precio neto", se usa directo en vez de calcularlo.</div>
+            <div style="font-size:11px;color:var(--text-soft);">El archivo debe tener columnas con <strong>SKU</strong>, <strong>Título/Producto</strong>, <strong>Precio de lista</strong>, y una o más columnas que digan <strong>"Descuento"</strong> (se aplican en cadena, ej: -10% y después -5%). Si el archivo ya trae una columna "Precio neto", se usa directo en vez de calcularlo. Si la lista está en <strong>dólares</strong>, elegí <strong>US$</strong> en "Moneda de la lista": el costo queda guardado en US$ y se pasa a pesos solo con el dólar del día.</div>
           </div>
         </div>
 
@@ -8897,8 +8937,20 @@ async function nexoAbrirLinkDirecto(){
     else toast("Esa pregunta ya no está pendiente (puede que ya se haya respondido).","ok",6000);
   }
   if(tab === "mensajes" && p.p){
-    const i = await nexoEsperar(()=>{ const k = (atn.convs||[]).findIndex(c=>String(c.packId)===String(p.p)); return k >= 0 ? k+1 : 0; }, 25000);
-    if(i) atnAbrirConv(i-1); else toast("Esa conversación ya no tiene mensajes sin leer.","ok",6000);
+    // Primero se espera un poco a la lista de "sin leer"; si no aparece (ya leída en ML, o el celular tarda en cargar
+    // todas), la conversación se trae directo de ML y se abre igual, lista para responder.
+    const buscar = ()=>{ const k = (atn.convs||[]).findIndex(c=>String(c.packId)===String(p.p)); return k >= 0 ? k+1 : 0; };
+    let i = await nexoEsperar(buscar, 5000);
+    if(!i){
+      try{
+        toast("Abriendo la conversación…","ok",2500);
+        const uid = await atnUid();
+        const c = await atnCargarConv(String(p.p), uid, 0);
+        i = buscar();
+        if(!i && c && !c.error){ atn.convs = atn.convs || []; atn.convs.push(c); i = atn.convs.length; }
+      }catch(e){ toast("No se pudo abrir la conversación: "+e.message,"err",6000); }
+    }
+    if(i) atnAbrirConv(i-1);
   }
   // Se limpia el link para que recargar no lo repita
   history.replaceState(null, "", location.pathname + location.search + "#atencion");
@@ -8934,11 +8986,12 @@ const _nxObs = new MutationObserver(muts=>{
   muts.forEach(m=>{ const tb = m.target.closest ? (m.target.tagName==="TBODY" ? m.target : m.target.closest("tbody")) : null; if(tb && !vistos.has(tb) && NX_TABLAS_TARJETA.includes(tb.id)){ vistos.add(tb); nxEtiquetar(tb); } });
 });
 // Análisis ML: en el celular las herramientas (impuestos, sincronizar comisiones…) quedan detrás de un botón
-function nxHerramientasAnalisis(){
-  const sec = document.getElementById("sec-analisis"); if(!sec || document.getElementById("nxBtnHerr")) return;
+function nxHerramientasAnalisis(){ nxBotonHerr("sec-analisis", "nxBtnHerr"); nxBotonHerr("sec-productos", "nxBtnHerrProd"); }
+function nxBotonHerr(secId, btnId){
+  const sec = document.getElementById(secId); if(!sec || document.getElementById(btnId)) return;
   const tb = sec.querySelector(".toolbar"); if(!tb) return;
   const b = document.createElement("button");
-  b.id = "nxBtnHerr"; b.type = "button"; b.className = "btn btn-ghost btn-sm nx-solo-movil";
+  b.id = btnId; b.type = "button"; b.className = "btn btn-ghost btn-sm nx-solo-movil";
   b.textContent = "⚙️ Más opciones";
   b.onclick = ()=>{ sec.classList.toggle("nx-ver-herr"); b.textContent = sec.classList.contains("nx-ver-herr") ? "⚙️ Menos opciones" : "⚙️ Más opciones"; };
   tb.appendChild(b);
@@ -9064,6 +9117,194 @@ function nxPrecioCelda(p){
   const orig = precioOrig(p);
   return `<span title="Publicado en ${simMoneda(p.precio_moneda)} en MercadoLibre">${simMoneda(p.precio_moneda)} ${orig.toLocaleString("es-AR",{maximumFractionDigits:2})}</span><div style="font-size:10.5px;color:var(--text-soft);" title="Equivalente en moneda local con el dólar del día">≈ ${monedaTxt(null)}${fmt(p.precio)}</div>`;
 }
+// ================================================================
+// 💵 Listas de precios de proveedores en dólares (pensado para Uruguay, sirve en cualquier país)
+// · Al subir la lista se elige la moneda: pesos (moneda local) o US$. Si el archivo dice "US$/USD/dólar"
+//   en los encabezados, se elige US$ solo. Se recuerda la moneda de la última lista de cada proveedor.
+// · Se guarda en listas_precios_items.moneda ("USD" o null = moneda local).
+// · Comparar con Catálogo: compara en la moneda de la lista (el costo actual se convierte si hace falta)
+//   y al actualizar, el costo queda guardado en US$ (costo_moneda = "USD"), así se reconvierte solo
+//   con el dólar del día.
+// ================================================================
+function lpMonedaSel(){ const s = document.getElementById("lpMoneda"); return s && s.value === "USD" ? "USD" : null; }
+function lpSim(m){ return m === "USD" ? "US$" : (typeof monedaTxt === "function" ? monedaTxt(null) : "$"); }
+function lpFmt(v, m){ return lpSim(m) + (m === "USD" ? Number(v||0).toLocaleString("es-AR",{minimumFractionDigits:0, maximumFractionDigits:2}) : fmt(v)); }
+function lpMonedaOpciones(){
+  const s = document.getElementById("lpMoneda"); if(!s) return;
+  const v = s.value;
+  const loc = (typeof monedaLocal === "function" && monedaLocal() === "UYU") ? "$U pesos uruguayos" : "$ pesos";
+  s.innerHTML = `<option value="">${loc}</option><option value="USD">US$ dólares</option>`;
+  s.value = v === "USD" ? "USD" : "";
+}
+// Al escribir el proveedor: si su última lista fue en US$, se elige US$
+function lpMonedaPorProveedor(){
+  const prov = String((document.getElementById("lpProveedor")||{}).value||"").trim().toUpperCase(); if(!prov) return;
+  const ult = (listasPrecios||[]).filter(x=>String(x.proveedor||"").toUpperCase()===prov).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)))[0];
+  if(ult){ const s = document.getElementById("lpMoneda"); if(s){ s.value = ult.moneda === "USD" ? "USD" : ""; } }
+}
+
+// ── Lectura del archivo: detectar dólares en los encabezados ──
+const _lpProcesarRowsOrig = procesarRowsListaPrecios;
+procesarRowsListaPrecios = function(rows){
+  try{
+    const enc = (rows||[]).slice(0, 12).map(r=>(r||[]).join(" ")).join(" ").toLowerCase();
+    if(/u\$s|us\$|\busd\b|d[oó]lar/.test(enc)){
+      const s = document.getElementById("lpMoneda");
+      if(s && s.value !== "USD"){ s.value = "USD"; toast("La lista parece estar en dólares: se marcó la moneda US$. Cambiala si no es así.","ok",6000); }
+    }
+  }catch(e){}
+  return _lpProcesarRowsOrig.apply(this, arguments);
+};
+renderPreviewListaPrecios = function(){
+  const m = lpMonedaSel();
+  const enCat = lpLineasPreview.filter(l=>l.enCatalogo).length;
+  document.getElementById('lpPreviewResumen').textContent =
+    `${lpLineasPreview.length} productos en el archivo · precios en ${m==="USD"?"dólares (US$)":"pesos"} · ${enCat} existen en tu Catálogo (se van a poder comparar) · ${lpLineasPreview.length-enCat} no están en tu Catálogo`;
+  document.getElementById('lpPreviewBody').innerHTML = lpLineasPreview.map(l=>`
+    <tr>
+      <td><span class="sku-tag">${esc(l.sku)}</span></td>
+      <td style="max-width:220px;font-size:12px;">${esc(l.titulo)}</td>
+      <td class="num">${lpFmt(l.precioLista, m)}</td>
+      <td style="font-size:12px;">${l.descuentos.length?l.descuentos.map(d=>d+'%').join(' + '):'—'}</td>
+      <td class="num" style="font-weight:700;">${lpFmt(l.precioNeto, m)}</td>
+      <td>${l.enCatalogo?'<span class="badge badge-green">✓ Sí</span>':'<span class="badge badge-red">✕ No</span>'}</td>
+    </tr>`).join('');
+  document.getElementById('lpPreviewWrap').style.display='block';
+};
+
+// ── Guardar la lista con su moneda ──
+confirmarImportLista = async function(){
+  if(checkViewer("Importar lista de precios")) return;
+  const proveedor=document.getElementById('lpProveedor').value.trim().toUpperCase();
+  const fecha=document.getElementById('lpFecha').value || new Date().toISOString().split('T')[0];
+  if(!proveedor){ toast('Ingresá el proveedor.','err'); return; }
+  if(!lpLineasPreview.length){ toast('No hay datos para importar.','err'); return; }
+  const moneda = lpMonedaSel();
+  const rowsData = lpLineasPreview.map(l=>({
+    proveedor, fecha, sku:l.sku, titulo:l.titulo, precio_lista:l.precioLista, descuentos:l.descuentos, precio_neto:l.precioNeto, moneda
+  }));
+  mostrarCargando(true);
+  try{
+    const guardadas = await sbInsertBulk('listas_precios_items', rowsData, 300);
+    guardadas.forEach((g,idx)=>listasPrecios.unshift(Object.assign({},rowsData[idx],g||{})));
+    toast(`✅ ${guardadas.length} precios importados de ${proveedor}${moneda==="USD"?" (en US$)":""}`,'ok',4000);
+  }catch(e){
+    toast('Error importando: '+e.message,'err',6000);
+    mostrarCargando(false);
+    return;
+  }
+  mostrarCargando(false);
+  document.getElementById('lpPreviewWrap').style.display='none';
+  document.getElementById('lpArchivo').value='';
+  lpLineasPreview=[];
+  actualizarProvLists();
+  renderComparacionListaPrecios();
+  renderSkuSinCatalogo();
+};
+
+// ── SKU sin catálogo ──
+const _lpSinCatOrig = renderSkuSinCatalogo;
+renderSkuSinCatalogo = function(){
+  _lpSinCatOrig.apply(this, arguments);
+  // Precio neto con la moneda de cada lista
+  const lista = window._lpSinCatalogoActual || [];
+  document.querySelectorAll('#lpSinCatBody tr').forEach((tr,i)=>{
+    const it = lista[i]; if(!it) return;
+    const td = tr.children[4]; if(td) td.textContent = lpFmt(it.precio_neto, it.moneda);
+  });
+};
+const _lpCrearOrig = crearProductoDesdeLista;
+crearProductoDesdeLista = function(i){
+  const item = (window._lpSinCatalogoActual||[])[i];
+  const r = _lpCrearOrig.apply(this, arguments);
+  try{
+    const s = document.getElementById("pCostoMoneda");
+    if(item && s){ s.value = item.moneda === "USD" ? "USD" : ""; if(typeof nexoFormEquivalente === "function") nexoFormEquivalente(); }
+  }catch(e){}
+  return r;
+};
+
+// ── Comparar con Catálogo (en la moneda de la lista) ──
+// Costo actual del producto expresado en la moneda m de la lista
+function lpCostoEn(p, m){
+  if(m === "USD"){
+    if(p.costo_moneda === "USD") return Number(costoOrig(p))||0;
+    return Math.round(deLocal(p.costo||0, "USD")*100)/100;
+  }
+  return Number(p.costo)||0;   // moneda local (ya convertido si estaba en US$)
+}
+renderComparacionListaPrecios = function(){
+  try{ lpMonedaOpciones(); }catch(e){}
+  const ultimos = ultimasListasPorSku();
+  const selProv = document.getElementById('lpFiltroProveedor');
+  const provsUnicos = [...new Set(ultimos.map(i=>i.proveedor))].sort();
+  const valorActual = selProv.value;
+  selProv.innerHTML = '<option value="">Todos los proveedores</option>' + provsUnicos.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  selProv.value = provsUnicos.includes(valorActual) ? valorActual : '';
+  const filtro = selProv.value;
+  const sinDolar = ultimos.some(i=>i.moneda==="USD") && !(cotizUSD() > 0);
+  const filas = ultimos
+    .filter(item=>!filtro || item.proveedor===filtro)
+    .map(item=>{
+      const p = productos.find(x=>x.sku.toUpperCase()===item.sku.toUpperCase());
+      if(!p) return null;
+      const m = item.moneda === "USD" ? "USD" : null;
+      const costo = lpCostoEn(p, m);
+      // Si la lista y el costo están en la misma moneda original, se compara exacto
+      const mismo = (m === "USD") === (p.costo_moneda === "USD");
+      const diferencia = Math.round((Number(item.precio_neto) - costo)*100)/100;
+      return { item, p, m, costo, diferencia, mismo };
+    })
+    .filter(Boolean)
+    .sort((a,b)=>Math.abs(b.diferencia)-Math.abs(a.diferencia));
+  const tbody = document.getElementById('lpCompBody');
+  const empty = document.getElementById('lpCompEmpty');
+  if(!filas.length){ tbody.innerHTML=''; empty.style.display='block'; window._lpFilasActuales = []; return; }
+  empty.style.display='none';
+  tbody.innerHTML = (sinDolar ? `<tr><td colspan="8" style="color:var(--orange);font-size:12px;">⚠️ Todavía no hay cotización del dólar: la comparación de listas en US$ con costos en pesos puede no ser exacta.</td></tr>` : "") + filas.map((f,i)=>{
+    const {item,p,m,costo,diferencia,mismo}=f;
+    const sinCambio = Math.abs(diferencia)<0.01 && mismo;
+    const loc = m === "USD" && cotizUSD() > 0 ? `<div style="font-size:10px;color:var(--text-soft);">≈ ${lpFmt(aLocal(item.precio_neto,"USD"), null)}</div>` : "";
+    const conv = m === "USD" && p.costo_moneda !== "USD" ? `<div style="font-size:10px;color:var(--text-soft);" title="El costo de este producto está cargado en pesos; se pasó a US$ con el dólar del día para comparar. Al actualizar queda guardado en US$.">en pesos: ${lpFmt(p.costo||0, null)}</div>` : "";
+    return `<tr data-sku="${esc(item.sku)}" data-nuevo="${item.precio_neto}">
+      <td><input type="checkbox" class="lp-check" ${sinCambio?'disabled':'checked'} data-idx="${i}"></td>
+      <td><span class="sku-tag">${esc(item.sku)}</span></td>
+      <td style="max-width:180px;">${esc(p.nombre)}</td>
+      <td>${esc(item.proveedor)}${m==="USD"?' <span class="badge badge-green" style="font-size:9px;">US$</span>':''}</td>
+      <td style="font-size:12px;color:var(--text-soft);">${fFecha(item.fecha)}</td>
+      <td class="num">${lpFmt(costo, m)}${conv}</td>
+      <td class="num" style="font-weight:700;">${lpFmt(item.precio_neto, m)}${loc}</td>
+      <td class="num ${diferencia>0?'num-neg':diferencia<0?'num-pos':''}">${sinCambio?'—':(Math.abs(diferencia)<0.01?'cambia a '+lpSim(m):(diferencia>0?'+':'')+lpFmt(diferencia, m).replace(lpSim(m)+'-','-'+lpSim(m)))}</td>
+    </tr>`;
+  }).join('');
+  window._lpFilasActuales = filas;
+};
+// Actualizar costos: queda guardado en la moneda de la lista
+_actualizarCostosDesdeFilas = async function(filas){
+  if(!filas.length){ toast('No hay nada para actualizar.','ok'); return; }
+  mostrarCargando(true);
+  let ok=0, err=0;
+  for(const f of filas){
+    try{
+      const m = f.item.moneda === "USD" ? "USD" : null;
+      const v = Number(f.item.precio_neto)||0;
+      await sbUpdate('productos','sku=eq.'+encodeURIComponent(f.p.sku),{costo:v, costo_moneda:m});
+      if(m){ f.p.__costoDB = v; f.p.costo_moneda = m; nexoNormalizarProducto(f.p); }
+      else nexoSetCostoLocal(f.p, v);
+      ok++;
+    }catch(e){ err++; }
+  }
+  mostrarCargando(false);
+  renderComparacionListaPrecios(); renderProductos(); renderAnalisis();
+  toast(`💾 ${ok} costo(s) actualizado(s)${err?` · ${err} con error`:''}`,'ok',4000);
+};
+actualizarTodosCostos = async function(){
+  if(checkViewer("Actualizar costos")) return;
+  const filas=(window._lpFilasActuales||[]).filter(f=>!(Math.abs(f.diferencia)<0.01 && f.mismo));
+  await _actualizarCostosDesdeFilas(filas);
+};
+document.addEventListener("DOMContentLoaded", ()=>{ try{ lpMonedaOpciones(); }catch(e){} });
+setTimeout(()=>{ try{ lpMonedaOpciones(); }catch(e){} }, 4000);
 
 // ================================================================
 // SUPERADMIN NEXO
