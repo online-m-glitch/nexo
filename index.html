@@ -9488,6 +9488,137 @@ const _fdifSyncOrig = fullSyncStock;
 fullSyncStock = async function(){ _fdifStockAt = null; return await _fdifSyncOrig.apply(this, arguments); };
 const _fdifAplicarOrig = fullAplicar;
 fullAplicar = async function(){ _fdifStockAt = null; return await _fdifAplicarOrig.apply(this, arguments); };
+// ================================================================
+// 🧾 Impuestos reales desde la facturación de MercadoLibre
+// La función del servidor nexo-impuestos lee la facturación de ML de las ventas de los últimos 90 días
+// (todos los días, de a poco porque ML limita esa API) y calcula el % real que retiene ML:
+//   Argentina: IIBB por provincia del comprador · Uruguay: retención y reducción de IVA.
+// Acá se muestra ese % real, el detalle por provincia, y se elige si Análisis ML y el precio automático
+// usan el % real de IIBB automáticamente (app_config.impuestos_auto) o un % cargado a mano.
+// El segundo campo (percepción / otros impuestos) siempre queda a mano: puede ser IVA u otro impuesto
+// que el vendedor paga aparte de lo que retiene ML.
+// ================================================================
+function impReal(){ const v = appConfig && appConfig.impuestos_reales; return v && typeof v === "object" ? v : null; }
+function impAuto(){ return !(appConfig && appConfig.impuestos_auto === false); }
+function impPctTxt(v){ return v == null ? "—" : String(Math.round(v*100)/100).replace(".", ",") + "%"; }
+function impProvTxt(p){ return p === "sin retención" ? "Sin retención" : String(p||"").replace(/_/g," ").replace(/\b\w/g, c=>c.toUpperCase()); }
+function impNombres(){ return (typeof NEXO_IMP_NOMBRES!=="undefined" && NEXO_IMP_NOMBRES[typeof clientePais!=="undefined"?clientePais:"AR"]) || {imp:"Impuesto %", perc:"Percepción %"}; }
+
+// Cartelito al lado de los % en Análisis ML
+function impBadgePintar(){
+  const inp = document.getElementById("percepcionPctInput"); if(!inp) return;
+  let el = document.getElementById("impRealBadge");
+  if(!el){
+    el = document.createElement("button"); el.type = "button"; el.id = "impRealBadge"; el.className = "btn btn-ghost btn-sm";
+    el.onclick = ()=>abrirImpuestosReales();
+    const lbl = inp.closest("label"); (lbl || inp).insertAdjacentElement("afterend", el);
+  }
+  const r = impReal();
+  if(r && r.ventas){
+    el.innerHTML = `🧾 Retiene ML: <b>${impPctTxt(r.iibb_pct)}</b> <span style="opacity:.7;">(${r.ventas} ventas${impAuto()?" · automático":""})</span>`;
+    el.title = `Calculado con la facturación de MercadoLibre de ${r.ventas} venta(s) desde el ${fFecha(r.desde)}. ${impAuto()?"El primer % se actualiza solo con este valor.":"Ahora el primer % está cargado a mano."} Clic para ver el detalle.`;
+  } else {
+    el.innerHTML = `🧾 Impuestos reales`;
+    el.title = "Ver los impuestos que retiene MercadoLibre de verdad, según su facturación";
+  }
+}
+
+async function abrirImpuestosReales(){
+  let ov = document.getElementById("modalImpReales");
+  if(!ov){
+    ov = document.createElement("div"); ov.className = "overlay"; ov.id = "modalImpReales";
+    ov.innerHTML = `<div class="modal" style="max-width:640px;"><button type="button" class="modal-x" aria-label="Cerrar" onclick="document.getElementById('modalImpReales').classList.remove('show')">✕</button><div id="impRealCont"></div></div>`;
+    ov.addEventListener("click", e=>{ if(e.target===ov) ov.classList.remove("show"); });
+    document.body.appendChild(ov);
+  }
+  impPintarModal(); ov.classList.add("show");
+}
+function impPintarModal(){
+  const cont = document.getElementById("impRealCont"); if(!cont) return;
+  const r = impReal(), n = impNombres(), auto = impAuto();
+  const actImp = Number(appConfig.impuesto_pct)||0, actPerc = Number(appConfig.percepcion_pct)||0;
+  const provs = (r && r.provincias) || [];
+  cont.innerHTML = `
+    <h3>🧾 Impuestos reales de MercadoLibre</h3>
+    <div class="atn-sub" style="margin-bottom:10px;">Lo que ML retiene de verdad en cada cobro, según su facturación (últimos 90 días). Se actualiza solo todos los días.</div>
+    ${r && r.ventas ? `
+    <div class="stats-grid" style="margin-bottom:12px;">
+      <div class="stat-card"><div class="label">${esc(n.imp.replace(/[:]/g,""))} real</div><div class="value" style="color:var(--orange);">${impPctTxt(r.iibb_pct)}</div><div class="sub">hoy usás ${impPctTxt(actImp)}</div></div>
+      <div class="stat-card"><div class="label">${esc(n.perc.replace(/[:]/g,""))}</div><div class="value">${impPctTxt(actPerc)}</div><div class="sub">a mano · ML retiene ${impPctTxt(r.otros_pct)}</div></div>
+      <div class="stat-card"><div class="label">Ventas analizadas</div><div class="value">${r.ventas}</div><div class="sub">desde el ${fFecha(r.desde)}${r.pendientes?` · faltan ${r.pendientes}`:""}</div></div>
+    </div>
+    ${provs.length ? `<div class="table-wrap" style="max-height:240px;"><table><thead><tr><th>${typeof clientePais!=="undefined" && clientePais==="UY" ? "Retención" : "Provincia del comprador"}</th><th>% retenido</th><th>Ventas</th><th>Peso</th></tr></thead><tbody>
+      ${provs.map(p=>`<tr><td>${esc(impProvTxt(p.prov))}</td><td class="num" style="font-weight:700;">${impPctTxt(p.pct)}</td><td class="num">${p.ventas}</td><td class="num">${impPctTxt(p.peso)}</td></tr>`).join("")}
+    </tbody></table></div>` : ""}
+    <div class="atn-sub" style="margin-top:8px;">Actualizado ${r.at ? new Date(r.at).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}. El % retenido depende de la provincia del comprador; el promedio sale de cuánto vendiste en cada una.</div>
+    ` : `<div style="padding:14px;background:var(--bg);border-radius:10px;font-size:13px;">Todavía no hay datos de la facturación de ML para esta cuenta. Tocá <b>Recalcular ahora</b> (puede tardar un minuto) o esperá a la actualización automática de mañana.</div>`}
+    <label class="admin-only" style="display:flex;gap:8px;align-items:flex-start;margin-top:14px;font-size:13px;cursor:pointer;">
+      <input type="checkbox" id="impAutoChk" ${auto?"checked":""} onchange="impCambiarAuto(this.checked)" style="margin-top:3px;">
+      <span><b>Usar automáticamente lo que retiene ML</b><br><span class="atn-sub">El primer % de Análisis ML y del precio automático 🤖 se actualiza solo con el % real. El segundo (${esc(n.perc.replace(/[:]/g,"").trim())}) siempre lo cargás vos: puede ser IVA u otro impuesto que pagás aparte.</span></span>
+    </label>
+    <div class="modal-actions">
+      <button class="btn btn-ghost admin-only" id="impBtnRecalc" onclick="impRecalcular()">🔄 Recalcular ahora</button>
+      ${r && r.ventas && !auto ? `<button class="btn btn-ghost admin-only" onclick="impAplicarAhora()">Usar ${impPctTxt(r.iibb_pct)} una vez</button>` : ""}
+      <button class="btn btn-primary" onclick="document.getElementById('modalImpReales').classList.remove('show')">Cerrar</button>
+    </div>`;
+  if(typeof esAdmin==="function" && !esAdmin()) cont.querySelectorAll(".admin-only").forEach(el=>el.style.display="none");
+}
+async function impGuardarPcts(imp){
+  appConfig.impuesto_pct = imp;
+  const a = document.getElementById("impuestoPctInput"); if(a) a.value = imp;
+  await sbGuardar("config",{key:"impuesto_pct", value:imp}).catch(()=>{});
+  try{ renderAnalisis(); }catch(e){}
+}
+async function impCambiarAuto(on){
+  if(checkViewer("Configurar impuestos")) return;
+  appConfig.impuestos_auto = !!on;
+  await sbGuardar("config",{key:"impuestos_auto", value:!!on}).catch(()=>{});
+  const r = impReal();
+  if(on && r && r.ventas >= 10 && r.iibb_pct != null){
+    await impGuardarPcts(r.iibb_pct);
+    toast(`Listo: se usa lo que retiene ML (${impPctTxt(r.iibb_pct)}) y se actualiza solo ✅`,"ok",6000);
+  } else if(on) toast("Activado. Se van a usar los % reales cuando haya al menos 10 ventas con facturación.","ok",6000);
+  else toast("Modo manual: se usa el % que cargues en Análisis ML.","ok",5000);
+  impPintarModal(); impBadgePintar();
+}
+async function impAplicarAhora(){
+  if(checkViewer("Configurar impuestos")) return;
+  const r = impReal(); if(!r || r.iibb_pct == null) return;
+  await impGuardarPcts(r.iibb_pct);
+  toast(`Impuesto actualizado a ${impPctTxt(r.iibb_pct)} ✅`,"ok",5000);
+  impPintarModal(); impBadgePintar();
+}
+async function impRecalcular(){
+  if(checkViewer("Recalcular impuestos")) return;
+  const b = document.getElementById("impBtnRecalc"); if(b){ b.disabled = true; b.textContent = "⏳ Leyendo la facturación de ML…"; }
+  try{
+    const r = await fetch(SB_URL+"/functions/v1/nexo-impuestos", {method:"POST", headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+sbAuth()}, body:"{}"});
+    const d = await r.json().catch(()=>({}));
+    const s = (d.salida||[])[0] || {};
+    if(!r.ok || s.error) throw new Error(s.error || d.message || d.error || ("HTTP "+r.status));
+    const cfg = await sbGet("app_config","select=key,value&key=in.(impuestos_reales,impuesto_pct,percepcion_pct,impuestos_auto)").catch(()=>[]);
+    (cfg||[]).forEach(x=>{ appConfig[x.key] = x.value; });
+    const a = document.getElementById("impuestoPctInput"), p = document.getElementById("percepcionPctInput");
+    if(a) a.value = appConfig.impuesto_pct ?? ""; if(p) p.value = appConfig.percepcion_pct ?? "";
+    try{ renderAnalisis(); }catch(e){}
+    toast(`Facturación leída: ${s.guardadas||0} venta(s) nuevas${s.pendientes?` · faltan ${s.pendientes} (se completan solas)`:""} ✅`,"ok",6000);
+  }catch(e){ toast("No se pudo recalcular: "+e.message,"err",7000); }
+  if(b){ b.disabled = false; b.textContent = "🔄 Recalcular ahora"; }
+  impPintarModal(); impBadgePintar();
+}
+// El botón viejo "📊 Retenciones reales" abre esta ventana
+aplicarRetencionesRealesAnalisis = async function(){ abrirImpuestosReales(); };
+// Si se cambia un % a mano estando en automático, pasa a manual
+(function(){
+  const envolver = (nombre)=>{ if(typeof window[nombre] !== "function") return; const orig = window[nombre];
+    window[nombre] = async function(){ if(impAuto() && (typeof esAdmin!=="function" || esAdmin())){ appConfig.impuestos_auto = false; await sbGuardar("config",{key:"impuestos_auto", value:false}).catch(()=>{}); toast("Cargaste el % a mano: pasa a modo manual (podés volver a automático en 🧾).","ok",6000); }
+      const r = await orig.apply(this, arguments); impBadgePintar(); return r; }; };
+  envolver("guardarImpuestoPct");
+})();
+if(typeof renderAnalisis === "function"){
+  const _impRenderOrig = renderAnalisis;
+  renderAnalisis = function(){ const r = _impRenderOrig.apply(this, arguments); try{ impBadgePintar(); }catch(e){} return r; };
+}
 
 // ================================================================
 // SUPERADMIN NEXO
