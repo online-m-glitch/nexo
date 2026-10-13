@@ -9305,6 +9305,189 @@ actualizarTodosCostos = async function(){
 };
 document.addEventListener("DOMContentLoaded", ()=>{ try{ lpMonedaOpciones(); }catch(e){} });
 setTimeout(()=>{ try{ lpMonedaOpciones(); }catch(e){} }, 4000);
+// ================================================================
+// 🔍 Full ML: explicar cada diferencia entre el stock de Full en NEXO y el real de MercadoLibre
+// Usa los movimientos del inventario en Full (/stock/fulfillment/operations/search): ventas, ingresos
+// recibidos, devoluciones, retiros, ajustes, unidades que pasan a "no disponible", etc.
+// Cómo calcula NEXO el Full:
+//  · Si hay un dato guardado en stock_ml (se trae de ML o se ajusta a mano), NEXO usa ese número
+//    y le suma los envíos a Full que registres después. Las ventas NO lo descuentan hasta volver a traerlo.
+//  · Si no hay dato guardado: envíos a Full registrados − ventas de ML registradas.
+// Solo lee: no cambia stock ni movimientos.
+// ================================================================
+const FDIF_TIPOS = [
+  {re:/^SALE_CONFIRMATION/, grupo:"ventas", txt:"Venta"},
+  {re:/SALE.*CANCEL/, grupo:"cancel", txt:"Venta cancelada (volvió a Full)"},
+  {re:/RETURN/, grupo:"devol", txt:"Devolución de comprador"},
+  {re:/INBOUND/, grupo:"ingresos", txt:"Ingreso recibido por ML"},
+  {re:/WITHDRAWAL/, grupo:"retiros", txt:"Retiro de Full"},
+  {re:/LOST|DAMAGE|DISPOSAL|QUARANTINE|IDENTIFICATION|ADJUST|TRANSFER/, grupo:"ajustes", txt:"Ajuste / revisión de ML"}
+];
+const FDIF_TXT = {
+  SALE_CONFIRMATION:"Venta", SALE_CANCELATION:"Venta cancelada", SALE_DELIVERY_CANCELATION:"Venta cancelada antes del envío",
+  SALE_RETURN:"Devolución de comprador", CUSTOMER_RETURN:"Devolución de comprador", INBOUND_RECEPTION:"Ingreso recibido",
+  WITHDRAWAL_RESERVATION:"Retiro reservado", WITHDRAWAL_DELIVERY:"Retiro entregado", WITHDRAWAL_CANCELATION:"Retiro cancelado",
+  ADJUSTMENT:"Ajuste de ML", LOST_REFUND:"Perdido (ML lo reintegra)", DISPOSAL:"Descarte",
+  QUARANTINE_RESERVATION:"Pasó a revisión", QUARANTINE_RESTOCK:"Volvió de revisión",
+  IDENTIFICATION_PROBLEM_REMOVE:"Problema de identificación", IDENTIFICATION_PROBLEM_ADD:"Identificación resuelta",
+  TRANSFER_RESERVATION:"Transferencia reservada", TRANSFER_DELIVERY:"Transferencia enviada", TRANSFER_RECEPTION:"Transferencia recibida"
+};
+const FDIF_NODISP = {damaged:"dañadas", lost:"perdidas", withdrawal:"reservadas para retiro", internal_process:"en proceso interno de ML",
+  transfer:"en transferencia", noFiscalCoverage:"sin cobertura fiscal", not_supported:"no admitidas", quarantine:"en revisión", in_review:"en revisión"};
+function fdifTipo(t){ const x = FDIF_TIPOS.find(y=>y.re.test(String(t||""))); return x ? x.grupo : "otros"; }
+function fdifTxt(t){ return FDIF_TXT[t] || String(t||"").replace(/_/g," ").toLowerCase(); }
+function fdifNoDisp(s){ return FDIF_NODISP[s] || String(s||"").replace(/_/g," "); }
+function fdifFechaHora(iso){ const t = Date.parse(iso); return t ? new Date(t).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"; }
+
+let _fdifStockAt = null;   // SKU → fecha en que se guardó el Full de NEXO (stock_ml.updated_at)
+async function fdifFechasStockML(){
+  if(_fdifStockAt) return _fdifStockAt;
+  const filas = await sbGet("stock_ml", "select=sku,updated_at").catch(()=>[]);
+  _fdifStockAt = {}; (filas||[]).forEach(f=>{ if(f.sku) _fdifStockAt[String(f.sku).toUpperCase()] = f.updated_at; });
+  return _fdifStockAt;
+}
+// Movimientos de ML en Full para un inventario desde una fecha (más nuevos primero; se pagina con scroll)
+async function fdifOperaciones(uid, inv, desdeISO){
+  const desde = desdeISO.slice(0,10), hasta = new Date(Date.now()+86400000).toISOString().slice(0,10);
+  const out = []; let scroll = null;
+  for(let pag=0; pag<15; pag++){
+    const qs = `seller_id=${uid}&inventory_id=${encodeURIComponent(inv)}&date_from=${desde}&date_to=${hasta}` + (scroll ? `&scroll=${encodeURIComponent(scroll)}` : "");
+    const r = await mlGet("/stock/fulfillment/operations/search?"+qs);
+    if(!r.ok) throw new Error(_mlError(r));
+    const res = (r.data && r.data.results) || [];
+    out.push(...res);
+    scroll = r.data && r.data.paging && r.data.paging.scroll;
+    if(!res.length || !scroll) break;
+  }
+  return out;
+}
+
+// Arma la explicación de un SKU
+async function fdifExplicar(sku){
+  const k = sku.toUpperCase(), real = fmlStockReal[k];
+  if(!real) throw new Error("Primero tocá «Traer stock real de ML».");
+  const uid = await atnUid();
+  const fechas = await fdifFechasStockML();
+  const nexo = calcularStockFullML(sku);
+  const conFoto = stockML[k] !== undefined && !!fechas[k];
+  const hace60 = new Date(Date.now() - 60*86400000).toISOString();
+  const t0 = conFoto ? fechas[k] : hace60;                       // desde cuándo NEXO no descuenta lo que pasa en Full
+  const desdeConsulta = Date.parse(t0) < Date.parse(hace60) ? t0 : hace60;
+  const ops = [];
+  for(const inv of real.codigos){ (await fdifOperaciones(uid, inv, desdeConsulta)).forEach(o=>ops.push(o)); }
+  const t0Ms = Date.parse(t0), h60Ms = Date.parse(hace60);
+  const nuevas = ops.filter(o=>Date.parse(o.date_created) > t0Ms).sort((a,b)=>Date.parse(a.date_created)-Date.parse(b.date_created));
+  const g = {ventas:0, cancel:0, devol:0, ingresos:0, retiros:0, ajustes:0, otros:0};
+  nuevas.forEach(o=>{ g[fdifTipo(o.type)] += Number(o.detail && o.detail.available_quantity)||0; });
+  // Ingresos de los últimos 60 días (para saber qué envíos registrados todavía no recibió ML)
+  const ingresos60 = ops.filter(o=>Date.parse(o.date_created) > h60Ms && fdifTipo(o.type)==="ingresos").reduce((a,o)=>a+(Number(o.detail && o.detail.available_quantity)||0),0);
+  const movs = (movimientos||[]).filter(m=>String(m.sku||"").toUpperCase().trim()===k);
+  const tMov = m => Date.parse(m.created_at || (m.fecha ? m.fecha+"T12:00:00-03:00" : 0)) || 0;
+  const envNexo60 = movs.filter(m=>m.tipo==="Envío a Full" && tMov(m) > h60Ms).reduce((a,m)=>a+(Number(m.cantidad)||0),0);
+  const ventNexo = movs.filter(m=>m.tipo==="Venta" && m.origen==="ML" && tMov(m) > t0Ms).reduce((a,m)=>a+(Number(m.cantidad)||0),0);
+  const pendiente = Math.max(0, envNexo60 - ingresos60);         // enviadas que ML todavía no recibió
+  // NEXO suma los envíos al registrarlos; ML, cuando los recibe → no se cuentan los ingresos de ML
+  const otrosML = g.ventas + g.cancel + g.devol + g.retiros + g.ajustes + g.otros;
+  const esperado = conFoto
+    ? nexo - pendiente + otrosML                                   // la foto no descuenta nada de lo que pasó en Full
+    : nexo - pendiente + otrosML + ventNexo;                       // NEXO ya descontó sus ventas de ML registradas
+  const sinExplicar = real.disponible - esperado;
+  return {sku, real, nexo, conFoto, t0, nuevas, g, ingresos60, envNexo60, ventNexo, pendiente, esperado, sinExplicar};
+}
+
+function fdifRenglones(x){
+  const r = [], n = v => (v>0?"+":"") + v;
+  const desde = fdifFechaHora(x.t0);
+  if(x.conFoto) r.push(`NEXO tiene <b>${x.nexo}</b>: es el último stock de Full guardado en NEXO (${desde}) más los envíos a Full que registres después. Lo que pasa en Full después de esa fecha (ventas, devoluciones, retiros) no se descuenta solo: se corrige al volver a traer el stock de ML.`);
+  else r.push(`NEXO tiene <b>${x.nexo}</b>: envíos a Full registrados menos ventas de ML registradas (toda la historia).`);
+  if(x.g.ventas){
+    let t = `🛒 <b>${-x.g.ventas}</b> vendida(s) desde Full ${x.conFoto?`después del ${desde}`:"en los últimos 60 días"}`;
+    if(!x.conFoto) t += x.ventNexo < -x.g.ventas ? ` — NEXO tiene registradas solo <b>${x.ventNexo}</b>: faltan sincronizar ventas.` : x.ventNexo > -x.g.ventas ? ` — NEXO tiene registradas <b>${x.ventNexo}</b> ventas de ML: las de más pueden ser Flex/Colecta (no salen de Full) o canceladas, y NEXO igual las descuenta de Full.` : ` — coinciden con las ventas registradas en NEXO.`;
+    else t += x.ventNexo ? ` (en NEXO figuran ${x.ventNexo} venta(s) de ML en ese período, pero no se descuentan del Full guardado).` : (t.endsWith(".") ? "" : ".");
+    r.push(t);
+  }
+  if(x.g.cancel) r.push(`↩️ <b>${n(x.g.cancel)}</b> por ventas canceladas que volvieron a Full.`);
+  if(x.g.devol) r.push(`📦 <b>${n(x.g.devol)}</b> por devoluciones de compradores que ML volvió a poner a la venta.`);
+  if(x.envNexo60 || x.ingresos60){
+    let t = `🚚 Últimos 60 días: registraste <b>${x.envNexo60}</b> enviada(s) a Full y ML recibió <b>${x.ingresos60}</b>`;
+    if(x.pendiente) t += ` → <b>${x.pendiente}</b> todavía no recibida(s) por ML (en camino o en revisión de ingreso). NEXO ya las cuenta.`;
+    else if(x.ingresos60 > x.envNexo60) t += ` → ML recibió <b>${x.ingresos60 - x.envNexo60}</b> más de las registradas (quizás un envío anterior o uno sin cargar en NEXO).`;
+    else t += ".";
+    r.push(t);
+  }
+  if(x.g.retiros) r.push(`🏷️ <b>${n(x.g.retiros)}</b> por retiros de Full.`);
+  if(x.g.ajustes || x.g.otros) r.push(`⚠️ <b>${n(x.g.ajustes + x.g.otros)}</b> por ajustes o revisiones de ML (perdidas, dañadas, problemas de identificación, transferencias).`);
+  if(x.real.noDisponible) r.push(`🔒 Hay <b>${x.real.noDisponible}</b> no disponible(s) en Full: ${x.real.detalle.map(d=>{ const [s,q] = d.split(": "); return `${q} ${fdifNoDisp(s)}`; }).join(", ") || "sin detalle"}. No se pueden vender.`);
+  if(Math.abs(x.sinExplicar) >= 1) r.push(`❔ Quedan <b>${n(x.sinExplicar)}</b> sin explicar con los movimientos de ML (pueden venir de antes${x.conFoto?" de que se guardara el Full en NEXO":" de los últimos 60 días"} o de un ajuste manual en NEXO).`);
+  else r.push(`✅ Con estos movimientos la diferencia queda explicada. Tocá <b>Usar</b> para poner en NEXO el número de ML.`);
+  return r;
+}
+
+async function fullExplicarDif(sku){
+  let ov = document.getElementById("modalFullDif");
+  if(!ov){
+    ov = document.createElement("div"); ov.className = "overlay"; ov.id = "modalFullDif";
+    ov.innerHTML = `<div class="modal" style="max-width:680px;"><button type="button" class="modal-x" aria-label="Cerrar" onclick="document.getElementById('modalFullDif').classList.remove('show')">✕</button><div id="fdifCont"></div></div>`;
+    ov.addEventListener("click", e=>{ if(e.target===ov) ov.classList.remove("show"); });
+    document.body.appendChild(ov);
+  }
+  const p = productos.find(x=>x.sku.toUpperCase()===sku.toUpperCase());
+  const cont = document.getElementById("fdifCont");
+  cont.innerHTML = `<h3>🔍 ¿Por qué no coincide? <span class="sku-tag">${esc(sku)}</span></h3><div class="atn-sub">${esc(p?p.nombre:"")}</div><div style="padding:24px;text-align:center;color:var(--text-soft);">⏳ Consultando los movimientos de Full en MercadoLibre…</div>`;
+  ov.classList.add("show");
+  try{
+    const x = await fdifExplicar(sku);
+    const dif = x.real.disponible - x.nexo;
+    const filas = x.nuevas.slice().reverse().slice(0, 60).map(o=>{
+      const d = Number(o.detail && o.detail.available_quantity)||0;
+      const res = o.result || {};
+      return `<tr><td style="font-size:12px;white-space:nowrap;">${fdifFechaHora(o.date_created)}</td><td style="font-size:12px;">${esc(fdifTxt(o.type))}</td>
+        <td class="num" style="font-weight:700;color:${d>0?"var(--green)":d<0?"var(--red)":"var(--text-soft)"};">${d>0?"+":""}${d||"0"}</td><td class="num" style="font-size:12px;">${res.available_quantity ?? "—"}</td></tr>`;
+    }).join("");
+    cont.innerHTML = `<h3>🔍 ¿Por qué no coincide? <span class="sku-tag">${esc(sku)}</span></h3>
+      <div class="atn-sub" style="margin-bottom:10px;">${esc(p?p.nombre:"")}</div>
+      <div class="stats-grid" style="margin-bottom:12px;">
+        <div class="stat-card"><div class="label">Full en NEXO</div><div class="value" style="color:var(--ml-blue);">${x.nexo}</div></div>
+        <div class="stat-card"><div class="label">Full real ML</div><div class="value">${x.real.disponible}</div></div>
+        <div class="stat-card"><div class="label">Diferencia</div><div class="value" style="color:${dif>0?"var(--green)":dif<0?"var(--red)":"inherit"};">${dif>0?"+":""}${dif}</div></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;line-height:1.45;">${fdifRenglones(x).map(t=>`<div>${t}</div>`).join("")}</div>
+      ${filas ? `<details style="margin-top:12px;"><summary style="cursor:pointer;font-size:13px;font-weight:700;">Movimientos de Full en ML (${x.nuevas.length})</summary>
+        <div class="table-wrap" style="max-height:280px;margin-top:6px;"><table><thead><tr><th>Fecha</th><th>Movimiento</th><th>Disponible</th><th>Quedó</th></tr></thead><tbody>${filas}</tbody></table></div></details>` : `<div class="atn-sub" style="margin-top:10px;">ML no registró movimientos en el período.</div>`}
+      <div class="modal-actions">
+        ${dif ? `<button class="btn btn-ghost admin-only" onclick="fullAplicar('${esc(sku)}'); document.getElementById('modalFullDif').classList.remove('show');" title="Poner en NEXO el stock real de ML">Usar ${x.real.disponible} (el de ML)</button>` : ""}
+        <button class="btn btn-primary" onclick="document.getElementById('modalFullDif').classList.remove('show')">Cerrar</button>
+      </div>`;
+    if(typeof esAdmin==="function" && !esAdmin()) cont.querySelectorAll(".admin-only").forEach(el=>el.style.display="none");
+  }catch(e){
+    cont.innerHTML += `<div style="color:var(--red);padding:10px 0;">No se pudo consultar: ${esc(e.message)}</div>`;
+  }
+}
+
+// Botón "¿Por qué?" en cada fila con diferencia
+const _fdifRenderOrig = renderFullStock;
+renderFullStock = function(){
+  const r = _fdifRenderOrig.apply(this, arguments);
+  try{
+    document.querySelectorAll("#fmlStockBody tr").forEach(tr=>{
+      const sku = (tr.querySelector(".sku-tag")||{}).textContent; if(!sku) return;
+      const real = fmlStockReal[sku.toUpperCase()]; if(!real) return;
+      if(real.disponible === calcularStockFullML(sku) && !real.noDisponible) return;
+      const td = tr.lastElementChild; if(!td || td.querySelector(".fdif-btn")) return;
+      const b = document.createElement("button");
+      b.className = "btn btn-ghost btn-sm fdif-btn"; b.type = "button"; b.textContent = "🔍 ¿Por qué?";
+      b.title = "Ver qué movimientos de Full explican la diferencia"; b.style.marginLeft = "4px";
+      b.onclick = ()=>fullExplicarDif(sku);
+      td.appendChild(b);
+    });
+  }catch(e){}
+  return r;
+};
+// Al volver a traer el stock de ML, se relee la fecha del último guardado
+const _fdifSyncOrig = fullSyncStock;
+fullSyncStock = async function(){ _fdifStockAt = null; return await _fdifSyncOrig.apply(this, arguments); };
+const _fdifAplicarOrig = fullAplicar;
+fullAplicar = async function(){ _fdifStockAt = null; return await _fdifAplicarOrig.apply(this, arguments); };
 
 // ================================================================
 // SUPERADMIN NEXO
