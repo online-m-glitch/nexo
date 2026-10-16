@@ -9619,6 +9619,212 @@ if(typeof renderAnalisis === "function"){
   const _impRenderOrig = renderAnalisis;
   renderAnalisis = function(){ const r = _impRenderOrig.apply(this, arguments); try{ impBadgePintar(); }catch(e){} return r; };
 }
+// ================================================================
+// ✍️ Saludo y firma automáticos en Atención ML (preguntas y mensajes)
+// Arma la respuesta así:  "{saludo} {nombre}! " + lo que escribís + " " + firma
+//   {saludo} = Buenos días (5 a 12:59) · Buenas tardes (13 a 19:59) · Buenas noches (20 a 4:59), hora de Argentina/Uruguay
+//   {nombre} = apodo del comprador en MercadoLibre (ML no da el nombre real: en preguntas solo el id → /users/{id}.nickname;
+//              en ventas, order.buyer.nickname). Se "embellece": JUAN.PEREZ_23 → Juan Perez.
+//   {tienda} = nombre que se carga en la plantilla (por defecto, el nombre del cliente).
+// Si lo que escribís ya empieza con "Hola/Buen día…" no agrega el saludo; si ya termina con "Saludos…" no agrega la firma.
+// Configuración en app_config.atn_plantilla {activo, preguntas, mensajes, saludo, firma, tienda, apodo}.
+// ================================================================
+const ATN_PLANT_DEF = {activo:false, preguntas:true, mensajes:true, apodo:true, saludo:"{saludo} {nombre}!", firma:"Saludos, {tienda}.", tienda:""};
+function atnPlant(){ const v = appConfig && appConfig.atn_plantilla; return Object.assign({}, ATN_PLANT_DEF, (v && typeof v==="object") ? v : {}); }
+function atnSaludoHora(d){
+  const h = Number(new Date((d ? d.getTime() : Date.now()) - 3*3600*1000).getUTCHours());
+  return h >= 5 && h < 13 ? "Buenos días" : h >= 13 && h < 20 ? "Buenas tardes" : "Buenas noches";
+}
+function atnApodoLindo(nick){
+  let s = String(nick||"").trim(); if(!s) return "";
+  s = s.replace(/[._\-]+/g," ").replace(/\d+/g," ").replace(/\s+/g," ").trim();
+  if(!s || s.length < 2) return "";
+  return s.split(" ").map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(" ");
+}
+function atnTiendaNombre(pl){ return (pl.tienda||"").trim() || clienteNombre || ""; }
+function atnVars(pl, nick){
+  return {saludo: atnSaludoHora(), nombre: pl.apodo ? atnApodoLindo(nick) : "", tienda: atnTiendaNombre(pl)};
+}
+function atnRellenar(tpl, v){
+  return String(tpl||"").replace(/\{(saludo|nombre|tienda)\}/g, (_,k)=>v[k]||"")
+    .replace(/\s+([!,.?])/g,"$1").replace(/,\s*([!.?])/g,"$1").replace(/\s{2,}/g," ").replace(/^[\s,]+|[\s,]+$/g,"").trim();
+}
+const ATN_RE_SALUDO = /^\s*[¡!]?\s*(hola|buen[oa]s?\s+(d[ií]as?|tardes?|noches?)|buen\s+d[ií]a)\b/i;
+const ATN_RE_FIRMA = /(saludos?|saludamos|atte\.?|atentamente|cordialmente)[^\n]{0,60}$/i;
+// tipo: "preguntas" | "mensajes"
+function atnArmar(texto, tipo, nick){
+  const pl = atnPlant(), t = String(texto||"").trim();
+  if(!t || !pl.activo || !pl[tipo]) return t;
+  const v = atnVars(pl, nick);
+  const sal = ATN_RE_SALUDO.test(t) ? "" : atnRellenar(pl.saludo, v);
+  const fir = ATN_RE_FIRMA.test(t) ? "" : atnRellenar(pl.firma, v);
+  let cuerpo = sal && /^[a-záéíóúñ]/.test(t) ? t.charAt(0).toUpperCase()+t.slice(1) : t;
+  if(fir && /[\wáéíóúñ)]$/i.test(cuerpo)) cuerpo += ".";
+  return [sal, cuerpo, fir].filter(Boolean).join(" ");
+}
+// Las respuestas rápidas traen "¡Hola!" y "¡Saludos!": con la plantilla activa se sacan para no repetir
+function atnLimpiarRapida(x, tipo){
+  const pl = atnPlant(); if(!pl.activo || !pl[tipo]) return x;
+  return String(x||"").replace(/^\s*[¡!]?\s*(hola|buen[oa]s?\s+(d[ií]as?|tardes?|noches?))[^.!?,]*[!.,]?\s*/i,"")
+    .replace(/\s*[¡!]?\s*(saludos?|muchas gracias por (tu|su) (consulta|compra))[^.!]*[.!]?\s*$/i,"").trim();
+}
+
+// ── Apodo de quien pregunta (/users/{id}) ──
+atn.apodos = atn.apodos || {};
+async function atnCargarApodos(ids){
+  const faltan = [...new Set(ids.filter(id=>id && atn.apodos[id]===undefined))];
+  await _pool(faltan, 4, async id=>{ const r = await mlGet("/users/"+id); atn.apodos[id] = (r.ok && r.data && r.data.nickname) || ""; });
+}
+if(typeof atnCargarPreguntas === "function"){
+  const _atnCargarPregOrig = atnCargarPreguntas;
+  atnCargarPreguntas = async function(){
+    await _atnCargarPregOrig.apply(this, arguments);
+    try{ await atnCargarApodos(atn.preg.map(q=>q.from && q.from.id)); renderAtnPreguntas(); }catch(e){}
+  };
+}
+function atnApodoPreg(qid){ const q = (atn.preg||[]).find(x=>String(x.id)===String(qid)); return q && q.from ? (atn.apodos[q.from.id]||"") : ""; }
+
+// ── Vista previa debajo del cuadro de respuesta ──
+function atnPrevia(tipo, texto, nick, max, prevEl, cntEl){
+  const pl = atnPlant(), t = String(texto||"").trim();
+  const on = pl.activo && pl[tipo];
+  const fin = on ? atnArmar(texto || "…", tipo, nick) : t;
+  const n = t ? (on ? fin.length : t.length) : 0;
+  if(prevEl){ prevEl.style.display = on ? "" : "none";
+    prevEl.innerHTML = on ? `✍️ Se envía: <i>${esc(fin)}</i> <a href="javascript:void(0)" onclick="atnEditarPlantilla()" style="white-space:nowrap;">cambiar</a>` : ""; }
+  if(cntEl){ cntEl.textContent = n+" / "+max; cntEl.style.color = n>max ? "var(--red)" : ""; cntEl.style.fontWeight = n>max ? "700" : ""; }
+}
+function atnPrevEl(ta, id){
+  let el = document.getElementById(id);
+  if(!el){ el = document.createElement("div"); el.id = id; el.className = "atn-previa"; el.title = "Así lo va a recibir el comprador."; ta.insertAdjacentElement("afterend", el); }
+  return el;
+}
+function atnPrevPreg(qid){
+  const ta = document.getElementById("atnR"+qid); if(!ta) return;
+  atnPrevia("preguntas", ta.value, atnApodoPreg(qid), 2000, atnPrevEl(ta, "atnRp"+qid), document.getElementById("atnRc"+qid));
+}
+function atnPrevMsg(){
+  const c = atn.convs[atn._conv], ta = document.getElementById("atnMsgTxt"); if(!c || !ta) return;
+  atnPrevia("mensajes", ta.value, c.buyerNick, c.maxLen, atnPrevEl(ta, "atnMsgPrev"), document.getElementById("atnMsgCnt"));
+}
+
+// ── Preguntas ──
+if(typeof renderAtnPreguntas === "function"){
+  const _renderPregOrig = renderAtnPreguntas;
+  renderAtnPreguntas = function(){
+    const r = _renderPregOrig.apply(this, arguments);
+    (atn.preg||[]).forEach(q=>{
+      const ta = document.getElementById("atnR"+q.id); if(!ta) return;
+      ta.removeAttribute("maxlength");
+      ta.setAttribute("oninput", `atnPrevPreg(${q.id})`);
+      const nick = atnApodoPreg(q.id), pl = atnPlant();
+      if(nick && pl.apodo){ const h = document.querySelector(`#atnQ${q.id} .atn-hace`); if(h && !h.dataset.nick){ h.dataset.nick = "1"; h.insertAdjacentHTML("afterend", ` <span class="atn-sub">· 👤 ${esc(nick)}</span>`); } }
+      atnPrevPreg(q.id);
+    });
+    return r;
+  };
+}
+atnUsarRapida = function(qid, i){
+  const x = atnRapidas()[i], ta = document.getElementById("atnR"+qid); if(!x || !ta) return;
+  const t = atnLimpiarRapida(x.x, "preguntas");
+  ta.value = ta.value.trim() ? ta.value.trim()+" "+t : t;
+  atnPrevPreg(qid); ta.focus();
+};
+atnResponder = async function(qid){
+  if(checkViewer("Responder preguntas")) return;
+  const ta = document.getElementById("atnR"+qid), btn = document.getElementById("atnRb"+qid);
+  const base = (ta && ta.value || "").trim();
+  if(!base){ toast("Escribí la respuesta.","err"); return; }
+  const txt = atnArmar(base, "preguntas", atnApodoPreg(qid));
+  if(txt.length > 2000){ toast("Máximo 2000 caracteres (con saludo y firma).","err"); return; }
+  btn.disabled = true; btn.textContent = "⏳ Enviando…";
+  const r = await atnPost("/answers", {question_id:qid, text:txt});
+  if(!r.ok){ btn.disabled = false; btn.textContent = "📤 Responder"; toast("ML no aceptó la respuesta: "+_mlError(r),"err",7000); return; }
+  atn.preg = atn.preg.filter(q=>q.id!==qid); atn.pregTotal = Math.max(0, atn.pregTotal-1);
+  atn.cnt.preg = atn.pregTotal; atnPintarContadores();
+  renderAtnPreguntas();
+  toast("Respuesta publicada en MercadoLibre ✅","ok");
+};
+
+// ── Mensajes de venta (máx. 350 caracteres en total) ──
+if(typeof atnPintarConv === "function"){
+  const _pintarConvOrig = atnPintarConv;
+  atnPintarConv = function(){
+    const r = _pintarConvOrig.apply(this, arguments);
+    const ta = document.getElementById("atnMsgTxt");
+    if(ta){ ta.removeAttribute("maxlength"); ta.setAttribute("oninput","atnPrevMsg()"); atnPrevMsg(); }
+    return r;
+  };
+}
+if(typeof atnEnviarMsg === "function"){
+  const _enviarMsgOrig = atnEnviarMsg;
+  atnEnviarMsg = async function(){
+    const c = atn.convs[atn._conv], ta = document.getElementById("atnMsgTxt");
+    if(c && ta && ta.value.trim()){
+      const fin = atnArmar(ta.value, "mensajes", c.buyerNick);
+      if(fin.length > c.maxLen){ toast(`Con saludo y firma queda en ${fin.length} caracteres (máx. ${c.maxLen}). Acortalo un poco.`,"err",7000); return; }
+      ta.value = fin;
+    }
+    return _enviarMsgOrig.apply(this, arguments);
+  };
+}
+
+// ── Editor de la plantilla ──
+function atnEditarPlantilla(){
+  if(checkViewer("Editar saludo y firma")) return;
+  let ov = document.getElementById("modalAtnPlantilla");
+  if(!ov){
+    ov = document.createElement("div"); ov.className = "overlay"; ov.id = "modalAtnPlantilla";
+    ov.innerHTML = `<div class="modal" style="max-width:600px;"><button type="button" class="modal-x" aria-label="Cerrar" onclick="document.getElementById('modalAtnPlantilla').classList.remove('show')">✕</button><div id="atnPlCont"></div></div>`;
+    ov.addEventListener("click", e=>{ if(e.target===ov) ov.classList.remove("show"); });
+    document.body.appendChild(ov);
+  }
+  atn._pl = atnPlant(); atnPlPintar(); ov.classList.add("show");
+}
+function atnPlPintar(){
+  const p = atn._pl, ej = atnApodoLindo("JUAN.PEREZ_23");
+  const chk = (k, txt)=>`<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:4px 0;cursor:pointer;"><input type="checkbox" ${p[k]?"checked":""} onchange="atn._pl.${k}=this.checked;atnPlPintar()"> ${txt}</label>`;
+  const v = {saludo:atnSaludoHora(), nombre:p.apodo?ej:"", tienda:(p.tienda||"").trim()||clienteNombre||""};
+  document.getElementById("atnPlCont").innerHTML = `
+    <h3>✍️ Saludo y firma automáticos</h3>
+    <p style="font-size:12px;color:var(--text-soft);margin:0 0 10px;">Se agregan solos al responder. Vos escribís solo la respuesta. Si ya empezás con "Hola…" o terminás con "Saludos…", no se repite.</p>
+    ${chk("activo","<b>Usar saludo y firma automáticos</b>")}
+    <div style="padding-left:24px;${p.activo?"":"opacity:.45;pointer-events:none;"}">
+      ${chk("preguntas","En preguntas")}${chk("mensajes","En mensajes de venta (máx. 350 caracteres en total)")}
+      ${chk("apodo","Incluir el apodo del comprador")}
+      <div class="form-group" style="margin-top:8px;"><label>Saludo</label><input type="text" value="${esc(p.saludo)}" oninput="atn._pl.saludo=this.value;atnPlPrev()"></div>
+      <div class="form-group"><label>Firma</label><input type="text" value="${esc(p.firma)}" oninput="atn._pl.firma=this.value;atnPlPrev()"></div>
+      <div class="form-group"><label>Nombre de la tienda <span style="font-weight:400;color:var(--text-soft);">({tienda})</span></label><input type="text" value="${esc(p.tienda)}" placeholder="${esc(clienteNombre||"Ej: Tienda Oficial ORIGO")}" oninput="atn._pl.tienda=this.value;atnPlPrev()"></div>
+      <div style="font-size:11px;color:var(--text-soft);">Podés usar <code>{saludo}</code> (Buenos días / Buenas tardes / Buenas noches según la hora), <code>{nombre}</code> (apodo del comprador) y <code>{tienda}</code>.</div>
+      <div style="margin-top:10px;padding:10px 12px;background:var(--bg);border-radius:10px;font-size:13px;"><div style="font-size:11px;color:var(--text-soft);margin-bottom:4px;">Ejemplo (comprador "JUAN.PEREZ_23", ahora):</div><div id="atnPlPrev"></div></div>
+      <div style="font-size:11px;color:var(--text-soft);margin-top:6px;">ℹ️ MercadoLibre no comparte el nombre real del comprador: se usa su apodo, acomodado (sin números ni puntos).</div>
+    </div>
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="document.getElementById('modalAtnPlantilla').classList.remove('show')">Cancelar</button><button class="btn btn-primary" onclick="atnPlGuardar()">💾 Guardar</button></div>`;
+  atnPlPrev();
+}
+function atnPlPrev(){
+  const p = atn._pl, el = document.getElementById("atnPlPrev"); if(!el) return;
+  const v = {saludo:atnSaludoHora(), nombre:p.apodo?atnApodoLindo("JUAN.PEREZ_23"):"", tienda:(p.tienda||"").trim()||clienteNombre||""};
+  el.innerHTML = `${esc(atnRellenar(p.saludo, v))} <span style="color:var(--text-soft);">Sí, tenemos stock disponible.</span> ${esc(atnRellenar(p.firma, v))}`;
+}
+async function atnPlGuardar(){
+  const p = atn._pl, val = {activo:!!p.activo, preguntas:!!p.preguntas, mensajes:!!p.mensajes, apodo:!!p.apodo, saludo:String(p.saludo||"").trim(), firma:String(p.firma||"").trim(), tienda:String(p.tienda||"").trim()};
+  appConfig.atn_plantilla = val;
+  try{ await sbUpsert("app_config", {key:"atn_plantilla", value:val, updated_at:new Date().toISOString()}); }
+  catch(e){ toast("No se pudo guardar: "+e.message,"err"); return; }
+  document.getElementById("modalAtnPlantilla").classList.remove("show");
+  try{ renderAtnPreguntas(); }catch(e){} try{ atnPintarConv(); }catch(e){}
+  toast("Saludo y firma guardados ✅","ok");
+}
+// Botón al lado de "Respuestas rápidas"
+(function(){
+  const pon = ()=>{ const b = [...document.querySelectorAll("button")].find(x=>/Respuestas rápidas/.test(x.textContent) && x.getAttribute("onclick")==="atnEditarRapidas()");
+    if(!b || document.getElementById("atnBtnPlantilla")) return;
+    const n = document.createElement("button"); n.id = "atnBtnPlantilla"; n.className = b.className; n.textContent = "✍️ Saludo y firma"; n.onclick = atnEditarPlantilla;
+    b.insertAdjacentElement("afterend", n); };
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", pon); else pon();
+})();
+(function(){ const s = document.createElement("style"); s.textContent = `.atn-previa{font-size:12px;color:var(--text-soft);line-height:1.45;margin-top:6px;padding:7px 10px;background:var(--bg);border-radius:8px;word-break:break-word}.atn-previa i{color:var(--text);font-style:normal}`; document.head.appendChild(s); })();
 
 // ================================================================
 // SUPERADMIN NEXO
