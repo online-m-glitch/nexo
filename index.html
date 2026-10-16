@@ -9666,7 +9666,7 @@ function atnArmar(texto, tipo, nick){
 function atnLimpiarRapida(x, tipo){
   const pl = atnPlant(); if(!pl.activo || !pl[tipo]) return x;
   return String(x||"").replace(/^\s*[¡!]?\s*(hola|buen[oa]s?\s+(d[ií]as?|tardes?|noches?))[^.!?,]*[!.,]?\s*/i,"")
-    .replace(/\s*[¡!]?\s*(saludos?|muchas gracias por (tu|su) (consulta|compra))[^.!]*[.!]?\s*$/i,"").trim();
+    .replace(/\s*¡?\s*(saludos?|muchas gracias por (tu|su) (consulta|compra))[^.!]*[.!]?\s*$/i,"").trim();
 }
 
 // ── Apodo de quien pregunta (/users/{id}) ──
@@ -9815,6 +9815,20 @@ async function atnPlGuardar(){
   document.getElementById("modalAtnPlantilla").classList.remove("show");
   try{ renderAtnPreguntas(); }catch(e){} try{ atnPintarConv(); }catch(e){}
   toast("Saludo y firma guardados ✅","ok");
+}
+// Aviso en la ventana de respuestas rápidas cuando la plantilla está activa
+if(typeof atnEditarRapidas === "function"){
+  const _editRapOrig = atnEditarRapidas;
+  atnEditarRapidas = function(){
+    const r = _editRapOrig.apply(this, arguments);
+    const ov = document.getElementById("modalAtnRapidas"); if(!ov) return r;
+    let n = document.getElementById("atnRapAviso");
+    if(!n){ n = document.createElement("div"); n.id = "atnRapAviso"; n.style.cssText = "font-size:12px;background:var(--bg);border-radius:8px;padding:8px 10px;margin:0 0 10px;line-height:1.45;";
+      const lista = document.getElementById("atnRapLista"); lista.parentNode.insertBefore(n, lista); }
+    const pl = atnPlant();
+    n.innerHTML = pl.activo ? `✍️ Tenés activado el <b>saludo y firma automáticos</b>: al usar una respuesta rápida se saca solo el "¡Hola!" del principio y el "¡Saludos!" del final, así no se repiten. No hace falta cambiar estos textos.` : `💡 Si activás <a href="javascript:void(0)" onclick="document.getElementById('modalAtnRapidas').classList.remove('show');atnEditarPlantilla()">✍️ Saludo y firma</a>, el "¡Hola!" y el "¡Saludos!" de estos textos se reemplazan solos por tu saludo y tu firma.`;
+    return r;
+  };
 }
 // Botón al lado de "Respuestas rápidas"
 (function(){
