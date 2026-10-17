@@ -9839,6 +9839,138 @@ if(typeof atnEditarRapidas === "function"){
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", pon); else pon();
 })();
 (function(){ const s = document.createElement("style"); s.textContent = `.atn-previa{font-size:12px;color:var(--text-soft);line-height:1.45;margin-top:6px;padding:7px 10px;background:var(--bg);border-radius:8px;word-break:break-word}.atn-previa i{color:var(--text);font-style:normal}`; document.head.appendChild(s); })();
+// ================================================================
+// 📤 Enviar la descripción del producto (Catálogo NEXO) a MercadoLibre
+// En la ficha del producto, debajo de "Descripción": botón que reemplaza la descripción de sus publicaciones de ML
+// (PUT /items/{id}/description {plain_text}; si la publicación no tenía, POST). Antes muestra la descripción actual
+// de ML, avisa si hay links/mails/teléfonos (ML no los permite) y deja elegir a qué publicaciones mandarla.
+// La descripción también se ve en la tienda online (tienda.html la muestra en la ficha).
+// ================================================================
+function dmlTexto(t){
+  return String(t||"").replace(/<br\s*\/?>/gi,"\n").replace(/<[^>]+>/g,"").replace(/\r\n?/g,"\n").replace(/[ \t]+\n/g,"\n").replace(/\n{3,}/g,"\n\n").trim();
+}
+function dmlProblemas(t){
+  const p = [];
+  if(/(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|ar|uy)(\.ar|\.uy)?\b)/i.test(t)) p.push("links o páginas web");
+  if(/[\w.+-]+@[\w-]+\.[\w.]+/.test(t)) p.push("direcciones de mail");
+  if(/(\+?\d[\d\s().-]{8,}\d)/.test(t.replace(/\b\d{1,5}\s?(w|v|a|mm|cm|m|kg|g|hz|mah|mts?|x)\b/gi,""))) p.push("números que parecen teléfonos");
+  if(/whats\s?app|wsp|ll[aá]manos|instagram|facebook/i.test(t)) p.push("formas de contacto (WhatsApp, redes)");
+  return p;
+}
+// Botón en la ficha del producto
+function dmlPonerBoton(){
+  const ta = document.getElementById("pDescripcion"); if(!ta) return;
+  const lbl = ta.closest(".form-group") && ta.closest(".form-group").querySelector("label");
+  if(lbl && !lbl.dataset.dml){ lbl.dataset.dml = "1"; lbl.innerHTML = `Descripción <span style="font-weight:400;color:var(--text-soft);">— se ve en la tienda online y se puede enviar a MercadoLibre</span>`; ta.placeholder = "Descripción del producto para los compradores (características, medidas, qué incluye…)"; }
+  let fila = document.getElementById("dmlFila");
+  if(!fila){
+    fila = document.createElement("div"); fila.id = "dmlFila"; fila.className = "admin-only";
+    fila.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;";
+    fila.innerHTML = `<span id="dmlInfo" style="font-size:11px;color:var(--text-soft);"></span><button type="button" class="btn btn-ghost btn-sm" id="dmlBtn" onclick="dmlAbrir()">📤 Enviar a MercadoLibre</button>`;
+    ta.insertAdjacentElement("afterend", fila);
+    ta.addEventListener("input", dmlActualizarInfo);
+    const ml = document.getElementById("pMlItemId"); if(ml) ml.addEventListener("input", dmlActualizarInfo);
+  }
+  dmlActualizarInfo();
+  if(typeof esAdmin==="function" && !esAdmin()) fila.style.display = "none";
+}
+function dmlActualizarInfo(){
+  const ta = document.getElementById("pDescripcion"), info = document.getElementById("dmlInfo"), b = document.getElementById("dmlBtn"); if(!ta || !info || !b) return;
+  const sku = (document.getElementById("pSku")||{}).value || "", ml = ((document.getElementById("pMlItemId")||{}).value||"").trim();
+  const n = dmlTexto(ta.value).length;
+  b.disabled = !n || (!ml && !sku);
+  info.textContent = n ? `${n} caracteres` : "Escribí la descripción para poder enviarla a ML.";
+}
+["abrirModalProducto","editarProducto"].forEach(nombre=>{
+  if(typeof window[nombre] !== "function") return;
+  const orig = window[nombre];
+  window[nombre] = function(){ const r = orig.apply(this, arguments); try{ dmlPonerBoton(); }catch(e){} return r; };
+});
+
+// Publicaciones del producto (la vinculada + las de nexo_ml_publicaciones con el mismo SKU)
+async function dmlPublicaciones(sku, mlId){
+  const ids = new Map();
+  if(mlId){ const id = (typeof normalizarMLA==="function" ? normalizarMLA(mlId) : mlId); if(id) ids.set(id, {id, titulo:"", principal:true}); }
+  if(sku){
+    try{
+      const filas = await sbGet("nexo_ml_publicaciones", "select=ml_item_id,titulo,estado,es_catalogo&sku=eq."+encodeURIComponent(sku));
+      (filas||[]).forEach(f=>{ if(!f.ml_item_id) return; const x = ids.get(f.ml_item_id) || {id:f.ml_item_id}; Object.assign(x, {titulo:f.titulo||x.titulo||"", estado:f.estado, catalogo:!!f.es_catalogo}); ids.set(f.ml_item_id, x); });
+    }catch(e){}
+  }
+  return [...ids.values()];
+}
+async function dmlAbrir(){
+  if(checkViewer("Enviar descripción a MercadoLibre")) return;
+  const texto = dmlTexto(document.getElementById("pDescripcion").value);
+  if(!texto){ toast("Escribí la descripción primero.","err"); return; }
+  const sku = (document.getElementById("pSku").value||"").trim(), mlId = (document.getElementById("pMlItemId").value||"").trim();
+  let ov = document.getElementById("modalDescML");
+  if(!ov){
+    ov = document.createElement("div"); ov.className = "overlay"; ov.id = "modalDescML"; ov.style.zIndex = "2100";
+    ov.innerHTML = `<div class="modal" style="max-width:720px;"><button type="button" class="modal-x" aria-label="Cerrar" onclick="document.getElementById('modalDescML').classList.remove('show')">✕</button><div id="dmlCont"></div></div>`;
+    ov.addEventListener("click", e=>{ if(e.target===ov) ov.classList.remove("show"); });
+    document.body.appendChild(ov);
+  }
+  const cont = document.getElementById("dmlCont");
+  cont.innerHTML = `<h3>📤 Enviar descripción a MercadoLibre</h3><div class="atn-vacio">⏳ Buscando las publicaciones y su descripción actual…</div>`;
+  ov.classList.add("show");
+  const pubs = await dmlPublicaciones(sku, mlId);
+  if(!pubs.length){ cont.innerHTML = `<h3>📤 Enviar descripción a MercadoLibre</h3><div class="atn-alerta">Este producto no tiene publicaciones de MercadoLibre vinculadas. Cargá la "Publicación ML" en la ficha o traé tus publicaciones desde MercadoLibre.</div>`; return; }
+  await Promise.all(pubs.map(async p=>{
+    const [d, it] = await Promise.all([mlGet("/items/"+p.id+"/description"), p.titulo ? Promise.resolve(null) : mlGet("/items/"+p.id+"?attributes=id,title,status,catalog_listing")]);
+    p.actual = d.ok && d.data ? dmlTexto(d.data.plain_text || d.data.text || "") : "";
+    p.tiene = d.ok && d.data && (d.data.plain_text || d.data.text) ? true : false;
+    if(it && it.ok && it.data){ p.titulo = it.data.title || p.titulo; p.estado = it.data.status || p.estado; if(it.data.catalog_listing) p.catalogo = true; }
+  }));
+  const probs = dmlProblemas(texto);
+  window.__dml = {texto, pubs};
+  cont.innerHTML = `
+    <h3>📤 Enviar descripción a MercadoLibre</h3>
+    <p style="font-size:12px;color:var(--text-soft);margin:0 0 10px;">Reemplaza la descripción de las publicaciones que marques por la de NEXO. ML solo acepta texto (sin formato).</p>
+    ${probs.length ? `<div class="atn-alerta">⚠️ La descripción tiene ${probs.join(", ")}. MercadoLibre no permite datos de contacto: puede rechazarla o pausar la publicación. Revisala antes de enviar.</div>` : ""}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0;" class="dml-comp">
+      <div><div style="font-size:11px;font-weight:700;color:var(--text-soft);margin-bottom:4px;">NUEVA (NEXO)</div><div class="dml-caja">${esc(texto)}</div></div>
+      <div><div style="font-size:11px;font-weight:700;color:var(--text-soft);margin-bottom:4px;">ACTUAL EN ML${pubs.length>1?" (1ª publicación)":""}</div><div class="dml-caja" style="color:var(--text-soft);">${pubs[0].actual ? esc(pubs[0].actual) : "<i>Sin descripción</i>"}</div></div>
+    </div>
+    <div style="font-weight:700;font-size:13px;margin:10px 0 6px;">Publicaciones (${pubs.length})</div>
+    ${pubs.map((p,i)=>`<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+      <input type="checkbox" class="dmlChk" data-i="${i}" ${p.actual===texto?"":"checked"} style="margin-top:3px;">
+      <span style="flex:1;"><b>${esc(p.id)}</b>${p.catalogo?` <span class="badge badge-gray">catálogo</span>`:""}${p.estado&&p.estado!=="active"?` <span class="badge badge-gray">${esc(p.estado)}</span>`:""}<br><span class="atn-sub">${esc(p.titulo||"")}</span>
+      <span class="atn-sub" id="dmlRes${i}" style="display:block;">${p.actual===texto?"✅ Ya tiene esta misma descripción":(p.tiene?"Tiene otra descripción":"Sin descripción en ML")}</span></span></label>`).join("")}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="document.getElementById('modalDescML').classList.remove('show')">Cancelar</button>
+      <button class="btn btn-primary" id="dmlEnviar" onclick="dmlEnviar()">📤 Enviar a las marcadas</button>
+    </div>`;
+}
+async function dmlEnviar(){
+  if(checkViewer("Enviar descripción a MercadoLibre")) return;
+  const st = window.__dml; if(!st) return;
+  const marcadas = [...document.querySelectorAll(".dmlChk")].filter(c=>c.checked).map(c=>Number(c.dataset.i));
+  if(!marcadas.length){ toast("Marcá al menos una publicación.","err"); return; }
+  const b = document.getElementById("dmlEnviar"); b.disabled = true; b.textContent = "⏳ Enviando…";
+  let ok = 0, mal = 0;
+  for(const i of marcadas){
+    const p = st.pubs[i], el = document.getElementById("dmlRes"+i);
+    if(el) el.textContent = "⏳ Enviando…";
+    let r = await dmlLlamar("/items/"+p.id+"/description?api_version=2", "PUT", {plain_text: st.texto});
+    if(!r.ok && (r.status===404 || /not.?found|no.*descrip/i.test(JSON.stringify(r.data||{})))) r = await dmlLlamar("/items/"+p.id+"/description", "POST", {plain_text: st.texto});
+    if(r.ok){ ok++; p.actual = st.texto; if(el) el.innerHTML = `<span style="color:var(--green);font-weight:700;">✅ Descripción actualizada en ML</span>`; }
+    else { mal++; if(el) el.innerHTML = `<span style="color:var(--red);">❌ ${esc(_mlError(r))}</span>`; }
+  }
+  b.disabled = false; b.textContent = "📤 Enviar a las marcadas";
+  toast(mal ? `Enviada a ${ok} publicación(es); ${mal} con error (mirá el detalle).` : `Descripción actualizada en ${ok} publicación(es) de MercadoLibre ✅`, mal?"err":"ok", 6000);
+}
+async function dmlLlamar(path, method, data){
+  let r;
+  try{
+    r = await fetch(SB_URL+"/functions/v1/ml-api", {method:"POST",
+      headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+sbAuth()},
+      body: JSON.stringify({grant_type:"proxy", path, method, data})});
+  }catch(e){ return {ok:false, status:0, data:{message:"Sin conexión"}}; }
+  const d = await r.json().catch(()=>({}));
+  return {ok: r.ok && !(d && d.error && !Array.isArray(d)), status: (d && d.status) || r.status, data:d};
+}
+(function(){ const s = document.createElement("style"); s.textContent = `.dml-caja{white-space:pre-line;font-size:12.5px;line-height:1.45;background:var(--bg);border-radius:8px;padding:8px 10px;max-height:220px;overflow:auto;word-break:break-word}@media(max-width:640px){.dml-comp{grid-template-columns:1fr!important}}`; document.head.appendChild(s); })();
 
 // ================================================================
 // SUPERADMIN NEXO
