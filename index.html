@@ -9887,17 +9887,36 @@ function dmlActualizarInfo(){
   window[nombre] = function(){ const r = orig.apply(this, arguments); try{ dmlPonerBoton(); }catch(e){} return r; };
 });
 
-// Publicaciones del producto (la vinculada + las de nexo_ml_publicaciones con el mismo SKU)
+// Publicaciones del producto: la vinculada + las de nexo_ml_publicaciones con el SKU + las que ML encuentra por SKU
+// + las tradicionales asociadas a una de catálogo (item_relations). ML NO deja editar la descripción de las de catálogo.
 async function dmlPublicaciones(sku, mlId){
   const ids = new Map();
-  if(mlId){ const id = (typeof normalizarMLA==="function" ? normalizarMLA(mlId) : mlId); if(id) ids.set(id, {id, titulo:"", principal:true}); }
+  const add = (id, extra)=>{ if(!id) return; const x = ids.get(id) || {id, titulo:""}; Object.assign(x, extra||{}); ids.set(id, x); };
+  if(mlId) add(typeof normalizarMLA==="function" ? normalizarMLA(mlId) : mlId, {principal:true});
   if(sku){
     try{
       const filas = await sbGet("nexo_ml_publicaciones", "select=ml_item_id,titulo,estado,es_catalogo&sku=eq."+encodeURIComponent(sku));
-      (filas||[]).forEach(f=>{ if(!f.ml_item_id) return; const x = ids.get(f.ml_item_id) || {id:f.ml_item_id}; Object.assign(x, {titulo:f.titulo||x.titulo||"", estado:f.estado, catalogo:!!f.es_catalogo}); ids.set(f.ml_item_id, x); });
+      (filas||[]).forEach(f=>add(f.ml_item_id, {titulo:f.titulo||"", estado:f.estado, catalogo:!!f.es_catalogo}));
+    }catch(e){}
+    try{
+      const uid = typeof mercUserId==="function" ? await mercUserId() : null;
+      if(uid){ const r = await mlGet(`/users/${uid}/items/search?seller_sku=${encodeURIComponent(sku)}&limit=50`);
+        ((r.ok && r.data && r.data.results) || []).forEach(id=>add(id)); }
     }catch(e){}
   }
-  return [...ids.values()];
+  // Datos de cada una y sus relacionadas
+  for(let vuelta=0; vuelta<2; vuelta++){
+    const faltan = [...ids.values()].filter(p=>!p._leida).map(p=>p.id);
+    for(let i=0;i<faltan.length;i+=20){
+      const r = await mlGet("/items?ids="+faltan.slice(i,i+20).join(",")+"&attributes=id,title,status,catalog_listing,item_relations");
+      ((r.ok && Array.isArray(r.data)) ? r.data : []).forEach(x=>{ const b = x && x.body; if(!b || !b.id) return;
+        add(b.id, {titulo:b.title||"", estado:b.status, catalogo:!!b.catalog_listing, _leida:true});
+        (b.item_relations||[]).forEach(rel=>{ if(rel && rel.id && !ids.has(rel.id)) add(rel.id, {relDe:b.id}); }); });
+      faltan.slice(i,i+20).forEach(id=>{ const p = ids.get(id); if(p) p._leida = true; });
+    }
+  }
+  // Tradicionales primero
+  return [...ids.values()].sort((a,b)=>(a.catalogo?1:0)-(b.catalogo?1:0));
 }
 async function dmlAbrir(){
   if(checkViewer("Enviar descripción a MercadoLibre")) return;
@@ -9917,10 +9936,9 @@ async function dmlAbrir(){
   const pubs = await dmlPublicaciones(sku, mlId);
   if(!pubs.length){ cont.innerHTML = `<h3>📤 Enviar descripción a MercadoLibre</h3><div class="atn-alerta">Este producto no tiene publicaciones de MercadoLibre vinculadas. Cargá la "Publicación ML" en la ficha o traé tus publicaciones desde MercadoLibre.</div>`; return; }
   await Promise.all(pubs.map(async p=>{
-    const [d, it] = await Promise.all([mlGet("/items/"+p.id+"/description"), p.titulo ? Promise.resolve(null) : mlGet("/items/"+p.id+"?attributes=id,title,status,catalog_listing")]);
+    const d = await mlGet("/items/"+p.id+"/description");
     p.actual = d.ok && d.data ? dmlTexto(d.data.plain_text || d.data.text || "") : "";
     p.tiene = d.ok && d.data && (d.data.plain_text || d.data.text) ? true : false;
-    if(it && it.ok && it.data){ p.titulo = it.data.title || p.titulo; p.estado = it.data.status || p.estado; if(it.data.catalog_listing) p.catalogo = true; }
   }));
   const probs = dmlProblemas(texto);
   window.__dml = {texto, pubs};
@@ -9930,13 +9948,17 @@ async function dmlAbrir(){
     ${probs.length ? `<div class="atn-alerta">⚠️ La descripción tiene ${probs.join(", ")}. MercadoLibre no permite datos de contacto: puede rechazarla o pausar la publicación. Revisala antes de enviar.</div>` : ""}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0;" class="dml-comp">
       <div><div style="font-size:11px;font-weight:700;color:var(--text-soft);margin-bottom:4px;">NUEVA (NEXO)</div><div class="dml-caja">${esc(texto)}</div></div>
-      <div><div style="font-size:11px;font-weight:700;color:var(--text-soft);margin-bottom:4px;">ACTUAL EN ML${pubs.length>1?" (1ª publicación)":""}</div><div class="dml-caja" style="color:var(--text-soft);">${pubs[0].actual ? esc(pubs[0].actual) : "<i>Sin descripción</i>"}</div></div>
+      <div><div style="font-size:11px;font-weight:700;color:var(--text-soft);margin-bottom:4px;">ACTUAL EN ML · ${esc(pubs[0].id)}</div><div class="dml-caja" style="color:var(--text-soft);">${pubs[0].actual ? esc(pubs[0].actual) : "<i>Sin descripción</i>"}</div></div>
     </div>
     <div style="font-weight:700;font-size:13px;margin:10px 0 6px;">Publicaciones (${pubs.length})</div>
-    ${pubs.map((p,i)=>`<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;">
-      <input type="checkbox" class="dmlChk" data-i="${i}" ${p.actual===texto?"":"checked"} style="margin-top:3px;">
-      <span style="flex:1;"><b>${esc(p.id)}</b>${p.catalogo?` <span class="badge badge-gray">catálogo</span>`:""}${p.estado&&p.estado!=="active"?` <span class="badge badge-gray">${esc(p.estado)}</span>`:""}<br><span class="atn-sub">${esc(p.titulo||"")}</span>
-      <span class="atn-sub" id="dmlRes${i}" style="display:block;">${p.actual===texto?"✅ Ya tiene esta misma descripción":(p.tiene?"Tiene otra descripción":"Sin descripción en ML")}</span></span></label>`).join("")}
+    ${pubs.map((p,i)=>{ const igual = p.actual===texto;
+      const nota = p.catalogo ? `🔒 Publicación de catálogo: ML no deja cambiar su descripción.${pubs.some(q=>!q.catalogo)?" Se cambia en la tradicional de arriba.":""}`
+        : igual ? "✅ Ya tiene esta misma descripción" : (p.relDe ? `Publicación tradicional asociada a ${esc(p.relDe)}. ` : "") + (p.tiene ? "Tiene otra descripción" : "Sin descripción en ML");
+      return `<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);cursor:${p.catalogo?"default":"pointer"};${p.catalogo?"opacity:.6;":""}">
+      <input type="checkbox" class="dmlChk" data-i="${i}" ${(!p.catalogo && !igual)?"checked":""} ${p.catalogo?"disabled":""} style="margin-top:3px;">
+      <span style="flex:1;"><b>${esc(p.id)}</b>${p.catalogo?` <span class="badge badge-gray">catálogo</span>`:` <span class="badge badge-blue">tradicional</span>`}${p.estado&&p.estado!=="active"?` <span class="badge badge-gray">${esc(p.estado)}</span>`:""}<br><span class="atn-sub">${esc(p.titulo||"")}</span>
+      <span class="atn-sub" id="dmlRes${i}" style="display:block;">${nota}</span></span></label>`; }).join("")}
+    ${pubs.every(p=>p.catalogo) ? `<div class="atn-alerta" style="margin-top:8px;">Este producto solo tiene publicaciones de catálogo y ML no deja cambiar su descripción por la API. Vinculá en la ficha la publicación tradicional (la que no es de catálogo).</div>` : ""}
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="document.getElementById('modalDescML').classList.remove('show')">Cancelar</button>
       <button class="btn btn-primary" id="dmlEnviar" onclick="dmlEnviar()">📤 Enviar a las marcadas</button>
