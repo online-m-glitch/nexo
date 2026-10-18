@@ -8543,9 +8543,12 @@ async function nexoAplicarPrecioML(p, precio){
   if(!(precio > 0) || Math.abs(actual - precio) < 0.5) return false;
   const upd = {ml_price: precio};
   if(f){
-    // Comisión: mismo % y cargo fijo que ML informó, aplicado al precio nuevo
-    const pct = Number(f.fee_pct)||0, fijo = Number(feeRaw(p.sku).fee_fixed)||0;
-    if(pct > 0){ upd.fee_amount = Math.round((precio*pct/100 + fijo)*100)/100; nexoFeeRaw(p.sku, "fee_amount", upd.fee_amount); }
+    // Comisión: mismo % (solo la parte proporcional) y el mismo cargo fijo que informó ML, aplicados al precio nuevo.
+    // fee_pct es el % TOTAL (incluye el fijo), por eso se recalcula el % puro desde los valores crudos: si no, el fijo se suma dos veces.
+    const raw = feeRaw(p.sku), fijo = Number(raw.fee_fixed)||0, feeAnt = Number(raw.fee_amount)||0, pAnt = Number(raw.ml_price)||actual;
+    const pctPuro = pAnt > 0 && feeAnt > 0 ? Math.max(0, (feeAnt - fijo) / pAnt * 100) : 0;
+    if(pctPuro > 0){ upd.fee_amount = Math.round((precio*pctPuro/100 + fijo)*100)/100; upd.fee_pct = upd.fee_amount / precio * 100;
+      nexoFeeRaw(p.sku, "fee_amount", upd.fee_amount); f.fee_pct = upd.fee_pct; }
     nexoFeeRaw(p.sku, "ml_price", precio);
     try{ await sbUpdate("ml_fees", "sku=eq."+encodeURIComponent(p.sku), upd); }catch(e){}
   }
