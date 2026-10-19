@@ -9996,6 +9996,79 @@ async function dmlLlamar(path, method, data){
   return {ok: r.ok && !(d && d.error && !Array.isArray(d)), status: (d && d.status) || r.status, data:d};
 }
 (function(){ const s = document.createElement("style"); s.textContent = `.dml-caja{white-space:pre-line;font-size:12.5px;line-height:1.45;background:var(--bg);border-radius:8px;padding:8px 10px;max-height:220px;overflow:auto;word-break:break-word}@media(max-width:640px){.dml-comp{grid-template-columns:1fr!important}}`; document.head.appendChild(s); })();
+// ================================================================
+// 🟠 Margen bajo ≠ Pérdida  ·  🤖 Competencia que vio el precio automático
+// 1) La etiqueta "Pérdida" solo cuando el margen es negativo. Entre 0% y 10% es "Margen bajo" (se gana, pero poco).
+// 2) La columna Competencia puede quedar vieja (se actualiza con 🥊). El precio automático (nexo-sync) consulta la
+//    competencia en cada corrida y lo deja en nexo_repricer_log: si ese dato es más nuevo, se muestra ese, con lo que
+//    hizo el 🤖 (bajó, subió, quedó en el piso del margen mínimo…).
+// ================================================================
+function nxEtiquetaMargen(r){
+  if(!r || r.margenPct == null || !isFinite(r.margenPct)) return r;
+  if(r.rec === "Pérdida" && r.margenPct >= 0){ r.rec = "Margen bajo"; r.cls = "badge-orange"; }
+  return r;
+}
+["calcAnaliML","calcAnaliPub"].forEach(n=>{
+  if(typeof window[n] !== "function") return;
+  const o = window[n];
+  window[n] = function(){ return nxEtiquetaMargen(o.apply(this, arguments)); };
+});
+
+// Último dato del precio automático por SKU
+let _rpzUlt = {}, _rpzUltAt = 0, _rpzUltCargando = false;
+async function rpzCargarUltimos(forzar){
+  if(_rpzUltCargando || (!forzar && Date.now() - _rpzUltAt < 10*60*1000)) return;
+  _rpzUltCargando = true;
+  try{
+    const desde = new Date(Date.now() - 3*86400000).toISOString();
+    const filas = await sbGet("nexo_repricer_log", "select=sku,fecha,competidor,accion,motivo,precio_antes,precio_nuevo,margen,margen_min&fecha=gte."+desde+"&order=fecha.desc&limit=2000");
+    const m = {}; (filas||[]).forEach(f=>{ const k = String(f.sku||"").toUpperCase(); if(!m[k]) m[k] = f; });
+    _rpzUlt = m; _rpzUltAt = Date.now();
+  }catch(e){}
+  _rpzUltCargando = false;
+}
+function rpzUltimo(p){ return _rpzUlt[String(p.sku||"").toUpperCase()] || null; }
+function rpzQueHizo(u){
+  const m = String(u.motivo||"");
+  if(/piso por margen/i.test(m) || (u.margen_min!=null && u.margen!=null && Math.abs(Number(u.margen)-Number(u.margen_min))<0.6 && Number(u.competidor) < Number(u.precio_nuevo)))
+    return {txt:`🤖 en el piso: margen mín. ${Number(u.margen_min)}%`, color:"var(--orange)", title:"El competidor está más barato que tu precio mínimo: el 🤖 no baja más para no perder margen."};
+  if(u.accion === "sin cambio") return {txt:"🤖 ya en el precio óptimo", color:"var(--text-soft)", title:m};
+  if(u.accion === "omitido" || u.accion === "error") return {txt:"🤖 "+(u.accion==="error"?"error":"no se aplicó"), color:"var(--red)", title:m};
+  const sube = Number(u.precio_nuevo) > Number(u.precio_antes);
+  return {txt:`🤖 ${sube?"subió":"bajó"} a $${fmt(u.precio_nuevo)}`, color: sube?"var(--green)":"var(--ml-blue)", title:m};
+}
+if(typeof celdaCompetencia === "function"){
+  const _celdaCompOrig = celdaCompetencia;
+  celdaCompetencia = function(p){
+    const u = rpzUltimo(p), c = (typeof compDe==="function") ? compDe(p) : null;
+    const tC = c && c.actualizado_at ? Date.parse(c.actualizado_at) : 0, tU = u && u.fecha ? Date.parse(u.fecha) : 0;
+    if(!u || !(Number(u.competidor) > 0) || tU <= tC) {
+      const html = _celdaCompOrig.apply(this, arguments);
+      if(!u) return html;
+      const q = rpzQueHizo(u);
+      return html.replace(/<\/td>\s*$/, `<div style="font-size:10px;color:${q.color};" title="${esc(q.title)}">${q.txt}</div></td>`);
+    }
+    // Dato del 🤖, más nuevo que la última consulta de 🥊
+    const mio = (typeof compPrecioMio==="function" ? compPrecioMio(p) : null) || Number(u.precio_nuevo) || 0;
+    const min = Number(u.competidor), dif = mio && min ? (mio - min)/min*100 : 0;
+    const color = !mio ? "var(--text)" : dif <= 0 ? "var(--green)" : dif <= 5 ? "var(--orange)" : "var(--red)";
+    const txt = !mio ? "" : dif <= 0 ? "sos el más barato" : `+${dif.toFixed(1)}% vs mín.`;
+    const q = rpzQueHizo(u);
+    return `<td style="font-size:12px;cursor:pointer;white-space:nowrap;" onclick="abrirCompetencia('${esc(p.sku)}')" title="Competidor más barato que vio el precio automático (${esc(u.motivo||"")}). Clic para ver el detalle o actualizar con 🥊.">
+      <div style="font-weight:700;color:${color};">mín $${fmt(min)}</div>
+      <div style="font-size:10px;color:${color};">${txt}</div>
+      <div style="font-size:10px;color:var(--text-soft);">🤖 ${compHace(u.fecha)}</div>
+      <div style="font-size:10px;color:${q.color};" title="${esc(q.title)}">${q.txt}</div></td>`;
+  };
+}
+if(typeof renderAnalisis === "function"){
+  const _renderAnRpz = renderAnalisis;
+  renderAnalisis = function(){
+    const r = _renderAnRpz.apply(this, arguments);
+    if(Date.now() - _rpzUltAt > 10*60*1000 && !_rpzUltCargando){ rpzCargarUltimos().then(()=>{ if(Object.keys(_rpzUlt).length){ try{ _renderAnRpz(); impBadgePintar && impBadgePintar(); }catch(e){} } }); }
+    return r;
+  };
+}
 
 // ================================================================
 // SUPERADMIN NEXO
