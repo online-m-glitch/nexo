@@ -5314,7 +5314,7 @@ async function sincronizarFeesPublicaciones(){
       const mode = (it.shipping && it.shipping.mode) || "";
       let envio = 0, peso = null;
       if(it.shipping && it.shipping.free_shipping && pub.ml_user_id){
-        const qsF = new URLSearchParams({item_id:pub.ml_item_id, mode:mode||"me2", logistic_type:logistic, listing_type_id:it.listing_type_id||"", condition:"new", item_price:precio});
+        const qsF = new URLSearchParams({item_id:pub.ml_item_id, mode:mode||"me2", logistic_type:logistic, listing_type_id:it.listing_type_id||"", condition:"new", item_price:precio, free_shipping:"true"});
         const fr = await mlGet("/users/"+pub.ml_user_id+"/shipping_options/free?"+qsF.toString());
         const cov = fr.ok && fr.data && fr.data.coverage && fr.data.coverage.all_country;
         if(cov){ envio = Number(cov.list_cost)||0; peso = cov.billable_weight!=null ? cov.billable_weight : null; }
@@ -7723,7 +7723,7 @@ async function prmEnvio(itemId, precio){
   const k = itemId+"|"+Math.round(precio);
   if(_prmEnvioCache[k] !== undefined) return _prmEnvioCache[k];
   const uid = await mercUserId();
-  const qs = new URLSearchParams({item_id:itemId, item_price:Math.round(precio), listing_type_id:it.listing_type_id||"gold_special", mode:it.shipping.mode||"me2", condition:"new"});
+  const qs = new URLSearchParams({item_id:itemId, item_price:Math.round(precio), listing_type_id:it.listing_type_id||"gold_special", mode:it.shipping.mode||"me2", condition:"new", free_shipping:"true"});
   if(it.shipping.logistic_type) qs.append("logistic_type", it.shipping.logistic_type);
   const r = await mlGet(`/users/${uid}/shipping_options/free?`+qs.toString());
   const cov = r.ok && r.data && r.data.coverage && r.data.coverage.all_country;
@@ -12302,7 +12302,7 @@ async function sincronizarFeesML(){
     // publicación y el costo real de envío, en la misma consulta.
     let billableWeight=null, shippingCost=0;
     if(item.shipping && item.shipping.free_shipping && mlUserId){
-      const qsFree=new URLSearchParams({item_id:p.ml_item_id, mode:shippingMode||"me2", logistic_type:logisticType, listing_type_id:item.listing_type_id||"", condition:"new", item_price:precio});
+      const qsFree=new URLSearchParams({item_id:p.ml_item_id, mode:shippingMode||"me2", logistic_type:logisticType, listing_type_id:item.listing_type_id||"", condition:"new", item_price:precio, free_shipping:"true"});
       const freeRes = await proxyGet("/users/"+mlUserId+"/shipping_options/free?"+qsFree.toString());
       if(freeRes.ok && freeRes.data && freeRes.data.coverage && freeRes.data.coverage.all_country){
         const cov=freeRes.data.coverage.all_country;
