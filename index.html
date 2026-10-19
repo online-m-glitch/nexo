@@ -10069,6 +10069,87 @@ if(typeof renderAnalisis === "function"){
     return r;
   };
 }
+// ================================================================
+// 📦 Cuenta Corriente: pedidos enviados a pagar
+// La deuda con el proveedor se anota al marcar el pedido como "Recibido" (ahí nace la Compra).
+// Hasta entonces, los pedidos aprobados/enviados se muestran aparte, como "a pagar cuando llegue",
+// descontando los pagos anticipados (Pago con referencia "Pedido #id"). No se suman al saldo para
+// no contar dos veces cuando se reciban.
+// ================================================================
+function ccpPendientes(){
+  return (pedidosProv||[]).filter(p=>p.estado==="enviado" || p.estado==="aprobado").map(p=>{
+    const total = Number(p.total)||0, pagado = typeof ppPagado==="function" ? ppPagado(p) : 0;
+    return {p, total, pagado, aPagar: Math.max(0, total - pagado)};
+  }).sort((a,b)=>String(a.p.fecha).localeCompare(String(b.p.fecha)));
+}
+function ccpPorProveedor(){
+  const m = {};
+  ccpPendientes().forEach(x=>{ const k = String(x.p.proveedor||"").toUpperCase(); m[k] = m[k] || {aPagar:0, n:0}; m[k].aPagar += x.aPagar; m[k].n++; });
+  return m;
+}
+function ccpDias(f){ const t = Date.parse(f); return t ? Math.floor((Date.now()-t)/86400000) : 0; }
+function ccpRender(){
+  const sec = document.getElementById("sec-cuentacorriente"); if(!sec) return;
+  const resumen = document.getElementById("provResumen"); if(!resumen) return;
+  let card = document.getElementById("ccpCard");
+  if(!card){ card = document.createElement("div"); card.id = "ccpCard"; card.className = "card"; card.style.marginBottom = "20px"; resumen.insertAdjacentElement("afterend", card); }
+  const lista = ccpPendientes();
+  const q = ((document.getElementById("ccBuscar")||{}).value||"").toLowerCase();
+  const vis = lista.filter(x=>!q || String(x.p.proveedor||"").toLowerCase().includes(q));
+  const tot = vis.reduce((a,x)=>a+x.aPagar,0);
+  if(!lista.length){ card.style.display = "none"; return; }
+  card.style.display = "";
+  card.innerHTML = `
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <h3>📦 Pedidos enviados — a pagar</h3>
+      <div style="font-size:13px;">Total: <strong style="color:var(--orange);font-size:16px;">$${fmt(tot)}</strong></div>
+    </div>
+    <div style="font-size:12px;color:var(--text-soft);padding:0 16px 8px;">Lo que vas a deber cuando llegue la mercadería. No se suma al saldo de arriba: pasa a la cuenta corriente al tocar <strong>📦 Recibido</strong> en el pedido. Los pagos anticipados ya están descontados.</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Proveedor</th><th>Productos</th><th class="num">Total pedido</th><th class="num">Pagado</th><th class="num">A pagar</th><th>Estado</th><th></th></tr></thead>
+      <tbody>${vis.map(x=>{ const p = x.p, d = ccpDias(p.fecha);
+        const prods = (p.lineas||[]).map(l=>`${esc(l.sku||"")} x${l.cantidad||0}`).join(", ");
+        return `<tr>
+          <td>${fFecha(p.fecha)}${d>=7?`<div style="font-size:10px;color:var(--orange);" title="¿Ya llegó? Marcalo como recibido.">hace ${d} días</div>`:""}</td>
+          <td><strong>${esc(p.proveedor||"")}</strong></td>
+          <td style="font-size:12px;color:var(--text-soft);max-width:220px;">${prods}</td>
+          <td class="num">$${fmt(x.total)}</td>
+          <td class="num" style="color:var(--green);">${x.pagado>0?"$"+fmt(x.pagado):"—"}</td>
+          <td class="num" style="font-weight:700;color:${x.aPagar>0?"var(--orange)":"var(--green)"};">${x.aPagar>0?"$"+fmt(x.aPagar):"✅ pagado"}</td>
+          <td><span class="badge ${p.estado==="enviado"?"badge-orange":"badge-blue"}">${p.estado==="enviado"?"📤 enviado":"✔️ aprobado"}</span></td>
+          <td style="white-space:nowrap;" class="admin-only">
+            ${x.aPagar>0 && typeof abrirPagoPP==="function"?`<button class="btn btn-success btn-sm" onclick="abrirPagoPP(${p.id})">💳 Pagar</button>`:""}
+            ${p.estado==="enviado" && typeof marcarRecibidoPP==="function"?`<button class="btn btn-primary btn-sm" onclick="marcarRecibidoPP(${p.id})">📦 Recibido</button>`:""}
+          </td></tr>`; }).join("") || `<tr><td colspan="8" style="text-align:center;color:var(--text-soft);padding:14px;">No hay pedidos enviados de ese proveedor.</td></tr>`}</tbody>
+    </table></div>`;
+  if(typeof esAdmin==="function" && !esAdmin()) card.querySelectorAll(".admin-only").forEach(e=>e.style.display="none");
+  // En las tarjetas de saldo por proveedor: lo que viene en camino
+  const porProv = ccpPorProveedor();
+  [...resumen.querySelectorAll(".stat-card")].forEach(c=>{
+    const lbl = c.querySelector(".label"); if(!lbl) return;
+    const k = lbl.textContent.trim().toUpperCase(), x = porProv[k];
+    let n = c.querySelector(".ccp-extra");
+    if(!x || !(x.aPagar > 0)){ if(n) n.remove(); return; }
+    if(!n){ n = document.createElement("div"); n.className = "ccp-extra"; n.style.cssText = "font-size:11px;color:var(--orange);margin-top:4px;font-weight:600;"; c.appendChild(n); }
+    n.textContent = `+ $${fmt(x.aPagar)} en ${x.n} pedido${x.n>1?"s":""} enviado${x.n>1?"s":""}`;
+  });
+  // Proveedores con pedidos enviados pero sin movimientos en la cuenta corriente
+  Object.entries(porProv).forEach(([k,x])=>{
+    if(!(x.aPagar > 0)) return;
+    if([...resumen.querySelectorAll(".stat-card .label")].some(l=>l.textContent.trim().toUpperCase()===k)) return;
+    resumen.insertAdjacentHTML("beforeend", `<div class="stat-card"><div class="label">${esc(k)}</div><div class="value green">$0</div><div style="font-size:11px;color:var(--text-soft);margin-top:4px;">Al día</div><div class="ccp-extra" style="font-size:11px;color:var(--orange);margin-top:4px;font-weight:600;">+ $${fmt(x.aPagar)} en ${x.n} pedido${x.n>1?"s":""} enviado${x.n>1?"s":""}</div></div>`);
+  });
+}
+if(typeof renderCC === "function"){
+  const _renderCCOrig = renderCC;
+  renderCC = function(){ const r = _renderCCOrig.apply(this, arguments); try{ ccpRender(); }catch(e){ console.error(e); } return r; };
+}
+// Al pagar o recibir un pedido, refrescar la cuenta corriente si está abierta
+["marcarRecibidoPP","registrarPagoPP"].forEach(n=>{
+  if(typeof window[n] !== "function") return;
+  const o = window[n];
+  window[n] = async function(){ const r = await o.apply(this, arguments); try{ const s = document.getElementById("sec-cuentacorriente"); if(s && s.classList.contains("active")) renderCC(); }catch(e){} return r; };
+});
 
 // ================================================================
 // SUPERADMIN NEXO
