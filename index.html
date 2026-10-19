@@ -5329,7 +5329,7 @@ async function sincronizarFeesPublicaciones(){
       if(Array.isArray(opt)) opt = opt.find(o=>o.listing_type_id===it.listing_type_id) || opt[0];
       if(!opt || opt.sale_fee_amount==null){ fail++; errores.push(pub.ml_item_id+": "+_mlError(fe)); return; }
       const campos = {precio, estado:it.status||pub.estado, listing_type_id:it.listing_type_id||pub.listing_type_id, logistic_type:logistic||null,
-        fee_amount:Number(opt.sale_fee_amount)||0, fee_fixed:Number(opt.sale_fee_details && opt.sale_fee_details.fixed_fee)||0,
+        fee_amount:nxFeeEnMoneda(opt, it.currency_id, precio).fee, fee_fixed:nxFeeEnMoneda(opt, it.currency_id, precio).fijo,
         shipping_cost:envio, fees_at:new Date().toISOString()};
       await sbUpdate("nexo_ml_publicaciones", "ml_item_id=eq."+encodeURIComponent(pub.ml_item_id)+"&variacion_id=eq."+encodeURIComponent(pub.variacion_id||""), campos);
       Object.assign(pub, campos, it.currency_id ? {moneda: esMonedaExt(it.currency_id) ? it.currency_id : null} : {});
@@ -10150,6 +10150,29 @@ if(typeof renderCC === "function"){
   const o = window[n];
   window[n] = async function(){ const r = await o.apply(this, arguments); try{ const s = document.getElementById("sec-cuentacorriente"); if(s && s.classList.contains("active")) renderCC(); }catch(e){} return r; };
 });
+// ================================================================
+// 💱 Comisión de ML en la moneda de la publicación (Uruguay en US$)
+// listing_prices responde SIEMPRE en la moneda del sitio (UYU), aunque la publicación esté en dólares
+// y se le pase currency_id=USD: convierte el precio a pesos y devuelve la comisión en $U.
+// NEXO guarda ml_price / fee_amount / fee_fixed en la moneda de la publicación (y los pasa a local al
+// mostrar), así que si las monedas no coinciden hay que llevar la comisión a la moneda de la publicación:
+//   parte porcentual = precio × % (exacta, sin cotización) · parte fija = fijo ÷ dólar.
+// El envío (shipping_options) se guarda en moneda local, como siempre.
+// ================================================================
+function nxFeeEnMoneda(opt, monedaItem, precio){
+  const fee = Number(opt && opt.sale_fee_amount)||0;
+  const det = (opt && opt.sale_fee_details) || {};
+  const fijo = Number(det.fixed_fee)||0;
+  const monOpt = opt && opt.currency_id;
+  if(!monOpt || !monedaItem || monOpt === monedaItem) return {fee, fijo};
+  const fx = (typeof cotizUSD==="function" ? cotizUSD() : 0) || 0;
+  const pct = Number(det.percentage_fee != null ? det.percentage_fee : det.meli_percentage_fee)||0;
+  const pctAdic = Number(det.financing_add_on_fee)||0;
+  const fijoItem = fijo ? (fx > 0 ? fijo / fx : 0) : 0;
+  if(pct > 0 && precio > 0) return {fee: Math.round((precio*(pct+pctAdic)/100 + fijoItem)*100)/100, fijo: Math.round(fijoItem*100)/100};
+  if(fx > 0) return {fee: Math.round(fee/fx*100)/100, fijo: Math.round(fijoItem*100)/100};
+  return {fee, fijo};
+}
 
 // ================================================================
 // SUPERADMIN NEXO
@@ -12317,8 +12340,10 @@ async function sincronizarFeesML(){
     if(!opt || opt.sale_fee_amount==null){
       return {sku:p.sku, fail:true, motivo:feeRes.data};
     }
-    const feeAmount = opt.sale_fee_amount||0;
-    const feeFixed = (opt.sale_fee_details && opt.sale_fee_details.fixed_fee) ? opt.sale_fee_details.fixed_fee : 0;
+    // Comisión en la moneda de la publicación (ML responde en la del sitio; ver fee_moneda.js)
+    const _fm = (typeof nxFeeEnMoneda==="function") ? nxFeeEnMoneda(opt, item.currency_id, precio) : {fee:opt.sale_fee_amount||0, fijo:(opt.sale_fee_details&&opt.sale_fee_details.fixed_fee)||0};
+    const feeAmount = _fm.fee;
+    const feeFixed = _fm.fijo;
     const feePct = precio>0 ? (feeAmount/precio*100) : (opt.sale_fee_details&&opt.sale_fee_details.percentage_fee)||0;
 
     return {sku:p.sku, ml_item_id:p.ml_item_id, feeAmount, feeFixed, feePct, shippingCost, mlPrice:precio, raw:{listing_prices:opt, billable_weight:billableWeight, tag_cuotas:tagCuotas||null}, fail:false};
