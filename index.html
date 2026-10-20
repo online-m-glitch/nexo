@@ -5666,11 +5666,23 @@ window.addEventListener("popstate", ()=>{
   const id = navSeccionDelHash() || "panel";
   if(navPuedeVer(id) && !document.getElementById("sec-"+id).classList.contains("active")) mostrarSeccion(id);
 });
-// Al abrir el panel (o una pestaña nueva con #seccion), ir a esa sección cuando terminan de cargar los datos
+// Al abrir el panel (o una pestaña nueva con #seccion), ir a esa sección cuando terminan de cargar los datos.
+// La sección pedida se guarda ACÁ, al cargar la página: mientras arranca, otras partes redibujan la sección abierta
+// (ej. al llegar el dólar del día en cuentas con costos en US$) y eso pisaba la dirección con #panel.
+let _navInicial = navSeccionDelHash();
+const _navPushOrig = history.pushState.bind(history);
+history.pushState = function(st, t, url){
+  // Durante el arranque no se agregan pasos al historial ni se pisa la sección pedida
+  if(_navInicial) return;
+  return _navPushOrig(st, t, url);
+};
 const _iniciarSinNav = iniciar;
 iniciar = async function(){
-  const r = await _iniciarSinNav.apply(this, arguments);
-  const id = navSeccionDelHash();
+  const pedida = _navInicial;
+  let r;
+  try{ r = await _iniciarSinNav.apply(this, arguments); }
+  finally{ _navInicial = ""; }
+  const id = pedida || navSeccionDelHash();
   if(id && id!=="panel"){
     if(navPuedeVer(id)) mostrarSeccion(id);
     else history.replaceState(null, "", location.pathname+location.search);
