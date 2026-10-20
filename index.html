@@ -10173,6 +10173,55 @@ function nxFeeEnMoneda(opt, monedaItem, precio){
   if(fx > 0) return {fee: Math.round(fee/fx*100)/100, fijo: Math.round(fijoItem*100)/100};
   return {fee, fijo};
 }
+// ================================================================
+// 🥊 Competencia: se actualiza sola al abrir el detalle
+// Si el último dato tiene más de 2 minutos, al abrir el modal se consulta ML en segundo plano
+// (se muestra lo guardado mientras tanto) y se vuelve a dibujar cuando llega lo nuevo.
+// ================================================================
+const COMP_AUTO_MIN = 2;
+let _compAutoEnCurso = {};
+function compAutoHaceFalta(sku){
+  const p = (productos||[]).find(x=>x.sku===sku); if(!p) return false;
+  if(typeof esAdmin==="function" && !esAdmin()) return false;   // solo lectura: no puede guardar
+  if(!compCatalogId(p)) return false;                             // sin producto de catálogo vinculado
+  const c = compDe(p);
+  if(!c || !c.actualizado_at) return true;
+  return Date.now() - Date.parse(c.actualizado_at) > COMP_AUTO_MIN*60000;
+}
+async function compAutoActualizar(sku){
+  if(_compAutoEnCurso[sku] || !compAutoHaceFalta(sku)) return;
+  _compAutoEnCurso[sku] = true;
+  const marcar = (txt)=>{ const b = document.getElementById("btnCompActualizar"); if(b && _compSku===sku){ b.disabled = !!txt; b.textContent = txt || "🔄 Actualizar ahora"; } };
+  if(_compSku===sku && document.getElementById("modalCompetencia")?.classList.contains("show")) compRender();
+  try{
+    const r = await compActualizarSku(sku, true);
+    const abierto = document.getElementById("modalCompetencia")?.classList.contains("show");
+    if(abierto && _compSku===sku) compRender();
+    if(r && r.ok){ try{ renderAnalisis(); }catch(e){} }
+  }catch(e){ console.error(e); }
+  finally{ _compAutoEnCurso[sku] = false; marcar(""); }
+}
+if(typeof abrirCompetencia === "function"){
+  const _abrirCompOrig = abrirCompetencia;
+  abrirCompetencia = function(sku){
+    const r = _abrirCompOrig.apply(this, arguments);
+    compAutoActualizar(sku);
+    return r;
+  };
+}
+// compRender vuelve a dibujar el botón: si hay una actualización en curso, mantenerlo como "actualizando"
+if(typeof compRender === "function"){
+  const _compRenderOrig = compRender;
+  compRender = function(){
+    const r = _compRenderOrig.apply(this, arguments);
+    if(_compSku && _compAutoEnCurso[_compSku]){
+      const b = document.getElementById("btnCompActualizar");
+      if(b){ b.disabled = true; b.textContent = "⏳ Actualizando solo…"; }
+      else { const cu = document.getElementById("compCuerpo"); if(cu) cu.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-soft);">⏳ Consultando la competencia en MercadoLibre…</div>`; }
+    }
+    return r;
+  };
+}
 
 // ================================================================
 // SUPERADMIN NEXO
