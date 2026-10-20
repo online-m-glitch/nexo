@@ -10222,6 +10222,41 @@ if(typeof compRender === "function"){
     return r;
   };
 }
+// ================================================================
+// 🔀 Usuarios con acceso a varias cuentas (nexo_usuario_cuentas)
+// Si el usuario (no superadmin) tiene más de una cuenta, aparece un selector debajo del nombre de la cuenta.
+// Al cambiar, el servidor pasa su cuenta activa (nexo_cambiar_cuenta) y se recarga el panel.
+// ================================================================
+async function cuentasCargar(){
+  if(esSuperadmin) return;
+  let cs = [];
+  try{ cs = await saRpc("nexo_mis_cuentas"); }catch(e){ return; }
+  const viejo = document.getElementById("cuentasSelector"); if(viejo) viejo.remove();
+  if(!Array.isArray(cs) || cs.length < 2) return;
+  const ref = document.getElementById("sidebarCliente"); if(!ref) return;
+  const sel = document.createElement("select");
+  sel.id = "cuentasSelector"; sel.title = "Cambiar de cuenta";
+  sel.style.cssText = "width:100%;margin-top:8px;padding:7px 8px;border-radius:7px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:inherit;font-size:12px;";
+  sel.innerHTML = cs.map(c=>`<option value="${esc(c.cliente_id)}" ${c.activa?"selected":""} style="color:#111;">🔀 ${esc(c.nombre)}${c.rol==="admin"?"":" (solo lectura)"}</option>`).join("");
+  sel.onchange = ()=>cuentasCambiar(sel.value);
+  ref.insertAdjacentElement("afterend", sel);
+}
+async function cuentasCambiar(id){
+  if(!id || id === clienteId) return;
+  try{
+    mostrarCargando(true);
+    await saRpc("nexo_cambiar_cuenta", {p_cliente:id});
+    window.location.reload();
+  }catch(e){ mostrarCargando(false); toast("No se pudo cambiar de cuenta: "+e.message,"err"); cuentasCargar(); }
+}
+if(typeof cargarCliente === "function"){
+  const _cargarClienteOrigCu = cargarCliente;
+  cargarCliente = async function(){
+    const r = await _cargarClienteOrigCu.apply(this, arguments);
+    try{ await cuentasCargar(); }catch(e){}
+    return r;
+  };
+}
 
 // ================================================================
 // SUPERADMIN NEXO
@@ -16658,6 +16693,9 @@ async function sincronizarStockML(){
     let actualizados=0;
     const promises=[];
     const skusConfiables=new Set(); // SKUs ya confirmados por SELLER_SKU explícito en esta sincronización
+    // Por SKU: si hay alguna publicación en Full, manda el stock de Full (por inventario, sin contar dos veces las
+    // publicaciones sincronizadas que comparten inventario); una publicación pausada o sin Full no lo pisa.
+    const stkPorSku={};
 
     // Traer detalles individuales de a 10 en paralelo
     logML("Iniciando fetch de "+itemIds.length+" items...");
@@ -16729,12 +16767,27 @@ async function sincronizarStockML(){
         }
 
         if(skuConfiable) skusConfiables.add(sku);
-        stockML[sku]=qty;
-        promises.push(sbGuardar("stockml",{sku,cantidad:qty}).catch(()=>{}));
-        actualizados++;
-        logML("✅ "+sku+": "+qty+" uds"+(skuConfiable?"":" (por título)"));
+        const antS = stkPorSku[sku];
+        if(logType==="fulfillment"){
+          const inv = body.inventory_id || body.id;
+          if(!antS || !antS.full) stkPorSku[sku] = {full:true, inv:{[inv]:qty}};
+          else antS.inv[inv] = qty;
+        } else if(!antS || !antS.full){
+          stkPorSku[sku] = {full:false, qty:Math.max(qty, antS?antS.qty:0)};
+        } else {
+          logML("  ⏭️ "+sku+": "+body.id+" no está en Full ("+(body.status||"")+"): no pisa el stock de Full");
+          continue;
+        }
+        logML("  · "+sku+" ("+body.id+"): "+qty+" uds"+(skuConfiable?"":" (por título)"));
       }
     }
+    Object.entries(stkPorSku).forEach(([sku,st])=>{
+      const q = st.full ? Object.values(st.inv).reduce((a,b)=>a+(Number(b)||0),0) : st.qty;
+      stockML[sku]=q;
+      promises.push(sbGuardar("stockml",{sku,cantidad:q}).catch(()=>{}));
+      actualizados++;
+      logML("✅ "+sku+": "+q+" uds"+(st.full?" en Full":""));
+    });
 
     await Promise.all(promises);
     mostrarCargando(false);
