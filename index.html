@@ -14626,6 +14626,7 @@ async function verAutomatizacionPrecio(mlItemId, sku){
     }
     const activa = data.status==="ACTIVE";
     _autoPrecioActual.ruleId = data.item_rule?.rule_id||null;
+    _autoPrecioActual.autoId = data.item_id || mlItemId;
     document.getElementById("autoPrecioContenido").innerHTML = `
       <div><strong>Estado:</strong> ${activa?'🟢 Activa':'⏸️ Pausada'}</div>
       <div><strong>Regla:</strong> ${esc(data.item_rule?.rule_id||'—')}</div>
@@ -14665,7 +14666,7 @@ async function verAutomatizacionPrecio(mlItemId, sku){
 }
 async function actualizarRangoAutomatizacion(){
   if(checkViewer("Ajustar rango de automatización de precios")) return;
-  const {mlItemId, ruleId} = _autoPrecioActual;
+  const {mlItemId, ruleId} = _autoPrecioActual; const autoId = _autoPrecioActual.autoId || mlItemId;
   if(!mlItemId || !ruleId){ toast("Faltan datos de la automatización — cerrá y volvé a abrir el cartel.","err"); return; }
   const min = parseFloat(document.getElementById("autoPrecioMin").value);
   const max = parseFloat(document.getElementById("autoPrecioMax").value);
@@ -14676,7 +14677,7 @@ async function actualizarRangoAutomatizacion(){
     const r=await fetch(SB_URL+"/functions/v1/ml-api", {
       method:"POST",
       headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+sbAuth()},
-      body:JSON.stringify({grant_type:"proxy", path:"/pricing-automation/items/"+encodeURIComponent(mlItemId)+"/automation", method:"PUT", data:{rule_id:ruleId, min_price:min, max_price:max}, access_token:mlToken})
+      body:JSON.stringify({grant_type:"proxy", path:"/pricing-automation/items/"+encodeURIComponent(autoId)+"/automation", method:"PUT", data:{rule_id:ruleId, min_price:min, max_price:max}, access_token:mlToken})
     });
     const data=await r.json().catch(()=>({}));
     if(!r.ok || data.error){
@@ -14697,7 +14698,7 @@ async function actualizarRangoAutomatizacion(){
 }
 async function desactivarAutomatizacionPrecio(){
   if(checkViewer("Desactivar automatización de precios")) return;
-  const {mlItemId, sku} = _autoPrecioActual;
+  const {mlItemId, sku} = _autoPrecioActual; const autoId = _autoPrecioActual.autoId || mlItemId;
   if(!mlItemId) return;
   if(!confirm("¿Desactivar la automatización de precios de esta publicación en MercadoLibre? El precio va a quedar fijo en el valor actual hasta que lo cambies vos.")) return;
 
@@ -14707,7 +14708,7 @@ async function desactivarAutomatizacionPrecio(){
     const r=await fetch(SB_URL+"/functions/v1/ml-api", {
       method:"POST",
       headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+sbAuth()},
-      body:JSON.stringify({grant_type:"proxy", path:"/pricing-automation/items/"+encodeURIComponent(mlItemId)+"/automation", method:"DELETE", access_token:mlToken})
+      body:JSON.stringify({grant_type:"proxy", path:"/pricing-automation/items/"+encodeURIComponent(autoId)+"/automation", method:"DELETE", access_token:mlToken})
     });
     if(!r.ok){
       const data=await r.json().catch(()=>({}));
