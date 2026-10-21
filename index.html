@@ -9049,7 +9049,11 @@ function nxFechaAR(off){ return new Date(Date.now() - 3*3600*1000 + (off||0)*864
 async function nxHoyCargar(forzar){
   if(_nxHoy.cargando) return;
   if(!forzar && _nxHoy.datos && Date.now() - _nxHoy.at < 5*60*1000) return;
-  if(typeof mlToken === "undefined" || !mlToken) return;
+  // mlToken solo se marcaba al abrir la sección MercadoLibre: si todavía no se verificó, verificarlo acá
+  if((typeof mlToken === "undefined" || !mlToken) && typeof verificarTokenML === "function" && !_nxHoy.verificado){
+    _nxHoy.verificado = true; try{ await verificarTokenML(); }catch(e){}
+  }
+  if(typeof mlToken === "undefined" || !mlToken){ nxHoyPintar(); return; }
   _nxHoy.cargando = true;
   try{
     const uid = await atnUid();
@@ -10266,6 +10270,25 @@ if(typeof cargarCliente === "function"){
   cargarCliente = async function(){
     const r = await _cargarClienteOrigCu.apply(this, arguments);
     try{ await cuentasCargar(); }catch(e){}
+    return r;
+  };
+}
+
+// ================================================================
+// Conexión con MercadoLibre verificada al arrancar
+// mlToken ("hay conexión") solo se marcaba al abrir la sección MercadoLibre, y varias cosas automáticas
+// (ventas de hoy en el Panel, precios y promociones de ML en Análisis) no corrían hasta entonces.
+// ================================================================
+if(typeof iniciar === "function"){
+  const _iniciarSinML = iniciar;
+  iniciar = async function(){
+    const r = await _iniciarSinML.apply(this, arguments);
+    try{
+      if(!mlToken && typeof verificarTokenML === "function"){
+        await verificarTokenML();
+        if(mlToken && typeof nxHoyCargar === "function") nxHoyCargar(true);
+      }
+    }catch(e){}
     return r;
   };
 }
