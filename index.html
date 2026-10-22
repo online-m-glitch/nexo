@@ -6272,7 +6272,7 @@ function compRender(){
       · actualizado ${compHace(c.actualizado_at)}
       <button class="btn btn-ghost btn-sm admin-only" id="btnCompActualizar" onclick="compActualizarActual()">🔄 Actualizar ahora</button>
       <button class="btn btn-ghost btn-sm admin-only" onclick="compMostrarVincular(productos.find(x=>x.sku===_compSku))">🔗 Cambiar producto vinculado</button>
-      ${sugerido && mio && mio>sugerido ? `<button class="btn btn-primary btn-sm admin-only" onclick="compUsarPrecio(${sugerido})" title="Carga el precio en la tabla de Análisis; no se publica hasta que toques 💲">Usar $${fmt(sugerido)} (1 menos que el más barato · margen ${mg(sugerido)})</button>`:""}
+      ${sugerido && mio && mio>sugerido ? `<button class="btn btn-primary btn-sm admin-only" onclick="compUsarPrecio(${sugerido})" title="Aplica este precio en MercadoLibre (pide confirmación). Si el producto tiene 🤖, baja su margen mínimo para que lo mantenga.">Usar $${fmt(sugerido)} (1 menos que el más barato · margen ${mg(sugerido)})</button>`:""}
     </div>`;
   const rep = o=>{ const r = COMP_REP[o.reputacion]; return r ? `<span title="Reputación ${r[1]}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${r[0]};margin-right:4px;"></span>` : ""; };
   cuerpo.innerHTML = `<div class="table-wrap" style="max-height:46vh;overflow:auto;"><table>
@@ -8724,8 +8724,9 @@ async function rpzGuardarMargenSku(sku, valor){
     if(rpz.activos[sku]) rpz.activos[sku].margen_min = v;
     rpzPintarActivos();
     try{ renderAnalisis(); }catch(e){}
-    toast(v === null ? `${sku}: vuelve a usar el margen general (${rpzMargenGlobal()}%).` : `${sku}: margen mínimo ${String(v).replace(".", ",")}% ✅ · simulando…`, "ok", 4000);
-    rpzEjecutar(true, sku);
+    toast(v === null ? `${sku}: vuelve a usar el margen general (${rpzMargenGlobal()}%) · aplicando…` : `${sku}: margen mínimo ${String(v).replace(".", ",")}% ✅ · aplicando el precio en MercadoLibre…`, "ok", 4000);
+    // Se aplica en el momento (sin esperar la corrida de cada 30 min)
+    if(rpzEsActivo(sku)) rpzEjecutar(false, sku).then(()=>{ try{ rpzCargar(true).then(rpzPintarActivos); }catch(e){} });
   }catch(e){ toast("No se pudo guardar: "+e.message,"err",6000); }
 }
 // Cambiar el piso desde la tabla de Análisis (cartel "🤖 en el piso")
@@ -8736,6 +8737,33 @@ function rpzEditarPiso(sku){
   const r = prompt(`Margen mínimo del 🤖 para ${sku} (%).\nDejalo vacío para usar el general (${rpzMargenGlobal()}%).`, act != null ? String(act).replace(".", ",") : "");
   if(r === null) return;
   rpzGuardarMargenSku(sku, r);
+}
+
+// 🥊 "Usar $X (1 menos que el más barato)": aplica el precio en un paso (antes solo lo cargaba en la tabla y había que tocar 💲)
+// - Con 🤖 activo: baja el piso de ese producto al margen que deja ese precio y el 🤖 lo aplica ya (si no, en la próxima
+//   corrida el 🤖 lo volvería a subir a su piso).
+// - Sin 🤖: publica el precio en MercadoLibre directamente.
+if(typeof compUsarPrecio === "function"){
+  compUsarPrecio = async function(precio){
+    const sku = _compSku, p = (productos||[]).find(x=>x.sku===sku);
+    if(!p) return;
+    if(checkViewer("Actualizar precio en ML")) return;
+    const m = (typeof calcAnaliMLConPrecio === "function" && calcAnaliMLConPrecio(p, precio)) || null;
+    const mTxt = m ? String(Math.round(m.margenPct*10)/10).replace(".", ",")+"%" : "";
+    if(rpzEsActivo(sku)){
+      const piso = Math.max(0, Math.round((Math.floor((m ? m.margenPct : 0) * 10) / 10 - 0.3) * 10) / 10);
+      if(!confirm(`${sku}: para quedar en $${fmt(precio)} (margen ${mTxt}) el 🤖 necesita un piso más bajo.\n\n¿Bajar el margen mínimo de este producto a ${String(piso).replace(".", ",")}% y aplicar el precio ahora?`)) return;
+      cerrarCompetencia();
+      await rpzGuardarMargenSku(sku, piso);
+      return;
+    }
+    if(!confirm(`¿Publicar $${fmt(precio)} en MercadoLibre para ${sku}?${mTxt ? `\nMargen con ese precio: ${mTxt}` : ""}`)) return;
+    const inp = document.getElementById("precioAn_"+sku);
+    if(inp) inp.value = Math.round(precio);
+    cerrarCompetencia();
+    if(inp && typeof actualizarPrecioAnalisis === "function") await actualizarPrecioAnalisis(sku);
+    else if(typeof nexoAplicarPrecioML === "function") await nexoAplicarPrecioML(p, Math.round(precio));
+  };
 }
 // ================================================================
 // 🏷️ Promociones en Análisis ML
