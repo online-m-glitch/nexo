@@ -10289,8 +10289,34 @@ if(typeof iniciar === "function"){
         if(mlToken && typeof nxHoyCargar === "function") nxHoyCargar(true);
       }
     }catch(e){}
+    try{ nxStockAlEntrar(); }catch(e){}
     return r;
   };
+}
+
+// ================================================================
+// 📦 Stock Full: se sincroniza solo al entrar al panel (admins, si pasaron más de 10 minutos desde la última vez)
+// Corre en segundo plano, sin la pantalla de "cargando" ni el cartel final; queda la fecha en "Última actualización".
+// ================================================================
+let _nxStockCorriendo = false;
+async function nxStockAlEntrar(){
+  if(_nxStockCorriendo || typeof sincronizarStockML !== "function") return;
+  if(typeof esAdmin === "function" && !esAdmin()) return;
+  if(typeof mlToken === "undefined" || !mlToken) return;
+  const ult = (typeof appConfig !== "undefined" && appConfig && appConfig.last_sync_stock) ? Date.parse(appConfig.last_sync_stock) : 0;
+  if(ult && Date.now() - ult < 10*60*1000) return;
+  _nxStockCorriendo = true;
+  const mc = mostrarCargando, ts = toast;
+  mostrarCargando = function(){};
+  toast = function(msg){ if(/^Stock ML sincronizado/.test(String(msg))) return; return ts.apply(this, arguments); };
+  try{ await sincronizarStockML(); }
+  catch(e){ console.warn("Stock Full al entrar:", e); }
+  finally{
+    if(mostrarCargando !== mc) mostrarCargando = mc;
+    toast = ts;
+    _nxStockCorriendo = false;
+    try{ if(typeof mostrarUltimaSync === "function") mostrarUltimaSync("stock","ultimaSyncStock"); }catch(e){}
+  }
 }
 
 // ================================================================
