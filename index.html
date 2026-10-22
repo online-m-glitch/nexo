@@ -10318,6 +10318,82 @@ async function nxStockAlEntrar(){
     try{ if(typeof mostrarUltimaSync === "function") mostrarUltimaSync("stock","ultimaSyncStock"); }catch(e){}
   }
 }
+// ================================================================
+// ⚡ Carga más rápida
+// 1) sbGetAll (ventas y movimientos, miles de filas): las páginas se piden de a 4 en paralelo, no una por una.
+// 2) Las tablas secundarias de cargarDatos (gastos, caja, devoluciones, listas, proveedores, pedidos) se piden
+//    todas juntas en paralelo con las principales.
+// 3) Al cambiar de sección no se vuelve a descargar todo si los datos tienen menos de 45 segundos
+//    (antes cada clic en el menú bajaba todas las ventas y movimientos otra vez).
+// ================================================================
+if(typeof sbGetAll === "function"){
+  sbGetAll = async function(table, baseParams, pageSize){
+    pageSize = pageSize || 1000; baseParams = baseParams || "";
+    const sep = baseParams ? "&" : "";
+    const pag = (off)=>sbGet(table, baseParams+sep+"limit="+pageSize+"&offset="+off);
+    const todas = [];
+    const primera = await pag(0);
+    todas.push(...(primera||[]));
+    if(!primera || primera.length < pageSize) return todas;
+    let offset = pageSize;
+    while(offset <= 200000){
+      const lote = await Promise.all([0,1,2,3].map(i=>pag(offset + i*pageSize)));
+      let fin = false;
+      for(const p of lote){ if(fin) break; todas.push(...(p||[])); if(!p || p.length < pageSize) fin = true; }
+      if(fin) break;
+      offset += 4*pageSize;
+    }
+    return todas;
+  };
+}
+
+// Precarga en paralelo de las tablas secundarias: cargarDatos las pide de a una después de las principales;
+// acá se piden juntas apenas arranca y cargarDatos recibe la respuesta ya lista.
+const _NX_SECUNDARIAS = {"gastos":"order=fecha.desc", "caja_movimientos":"order=fecha.desc", "devoluciones_garantias":"order=fecha_ingreso.desc",
+  "listas_precios_items":"order=fecha.desc", "proveedores":"order=nombre.asc", "pedidos_prov":"order=created_at.desc&limit=200", "pedidos":"order=created_at.desc&limit=500"};
+let _nxPrecarga = null;
+if(typeof sbGet === "function"){
+  const _sbGetOrigVel = sbGet;
+  sbGet = function(table, params){
+    if(_nxPrecarga && _NX_SECUNDARIAS[table] === params && _nxPrecarga[table]){ const pr = _nxPrecarga[table]; delete _nxPrecarga[table]; return pr; }
+    return _sbGetOrigVel.apply(this, arguments);
+  };
+  var _nxSbGetDirecto = _sbGetOrigVel;
+}
+
+let _nxUltCarga = 0, _nxDesdeSeccion = false;
+function nxInvalidarDatos(){ _nxUltCarga = 0; }
+if(typeof cargarDatos === "function"){
+  const _cargarDatosOrigVel = cargarDatos;
+  cargarDatos = async function(){
+    if(_nxDesdeSeccion && _nxUltCarga && Date.now() - _nxUltCarga < 45*1000) return;   // datos recientes: no se baja todo de nuevo
+    _nxPrecarga = {};
+    for(const [t, q] of Object.entries(_NX_SECUNDARIAS)) _nxPrecarga[t] = _nxSbGetDirecto(t, q).catch(e=>{ throw e; });
+    // Evitar avisos de "promesa rechazada sin manejar" si alguna tabla no existe: cargarDatos las atrapa al usarlas
+    Object.values(_nxPrecarga).forEach(pr=>pr.catch(()=>{}));
+    try{ const r = await _cargarDatosOrigVel.apply(this, arguments); _nxUltCarga = Date.now(); return r; }
+    finally{ _nxPrecarga = null; }
+  };
+}
+if(typeof mostrarSeccion === "function"){
+  const _mostrarSeccionVel = mostrarSeccion;
+  mostrarSeccion = function(){
+    _nxDesdeSeccion = true;
+    try{ return _mostrarSeccionVel.apply(this, arguments); }   // cargarDatos se llama en la parte sincrónica
+    finally{ _nxDesdeSeccion = false; }
+  };
+}
+// El refresco automático (cada 5 min o después de importar ventas) sí tiene que traer todo
+if(typeof nexoAutoRefrescar === "function"){
+  const _autoRefVel = nexoAutoRefrescar;
+  nexoAutoRefrescar = function(){ nxInvalidarDatos(); return _autoRefVel.apply(this, arguments); };
+}
+// Cualquier escritura en la base invalida los datos: el próximo cambio de sección vuelve a cargar todo
+["sbGuardar","sbInsert","sbInsertBulk","sbUpdate","sbUpsert","sbDelete"].forEach(n=>{
+  if(typeof window[n] !== "function") return;
+  const o = window[n];
+  window[n] = function(){ nxInvalidarDatos(); return o.apply(this, arguments); };
+});
 
 // ================================================================
 // SUPERADMIN NEXO
