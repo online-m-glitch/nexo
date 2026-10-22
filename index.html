@@ -8680,7 +8680,7 @@ function rpzPintarActivos(){
   el.innerHTML = `<div class="table-wrap"><table style="width:100%;font-size:12px;"><thead><tr><th>SKU</th><th>Producto</th><th class="num">Precio actual</th><th class="num">Margen mín.</th><th>Pendiente</th><th></th></tr></thead><tbody>${skus.map(s=>{
     const p = (productos||[]).find(q=>q.sku===s) || {};
     const pr = typeof feeRaw==="function" && Number(feeRaw(s).ml_price) > 0 ? Number(feeRaw(s).ml_price) : p.precio;
-    return `<tr><td><span class="sku-tag">${esc(s)}</span></td><td>${esc(p.nombre||"")}</td><td class="num">$${fmt(pr||0)}</td><td class="num">${rpz.activos[s].margen_min||rpzMargenGlobal()}%</td><td>${rpz.activos[s].precio_pendiente?`<span style="color:#b45309;font-weight:700;" title="La publicación está pausada y ML no deja cambiar el precio. Se aplica sola cuando se active.">⏳ $${fmt(rpz.activos[s].precio_pendiente)}</span>`:""}</td>
+    return `<tr><td><span class="sku-tag">${esc(s)}</span></td><td>${esc(p.nombre||"")}</td><td class="num">$${fmt(pr||0)}</td><td class="num" style="white-space:nowrap;"><input type="number" step="0.5" min="0" max="80" id="rpzMm_${esc(s)}" value="${rpz.activos[s].margen_min!=null?rpz.activos[s].margen_min:""}" placeholder="${rpzMargenGlobal()}" title="Margen mínimo de este producto. Vacío = usa el general (${rpzMargenGlobal()}%)." style="width:62px;padding:3px 5px;border:1.5px solid ${rpz.activos[s].margen_min!=null?'var(--orange)':'var(--border)'};border-radius:6px;text-align:right;font-size:12px;" onchange="rpzGuardarMargenSku('${esc(s)}', this.value)"> %</td><td>${rpz.activos[s].precio_pendiente?`<span style="color:#b45309;font-weight:700;" title="La publicación está pausada y ML no deja cambiar el precio. Se aplica sola cuando se active.">⏳ $${fmt(rpz.activos[s].precio_pendiente)}</span>`:""}</td>
       <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="rpzEjecutar(true,'${esc(s)}')" title="Calcular sin cambiar nada">🔍 Simular</button> <button class="btn btn-ghost btn-sm" onclick="rpzToggle('${esc(s)}').then(rpzPintarActivos)">Desactivar</button></td></tr>`;
   }).join("")}</tbody></table></div>`;
 }
@@ -8711,6 +8711,31 @@ function rpzEtiquetaPend(p){
 function rpzAlActivarse(p){
   const r = rpz.activos[p.sku];
   if(r && r.precio_pendiente && typeof esAdmin==="function" && esAdmin()) setTimeout(()=>rpzEjecutar(false, p.sku).then(()=>rpzCargar(true)).then(()=>{ try{ renderAnalisis(); }catch(e){} }), 500);
+}
+
+// Margen mínimo propio de un producto (vacío = usa el general). Después de guardar, simula para mostrar a qué precio quedaría.
+async function rpzGuardarMargenSku(sku, valor){
+  if(checkViewer("Configurar margen mínimo")) return;
+  const txt = String(valor ?? "").trim().replace(",", ".");
+  const v = txt === "" ? null : parseFloat(txt);
+  if(v !== null && !(v >= 0 && v < 80)){ toast("Cargá un margen válido (ej. 7) o dejalo vacío para usar el general.","err"); return; }
+  try{
+    await sbUpdate("nexo_repricer", "sku=eq."+encodeURIComponent(sku), {margen_min:v, updated_at:new Date().toISOString()});
+    if(rpz.activos[sku]) rpz.activos[sku].margen_min = v;
+    rpzPintarActivos();
+    try{ renderAnalisis(); }catch(e){}
+    toast(v === null ? `${sku}: vuelve a usar el margen general (${rpzMargenGlobal()}%).` : `${sku}: margen mínimo ${String(v).replace(".", ",")}% ✅ · simulando…`, "ok", 4000);
+    rpzEjecutar(true, sku);
+  }catch(e){ toast("No se pudo guardar: "+e.message,"err",6000); }
+}
+// Cambiar el piso desde la tabla de Análisis (cartel "🤖 en el piso")
+function rpzEditarPiso(sku){
+  if(checkViewer("Configurar margen mínimo")) return;
+  if(!rpzEsActivo(sku)){ toast("Primero activá el 🤖 en este producto.","err"); return; }
+  const act = rpz.activos[sku].margen_min;
+  const r = prompt(`Margen mínimo del 🤖 para ${sku} (%).\nDejalo vacío para usar el general (${rpzMargenGlobal()}%).`, act != null ? String(act).replace(".", ",") : "");
+  if(r === null) return;
+  rpzGuardarMargenSku(sku, r);
 }
 // ================================================================
 // 🏷️ Promociones en Análisis ML
@@ -10047,7 +10072,7 @@ function rpzUltimo(p){ return _rpzUlt[String(p.sku||"").toUpperCase()] || null; 
 function rpzQueHizo(u){
   const m = String(u.motivo||"");
   if(/piso por margen/i.test(m) || (u.margen_min!=null && u.margen!=null && Math.abs(Number(u.margen)-Number(u.margen_min))<0.6 && Number(u.competidor) < Number(u.precio_nuevo)))
-    return {txt:`🤖 en el piso: margen mín. ${Number(u.margen_min)}%`, color:"var(--orange)", title:"El competidor está más barato que tu precio mínimo: el 🤖 no baja más para no perder margen."};
+    return {txt:`🤖 en el piso: margen mín. ${Number(u.margen_min)}%`, color:"var(--orange)", title:"El competidor está más barato que tu precio mínimo: el 🤖 no baja más para no perder margen. Tocá ✏️ para cambiar el mínimo de este producto.", piso:true};
   if(u.accion === "sin cambio") return {txt:"🤖 ya en el precio óptimo", color:"var(--text-soft)", title:m};
   if(u.accion === "omitido" || u.accion === "error") return {txt:"🤖 "+(u.accion==="error"?"error":"no se aplicó"), color:"var(--red)", title:m};
   const sube = Number(u.precio_nuevo) > Number(u.precio_antes);
@@ -10062,7 +10087,7 @@ if(typeof celdaCompetencia === "function"){
       const html = _celdaCompOrig.apply(this, arguments);
       if(!u) return html;
       const q = rpzQueHizo(u);
-      return html.replace(/<\/td>\s*$/, `<div style="font-size:10px;color:${q.color};" title="${esc(q.title)}">${q.txt}</div></td>`);
+      return html.replace(/<\/td>\s*$/, `<div style="font-size:10px;color:${q.color};" title="${esc(q.title)}">${q.txt}${rpzLapiz(p,q)}</div></td>`);
     }
     // Dato del 🤖, más nuevo que la última consulta de 🥊
     const mio = (typeof compPrecioMio==="function" ? compPrecioMio(p) : null) || Number(u.precio_nuevo) || 0;
@@ -10074,7 +10099,7 @@ if(typeof celdaCompetencia === "function"){
       <div style="font-weight:700;color:${color};">mín $${fmt(min)}</div>
       <div style="font-size:10px;color:${color};">${txt}</div>
       <div style="font-size:10px;color:var(--text-soft);">🤖 ${compHace(u.fecha)}</div>
-      <div style="font-size:10px;color:${q.color};" title="${esc(q.title)}">${q.txt}</div></td>`;
+      <div style="font-size:10px;color:${q.color};" title="${esc(q.title)}">${q.txt}${rpzLapiz(p,q)}</div></td>`;
   };
 }
 if(typeof renderAnalisis === "function"){
@@ -10084,6 +10109,11 @@ if(typeof renderAnalisis === "function"){
     if(Date.now() - _rpzUltAt > 10*60*1000 && !_rpzUltCargando){ rpzCargarUltimos().then(()=>{ if(Object.keys(_rpzUlt).length){ try{ _renderAnRpz(); impBadgePintar && impBadgePintar(); }catch(e){} } }); }
     return r;
   };
+}
+
+function rpzLapiz(p, q){
+  if(!q || !q.piso || typeof rpzEditarPiso !== "function") return "";
+  return ` <a href="#" class="admin-only" style="text-decoration:none;" title="Cambiar el margen mínimo de este producto" onclick="event.stopPropagation();rpzEditarPiso('${esc(p.sku)}');return false;">✏️</a>`;
 }
 // ================================================================
 // 📦 Cuenta Corriente: pedidos enviados a pagar
