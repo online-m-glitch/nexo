@@ -16389,7 +16389,7 @@ async function verificarTokenML(){
     const r = await mlApi({grant_type:"proxy", path:"/users/me"});
     const user = r.data || {};
     if(statusEl) statusEl.innerHTML = '<span style="color:var(--green);">🟢 Conectado</span>';
-    if(userEl) userEl.textContent = (user.nickname||"")+" · "+(user.email||"");
+    if(userEl){ userEl.textContent = ((typeof clienteNombre!=="undefined" && clienteNombre) || user.nickname || "")+" · "+(user.email||""); userEl.title = "Usuario de MercadoLibre: "+(user.nickname||""); }
     if(btnConectar) btnConectar.style.display="none";
     if(btnDesconectar) btnDesconectar.style.display = esAdmin() ? "inline-block" : "none";
     if(accionesWrap) accionesWrap.style.display="block";
