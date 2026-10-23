@@ -10536,6 +10536,103 @@ if(typeof _recMargen === "function"){
 }
 
 // ================================================================
+// ↩️ Posventa: reclamos, devoluciones y reembolsos de MercadoLibre
+// El servidor (nexo-sync, acción "posventa", 1 vez por día) guarda en nexo_posventa lo que informa ML de cada reclamo:
+// reembolso al comprador, envío de la devolución a cargo del vendedor, comisión anulada y si aplicó la cobertura de ML.
+// impacto = cuánto cambia la ganancia de esa venta (negativo = se pierde). Acá se descuenta de la venta en
+// Rentabilidad y se marca en Ventas. No toca el stock: si el producto vuelve, se reingresa a mano.
+// ================================================================
+let pv = { lista: [], at: 0, cargando: false, mapa: null, firma: "" };
+async function pvCargar(forzar){
+  if(pv.cargando || (!forzar && pv.at && Date.now() - pv.at < 10*60*1000)) return false;
+  pv.cargando = true;
+  try{
+    const filas = await sbGet("nexo_posventa", "select=claim_id,order_id,pack_id,tipo,subtipo,estado,resolucion,a_favor,cobertura,sku,producto,cantidad,precio,reembolso,envio_devolucion,comision_anulada,producto_vuelve,devolucion_estado,impacto,fecha_reclamo&order=fecha_reclamo.desc");
+    pv.lista = Array.isArray(filas) ? filas : [];
+    pv.at = Date.now(); pv.mapa = null;
+    return true;
+  }catch(e){ pv.at = Date.now(); return false; }
+  finally{ pv.cargando = false; }
+}
+// Qué fila de ventas "lleva" cada reclamo: misma venta (nro de orden o de carrito) y, si hay varias líneas, el mismo SKU.
+// Solo cuentan los reclamos de ventas que están cargadas en NEXO.
+function pvMapa(){
+  const firma = pv.at + "|" + (ventas||[]).length;
+  if(pv.mapa && pv.firma === firma) return pv.mapa;
+  const porNro = {};
+  (ventas||[]).forEach(v=>{ if(v.canal === "ML" && v.nroVenta) (porNro[String(v.nroVenta)] ||= []).push(v); });
+  const mapa = new Map();
+  pv.lista.forEach(c=>{
+    const cand = [...(porNro[String(c.order_id)]||[]), ...(c.pack_id ? porNro[String(c.pack_id)]||[] : [])];
+    if(!cand.length) return;
+    const v = cand.find(x=>c.sku && String(x.sku||"").toUpperCase() === String(c.sku).toUpperCase()) || cand[0];
+    if(!mapa.has(v)) mapa.set(v, []);
+    mapa.get(v).push(c);
+  });
+  pv.mapa = mapa; pv.firma = firma;
+  return mapa;
+}
+function pvDeVenta(v){ return (v && pvMapa().get(v)) || []; }
+function pvAjuste(v){ return pvDeVenta(v).reduce((a,c)=>a+(Number(c.impacto)||0), 0); }
+function pvGanoVendedor(c){ const f = String(c.a_favor||""); return f.includes("respondent") && !f.includes("complainant"); }
+function pvEtiqueta(c){
+  if(c.cobertura) return {txt:"🛡️ Cubierto por ML", cls:"badge-blue"};
+  if(pvGanoVendedor(c)) return {txt:"✅ Reclamo a favor", cls:"badge-green"};
+  const abierto = c.estado !== "closed";
+  if(c.tipo === "returns") return {txt:"↩️ Devolución"+(abierto?" (abierta)":""), cls:"badge-orange"};
+  if(Number(c.reembolso) > 0) return {txt:"💸 Reembolso"+(Number(c.reembolso) < Number(c.precio)*(Number(c.cantidad)||1) ? " parcial" : ""), cls:"badge-red"};
+  return {txt:"⚠️ Reclamo"+(abierto?" (abierto)":""), cls:"badge-orange"};
+}
+function pvDetalle(c){
+  const l = [];
+  l.push((c.tipo === "returns" ? "Devolución" : "Reclamo") + " #" + c.claim_id + " · " + (c.estado === "closed" ? "cerrado" : "abierto") + (c.fecha_reclamo ? " · " + fFecha(String(c.fecha_reclamo).slice(0,10)) : ""));
+  if(Number(c.reembolso)) l.push("Reembolso al comprador: −$" + fmt(c.reembolso));
+  if(Number(c.comision_anulada) && Number(c.reembolso)) l.push("Comisión que devolvió ML: +$" + fmt(c.comision_anulada));
+  if(Number(c.envio_devolucion)) l.push("Envío de la devolución: −$" + fmt(c.envio_devolucion));
+  if(c.cobertura) l.push("ML aplicó la cobertura: no se descuenta.");
+  else if(pvGanoVendedor(c)) l.push("Se resolvió a tu favor: no se descuenta.");
+  if(c.producto_vuelve) l.push("El producto vuelve" + (c.devolucion_estado ? " (" + ({label_generated:"etiqueta generada", shipped:"en camino", delivered:"entregado", expired:"vencida", cancelled:"cancelada", closed:"cerrada"}[c.devolucion_estado] || c.devolucion_estado) + ")" : "") + ": reingresalo al stock a mano cuando llegue.");
+  l.push("Impacto en la ganancia: " + (Number(c.impacto) < 0 ? "−$" + fmt(-c.impacto) : "$0"));
+  return l.join("\n");
+}
+function pvBadges(v){
+  return pvDeVenta(v).map(c=>{ const e = pvEtiqueta(c); return `<span class="badge ${e.cls}" style="cursor:help;white-space:nowrap;" title="${esc(pvDetalle(c))}">${e.txt}${Number(c.impacto) < 0 ? " −$"+fmt(-c.impacto) : ""}</span>`; }).join(" ");
+}
+// Resumen de los reclamos de un conjunto de ventas
+function pvResumen(lista){
+  let n = 0, impacto = 0, cubiertos = 0;
+  (lista||[]).forEach(v=>pvDeVenta(v).forEach(c=>{ n++; impacto += Number(c.impacto)||0; if(c.cobertura) cubiertos++; }));
+  return {n, impacto, cubiertos};
+}
+function pvTarjeta(lista){
+  const r = pvResumen(lista);
+  if(!r.n) return "";
+  return `<div class="stat-card" title="Reclamos, devoluciones y reembolsos de MercadoLibre de estas ventas (se actualiza 1 vez por día). Ya está descontado de la ganancia.${r.cubiertos ? "\n" + r.cubiertos + " cubierto" + (r.cubiertos===1?"":"s") + " por ML (no se descuentan)." : ""}" style="cursor:help;"><div class="label">↩️ Posventa (${r.n} reclamo${r.n===1?"":"s"})</div><div class="value" style="color:${r.impacto<0?'#dc2626':'inherit'};">${r.impacto<0?"−$"+fmt(-r.impacto):"$0"}</div></div>`;
+}
+// Recarga y vuelve a dibujar cuando llegan los datos
+function pvAsegurar(redibujar){ pvCargar().then(ok=>{ if(ok) try{ redibujar(); }catch(e){} }); }
+if(typeof renderVentas === "function"){
+  const _pvRV = renderVentas;
+  renderVentas = function(){
+    const r = _pvRV.apply(this, arguments);
+    try{
+      pvAsegurar(()=>renderVentas());
+      // Marcas en cada venta (columna Observaciones) y tarjeta con el total
+      const tbody = document.getElementById("ventasBody");
+      if(tbody) tbody.querySelectorAll("tr").forEach(tr=>{
+        const b = tr.querySelector('button[onclick^="eliminarVenta("],button[onclick^="reSincronizarVentaPuntual("]');
+        const m = b && b.getAttribute("onclick").match(/\((\d+)\)/); if(!m) return;
+        const v = ventas[Number(m[1])], h = pvBadges(v); if(!h) return;
+        const td = tr.children[7]; if(td) td.insertAdjacentHTML("afterbegin", h + " ");
+      });
+      const st = document.getElementById("ventasStats");
+      if(st && pv.lista.length) st.insertAdjacentHTML("beforeend", pvTarjeta((ventas||[]).filter(v=>v.canal==="ML")));
+    }catch(e){}
+    return r;
+  };
+}
+
+// ================================================================
 // SUPERADMIN NEXO
 // ================================================================
 // ================================================================
@@ -15012,6 +15109,7 @@ let rentPagina=1, rentFiltroFirma='';
 function irAPaginaRentabilidad(n){ rentPagina=n; renderRentabilidad(); }
 function renderRentabilidad(){
   const periodoVal=document.getElementById("rentFiltroPeriodo")?.value||"30";
+  try{ pvAsegurar(()=>renderRentabilidad()); }catch(e){}
   const canal=document.getElementById("rentFiltroOrigen")?.value||"";
   const q=(document.getElementById("rentBuscar")?.value||"").toLowerCase().trim();
   const customWrap=document.getElementById("rentFechaPersonalizada");
@@ -15049,7 +15147,7 @@ function renderRentabilidad(){
   let totIngreso=0, totRecibi=0, totCosto=0, totGanancia=0, totUnid=0, conCosto=0;
   const filas=lista.map(v=>{
     const ingreso=v.precio*v.cantidad;
-    const recibi=v.totalNeto||v.ingresoBruto||ingreso;
+    const recibi=(v.totalNeto||v.ingresoBruto||ingreso)+(typeof pvAjuste==="function"?pvAjuste(v):0);
     // Costo "congelado" al momento de la venta (no se recalcula si el costo del producto cambió después).
     // Respaldo al costo actual del catálogo solo para ventas viejas, cargadas antes de guardar este dato.
     const esHistorico = v.costo_unitario!=null && v.costo_unitario>0;
@@ -15084,6 +15182,7 @@ function renderRentabilidad(){
     <div class="stat-card"><div class="label">Gastos operativos</div><div class="value" style="color:#ea7000;">$${fmt(totGastos)}</div></div>
     <div class="stat-card" style="border:1.5px solid ${gananciaNeta>=0?'#16a34a':'#dc2626'};"><div class="label">Ganancia neta real</div><div class="value" style="color:${gananciaNeta>=0?'#16a34a':'#dc2626'};font-weight:800;">$${fmt(gananciaNeta)}</div></div>
     <div class="stat-card"><div class="label">Margen promedio</div><div class="value">${margenPromedio.toFixed(1)}%</div></div>
+    ${typeof pvTarjeta==="function"?pvTarjeta(lista):""}
   `;
 
   if(!filas.length){ if(tbody) tbody.innerHTML=""; if(empty) empty.style.display="block"; renderPaginador('rentPaginacion',0,50,1,'irAPaginaRentabilidad'); return; }
@@ -15109,7 +15208,7 @@ function renderRentabilidad(){
       <td class="num num-pos" style="font-weight:700;">$${fmt(recibi)}</td>
       <td class="num ${ganancia!==null&&ganancia<0?'num-neg':''}" style="font-weight:700;">${tieneCosto?'$'+fmt(ganancia):'—'}</td>
       <td class="num ${margenCls}">${margen!==null?margen.toFixed(0)+'%':'—'}</td>
-      <td style="font-size:11px;color:var(--text-soft);">${esc(v.nroVenta||'')}</td>
+      <td style="font-size:11px;color:var(--text-soft);">${esc(v.nroVenta||'')}${typeof pvBadges==="function"&&pvBadges(v)?"<div style=\"margin-top:3px;\">"+pvBadges(v)+"</div>":""}</td>
     </tr>`;
   }).join("");
   renderPaginador('rentPaginacion', filas.length, porPagina, rentPagina, 'irAPaginaRentabilidad');
