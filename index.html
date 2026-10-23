@@ -3303,6 +3303,10 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
         <label>Observaciones</label>
         <input type="text" id="ppObs" placeholder="Opcional">
       </div>
+      <div class="form-group">
+        <label>N° de remito</label>
+        <input type="text" id="ppRemito" placeholder="Ej. 0001-00012345" title="Número de remito del proveedor (aparte del número de pedido de NEXO)">
+      </div>
     </div>
 
     <div style="font-size:13px;font-weight:700;color:var(--brand-oscuro);margin-bottom:8px;">Líneas del pedido</div>
@@ -3615,7 +3619,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
     </div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
       <label style="font-size:13px;font-weight:700;">Margen mínimo de seguridad
-        <input type="number" id="rpzMargen" step="0.5" min="0" style="width:64px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;margin-left:6px;"> %
+        <input type="text" inputmode="decimal" id="rpzMargen" style="width:64px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;margin-left:6px;"> %
       </label>
       <button class="btn btn-ghost btn-sm admin-only" onclick="rpzGuardarMargen()">Guardar</button>
       <span style="flex:1;"></span>
@@ -7715,16 +7719,19 @@ async function prmCargar(forzar){
 async function prmCargarInfo(ids){
   const faltan = [...new Set(ids.filter(id=>id && !prm.info[id]))];
   for(let i=0;i<faltan.length;i+=20){
-    const r = await mlGet("/items?ids="+faltan.slice(i,i+20).join(",")+"&attributes=id,title,thumbnail,secure_thumbnail,price,available_quantity,permalink,seller_custom_field,category_id,listing_type_id,shipping,status,currency_id");
+    const r = await mlGet("/items?ids="+faltan.slice(i,i+20).join(",")+"&attributes=id,title,thumbnail,secure_thumbnail,price,available_quantity,permalink,seller_custom_field,category_id,listing_type_id,shipping,status,currency_id,item_relations");
     (r.ok && Array.isArray(r.data) ? r.data : []).forEach(x=>{ if(x && x.body && x.body.id) prm.info[x.body.id] = x.body; });
   }
   if(!prm.pubs){ try{ prm.pubs = await sbGet("nexo_ml_publicaciones","select=sku,ml_item_id"); }catch(e){ prm.pubs = []; } }
 }
+let _prmRel = false;
 function prmProducto(itemId){
   const id = String(itemId||"").toUpperCase();
   let p = (productos||[]).find(x=>String(x.ml_item_id||"").toUpperCase()===id);
   if(!p){ const pub = (prm.pubs||[]).find(x=>String(x.ml_item_id||"").toUpperCase()===id && x.sku); if(pub) p = (productos||[]).find(x=>String(x.sku||"").toUpperCase()===String(pub.sku).toUpperCase()); }
   if(!p){ const sku = (prm.info[itemId]||{}).seller_custom_field; if(sku) p = (productos||[]).find(x=>String(x.sku||"").toUpperCase()===String(sku).toUpperCase()); }
+  // Publicación de catálogo vinculada a otra (item_relations): usa el SKU de la publicación con la que comparte stock
+  if(!p && !_prmRel){ _prmRel = true; try{ for(const r of ((prm.info[itemId]||{}).item_relations||[])){ if(r && r.id && String(r.id).toUpperCase()!==id){ p = prmProducto(r.id); if(p) break; } } } finally{ _prmRel = false; } }
   return p || null;
 }
 
@@ -8666,7 +8673,8 @@ async function abrirRepricer(){
 function cerrarRepricer(){ document.getElementById("modalRepricer").classList.remove("show"); }
 async function rpzGuardarMargen(){
   if(checkViewer("Configurar margen mínimo")) return;
-  const v = parseFloat(document.getElementById("rpzMargen").value);
+  const t0 = String(document.getElementById("rpzMargen").value||"").replace(/[%\s]/g, "").replace(",", ".");
+  const v = /^\d+(\.\d+)?$/.test(t0) ? parseFloat(t0) : NaN;
   if(!(v >= 0 && v < 90)){ toast("Cargá un margen válido (ej. 9).","err"); return; }
   appConfig.repricer = Object.assign({}, appConfig.repricer||{}, {margen_min:v});
   await sbGuardar("config", {key:"repricer", value:appConfig.repricer}).catch(()=>{});
@@ -8680,7 +8688,7 @@ function rpzPintarActivos(){
   el.innerHTML = `<div class="table-wrap"><table style="width:100%;font-size:12px;"><thead><tr><th>SKU</th><th>Producto</th><th class="num">Precio actual</th><th class="num">Margen mín.</th><th>Pendiente</th><th></th></tr></thead><tbody>${skus.map(s=>{
     const p = (productos||[]).find(q=>q.sku===s) || {};
     const pr = typeof feeRaw==="function" && Number(feeRaw(s).ml_price) > 0 ? Number(feeRaw(s).ml_price) : p.precio;
-    return `<tr><td><span class="sku-tag">${esc(s)}</span></td><td>${esc(p.nombre||"")}</td><td class="num">$${fmt(pr||0)}</td><td class="num" style="white-space:nowrap;"><input type="number" step="0.5" min="0" max="80" id="rpzMm_${esc(s)}" value="${rpz.activos[s].margen_min!=null?rpz.activos[s].margen_min:""}" placeholder="${rpzMargenGlobal()}" title="Margen mínimo de este producto. Vacío = usa el general (${rpzMargenGlobal()}%)." style="width:62px;padding:3px 5px;border:1.5px solid ${rpz.activos[s].margen_min!=null?'var(--orange)':'var(--border)'};border-radius:6px;text-align:right;font-size:12px;" onchange="rpzGuardarMargenSku('${esc(s)}', this.value)"> %</td><td>${rpz.activos[s].precio_pendiente?`<span style="color:#b45309;font-weight:700;" title="La publicación está pausada y ML no deja cambiar el precio. Se aplica sola cuando se active.">⏳ $${fmt(rpz.activos[s].precio_pendiente)}</span>`:""}</td>
+    return `<tr><td><span class="sku-tag">${esc(s)}</span></td><td>${esc(p.nombre||"")}</td><td class="num">$${fmt(pr||0)}</td><td class="num" style="white-space:nowrap;"><input type="text" inputmode="decimal" id="rpzMm_${esc(s)}" value="${rpz.activos[s].margen_min!=null?rpz.activos[s].margen_min:""}" placeholder="${rpzMargenGlobal()}" title="Margen mínimo de este producto: escribí el número, con o sin % (ej. 7 o 7,5%). Vacío = usa el general (${rpzMargenGlobal()}%)." style="width:62px;padding:3px 5px;border:1.5px solid ${rpz.activos[s].margen_min!=null?'var(--orange)':'var(--border)'};border-radius:6px;text-align:right;font-size:12px;" onchange="rpzGuardarMargenSku('${esc(s)}', this.value)"> %</td><td>${rpz.activos[s].precio_pendiente?`<span style="color:#b45309;font-weight:700;" title="La publicación está pausada y ML no deja cambiar el precio. Se aplica sola cuando se active.">⏳ $${fmt(rpz.activos[s].precio_pendiente)}</span>`:""}</td>
       <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="rpzEjecutar(true,'${esc(s)}')" title="Calcular sin cambiar nada">🔍 Simular</button> <button class="btn btn-ghost btn-sm" onclick="rpzToggle('${esc(s)}').then(rpzPintarActivos)">Desactivar</button></td></tr>`;
   }).join("")}</tbody></table></div>`;
 }
@@ -8716,8 +8724,9 @@ function rpzAlActivarse(p){
 // Margen mínimo propio de un producto (vacío = usa el general). Después de guardar, simula para mostrar a qué precio quedaría.
 async function rpzGuardarMargenSku(sku, valor){
   if(checkViewer("Configurar margen mínimo")) return;
-  const txt = String(valor ?? "").trim().replace(",", ".");
-  const v = txt === "" ? null : parseFloat(txt);
+  // Acepta "7", "7,5", "7%" o "7,5 %" (con o sin el símbolo)
+  const txt = String(valor ?? "").replace(/[%\s]/g, "").replace(",", ".");
+  const v = txt === "" ? null : (/^\d+(\.\d+)?$/.test(txt) ? parseFloat(txt) : NaN);
   if(v !== null && !(v >= 0 && v < 80)){ toast("Cargá un margen válido (ej. 7) o dejalo vacío para usar el general.","err"); return; }
   try{
     await sbUpdate("nexo_repricer", "sku=eq."+encodeURIComponent(sku), {margen_min:v, updated_at:new Date().toISOString()});
@@ -8734,7 +8743,7 @@ function rpzEditarPiso(sku){
   if(checkViewer("Configurar margen mínimo")) return;
   if(!rpzEsActivo(sku)){ toast("Primero activá el 🤖 en este producto.","err"); return; }
   const act = rpz.activos[sku].margen_min;
-  const r = prompt(`Margen mínimo del 🤖 para ${sku} (%).\nDejalo vacío para usar el general (${rpzMargenGlobal()}%).`, act != null ? String(act).replace(".", ",") : "");
+  const r = prompt(`Margen mínimo del 🤖 para ${sku}.\nEscribí el número, con o sin % (ej. 7  ·  7,5  ·  7%).\nDejalo vacío para usar el general (${rpzMargenGlobal()}%).`, act != null ? String(act).replace(".", ",") : "");
   if(r === null) return;
   rpzGuardarMargenSku(sku, r);
 }
@@ -10452,6 +10461,79 @@ if(typeof nexoAutoRefrescar === "function"){
   const o = window[n];
   window[n] = function(){ nxInvalidarDatos(); return o.apply(this, arguments); };
 });
+
+// ================================================================
+// 🎯 Piso de margen en Análisis ML
+// La clasificación usa el piso del 🤖 en vez de un 10% fijo:
+//   Rentable ≥20% · Aceptable 15-20% · A revisar piso-15% · Bajo el piso 0-piso · Con pérdida <0%
+// El piso es el general (editable en la barra de Análisis) salvo que el producto tenga su propio piso en el 🤖:
+// ese se respeta y no se modifica al cambiar el general.
+// ================================================================
+function nxPisoSku(sku){
+  const a = sku && typeof rpz !== "undefined" && rpz.activos ? rpz.activos[sku] : null;
+  const v = a && a.margen_min != null && a.margen_min !== "" ? Number(a.margen_min) : NaN;
+  return isFinite(v) ? v : rpzMargenGlobal();
+}
+const _nxPisoFmt = v => String(Math.round(Number(v) * 10) / 10).replace(".", ",");
+function nxClasificarPiso(r, sku){
+  if(!r || r.margenPct == null || !isFinite(r.margenPct)) return r;
+  if(!["Rentable", "Aceptable", "Revisar", "Pérdida", "Margen bajo"].includes(r.rec)) return r;
+  const m = r.margenPct, piso = nxPisoSku(sku);
+  r.piso = piso;
+  if(m >= 20){ r.rec = "Rentable"; r.cls = "badge-green"; }
+  else if(m >= 15){ r.rec = "Aceptable"; r.cls = "badge-blue"; }
+  else if(m >= piso){ r.rec = "Revisar"; r.cls = "badge-orange"; }
+  else if(m >= 0){ r.rec = "Bajo el piso"; r.cls = "badge-red"; }
+  else { r.rec = "Pérdida"; r.cls = "badge-red"; }
+  return r;
+}
+["calcAnaliML", "calcAnaliPub"].forEach(n=>{
+  if(typeof window[n] !== "function") return;
+  const o = window[n];
+  window[n] = function(x){ return nxClasificarPiso(o.apply(this, arguments), x && x.sku); };
+});
+// Barra de Análisis: textos del filtro con el piso actual + campo para el piso general
+function nxPisoUI(){
+  const sel = document.getElementById("analisisFiltro"); if(!sel) return;
+  const g = _nxPisoFmt(rpzMargenGlobal());
+  const opts = `<option value="">Todos</option><option value="Rentable">Solo rentables (≥20%)</option><option value="Aceptable">Aceptable (15-20%)</option><option value="Revisar">A revisar (${g}-15%)</option><option value="Bajo el piso">Bajo el piso (&lt;${g}%)</option><option value="Pérdida">Con pérdida (&lt;0%)</option>`;
+  if(sel.dataset.opts !== opts){ const v = sel.value; sel.innerHTML = opts; sel.dataset.opts = opts; sel.value = [...sel.options].some(o=>o.value===v) ? v : ""; }
+  let inp = document.getElementById("anPisoGral");
+  if(!inp){
+    const w = document.createElement("span");
+    w.className = "admin-only"; w.style.cssText = "display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text-soft);white-space:nowrap;";
+    w.title = "Piso general de margen: el 🤖 no baja de este % y debajo de este % el producto figura \"Bajo el piso\". Los productos con piso propio en el 🤖 mantienen el suyo.";
+    w.innerHTML = `🎯 Piso <input type="text" inputmode="decimal" id="anPisoGral" style="width:52px;padding:6px 6px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;text-align:right;" onchange="nxGuardarPisoGeneral(this.value)"> %`;
+    sel.insertAdjacentElement("afterend", w);
+    inp = document.getElementById("anPisoGral");
+  }
+  if(document.activeElement !== inp) inp.value = g;
+}
+async function nxGuardarPisoGeneral(valor){
+  if(checkViewer("Configurar el piso de margen")){ nxPisoUI(); return; }
+  const txt = String(valor ?? "").replace(/[%\s]/g, "").replace(",", ".");
+  const v = /^\d+(\.\d+)?$/.test(txt) ? parseFloat(txt) : NaN;
+  if(!(v >= 0 && v < 80)){ toast("Cargá un piso válido, con o sin % (ej. 8,5 o 8,5%).", "err"); nxPisoUI(); return; }
+  appConfig.repricer = Object.assign({}, appConfig.repricer || {}, {margen_min:v});
+  try{ await sbGuardar("config", {key:"repricer", value:appConfig.repricer}); }
+  catch(e){ toast("No se pudo guardar: " + e.message, "err", 6000); return; }
+  const propios = Object.values((typeof rpz !== "undefined" && rpz.activos) || {}).filter(a=>a.margen_min != null && a.margen_min !== "").length;
+  toast(`🎯 Piso general: ${_nxPisoFmt(v)}% ✅` + (propios ? ` · ${propios} producto${propios === 1 ? "" : "s"} con piso propio mantiene${propios === 1 ? "" : "n"} el suyo` : "") + " · el 🤖 lo usa desde su próxima corrida.", "ok", 6000);
+  const m = document.getElementById("rpzMargen"); if(m) m.value = v;
+  try{ rpzPintarActivos(); }catch(e){}
+  renderAnalisis();
+}
+if(typeof renderAnalisis === "function"){
+  const _nxRA = renderAnalisis;
+  renderAnalisis = function(){ try{ nxPisoUI(); }catch(e){} return _nxRA.apply(this, arguments); };
+}
+// Misma escala para Promociones y Mercado (sin SKU propio: usa el piso general)
+if(typeof _recMargen === "function"){
+  _recMargen = function(m){
+    if(m == null || !isFinite(m)) return {rec:"—", cls:"badge-gray"};
+    return nxClasificarPiso({rec:"Revisar", cls:"", margenPct:m}, null);
+  };
+}
 
 // ================================================================
 // SUPERADMIN NEXO
@@ -16445,16 +16527,29 @@ function actualizarTotalesFullML(){
     `<strong>${totalUnid}</strong> unidades totales a enviar a Full ML`;
 }
 
+let _fullMLGuardando = false;
 async function confirmarImportFullML(){
+  if(_fullMLGuardando) return;
   const fecha = document.getElementById("fullMLFecha").value;
   const nroEnvio = document.getElementById("fullMLNro").value.trim();
   if(!fecha){ toast("Ingresá la fecha del envío.","err"); return; }
 
   const seleccionadas = fullMLLineas.filter(l=>l.incluir&&l.unidades>0);
   if(!seleccionadas.length){ toast("Seleccioná al menos un producto.","err"); return; }
-
+  if(nroEnvio && !confirmarImportFullML._forzar){
+    const ya = movimientos.filter(m=>m.tipo==="Envío a Full" && String(m.obs||"").includes("Envío #"+nroEnvio));
+    if(ya.length){
+      confirmCb = async()=>{ confirmarImportFullML._forzar = true; try{ await confirmarImportFullML(); } finally{ confirmarImportFullML._forzar = false; } };
+      document.getElementById("confirmMsg").innerHTML = `⚠️ El envío <strong>#${esc(nroEnvio)}</strong> ya está cargado (${ya.length} producto${ya.length===1?"":"s"}, ${ya.reduce((a,m)=>a+(Number(m.cantidad)||0),0)} u.).<br>Si lo cargás otra vez se duplica el stock enviado a Full. ¿Cargarlo igual?`;
+      document.getElementById("modalConfirm").classList.add("show");
+      return;
+    }
+  }
+  _fullMLGuardando = true;
+  const btnFull = document.getElementById("btnConfirmarFullML"); if(btnFull) btnFull.disabled = true;
   mostrarCargando(true);
   let ok=0, warn=0;
+  try{
 
   for(const l of seleccionadas){
     const prod = productos.find(p=>p.sku.toUpperCase()===l.sku.toUpperCase());
@@ -16478,6 +16573,7 @@ async function confirmarImportFullML(){
       ok++;
     }catch(e){ warn++; }
   }
+  } finally { _fullMLGuardando = false; if(btnFull) btnFull.disabled = false; }
 
   mostrarCargando(false);
   cerrarModalFullML();
@@ -17184,7 +17280,7 @@ function renderPedidosProv(){
 
   const lista = pedidosProv.filter(p=>{
     if(filtroEstado && p.estado!==filtroEstado) return false;
-    if(buscar && !(p.proveedor||"").toLowerCase().includes(buscar)) return false;
+    if(buscar && !((p.proveedor||"")+" "+(p.remito||"")).toLowerCase().includes(buscar)) return false;
     return true;
   });
 
@@ -17223,7 +17319,7 @@ function renderPedidosProv(){
       <td style="max-width:200px;font-size:12px;color:var(--text-soft);" title="${esc(resumen)}">${esc(resumen.length>60?resumen.slice(0,60)+"…":resumen)}</td>
       <td class="num" style="font-weight:700;">$${fmt(p.total||0)}</td>
       <td><span class="badge ${cls}">${icon} ${p.estado}</span>${ppBadgePago(p)}</td>
-      <td style="font-size:12px;color:var(--text-soft);">${esc(p.obs||"")}</td>
+      <td style="font-size:12px;color:var(--text-soft);">${p.remito?`<div style="color:var(--text);font-weight:600;white-space:nowrap;">📄 Remito ${esc(p.remito)}</div>`:""}${esc(p.obs||"")}</td>
       <td>
         <div class="btn-group">
           ${p.estado!=="recibido"&&p.estado!=="cancelado"?`<button class="btn btn-ghost btn-sm admin-only" onclick="editarPedidoProv(${p.id})" title="Editar">✏️</button>`:""}
@@ -17358,6 +17454,7 @@ function abrirNuevoPedidoProv(proveedor, lineasSugeridas){
   document.getElementById("ppProveedor").value = proveedor;
   document.getElementById("ppFecha").value = new Date().toISOString().split("T")[0];
   document.getElementById("ppObs").value = "Reposición de stock";
+  if(document.getElementById("ppRemito")) document.getElementById("ppRemito").value = "";
   document.getElementById("ppLinSku").value = "";
   document.getElementById("ppLinCant").value = "";
   document.getElementById("ppLinCosto").value = "";
@@ -17380,6 +17477,7 @@ function editarPedidoProv(id){
   document.getElementById("ppProveedor").value = p.proveedor||"";
   document.getElementById("ppFecha").value = p.fecha||"";
   document.getElementById("ppObs").value = p.obs||"";
+  if(document.getElementById("ppRemito")) document.getElementById("ppRemito").value = p.remito||"";
   document.getElementById("ppLinSku").value = "";
   document.getElementById("ppLinCant").value = "";
   document.getElementById("ppLinCosto").value = "";
@@ -17469,13 +17567,14 @@ async function guardarPedidoProv(estado){
   const proveedor = document.getElementById("ppProveedor").value.trim().toUpperCase();
   const fecha = document.getElementById("ppFecha").value;
   const obs = document.getElementById("ppObs").value.trim();
+  const remito = (document.getElementById("ppRemito")?.value||"").trim() || null;
   if(!proveedor){ toast("Ingresá el proveedor.","err"); return; }
   if(!fecha){ toast("Ingresá la fecha.","err"); return; }
 
   const total = Math.round((ppLineas.reduce((a,l)=>a+(l.costo||0)*(l.cantidad||0),0) + (Number(ppAjuste)||0))*100)/100;
   const _prevPP = ppId ? pedidosProv.find(x=>x.id===ppId) : null;
   if(_prevPP && _prevPP.estado==="enviado") estado = "enviado";   // editar un pedido ya enviado no lo vuelve atrás
-  const data = {proveedor, fecha, obs, estado, lineas:ppLineas, total};
+  const data = {proveedor, fecha, obs, remito, estado, lineas:ppLineas, total};
 
   mostrarCargando(true);
   try{
@@ -17484,7 +17583,7 @@ async function guardarPedidoProv(estado){
       await fetch("https://piqkwewxbjumyqwtmnxn.supabase.co/rest/v1/pedidos_prov?id=eq."+ppId, {
         method:"PATCH",
         headers:{"apikey":SB_KEY,"Authorization":"Bearer "+sbAuth(),"Content-Type":"application/json","Prefer":"return=minimal"},
-        body:JSON.stringify({proveedor,fecha,obs,estado,lineas:JSON.stringify(ppLineas),total})
+        body:JSON.stringify({proveedor,fecha,obs,remito,estado,lineas:JSON.stringify(ppLineas),total})
       });
       const idx = pedidosProv.findIndex(p=>p.id===ppId);
       if(idx>=0) pedidosProv[idx] = Object.assign({},pedidosProv[idx],data,{id:ppId});
@@ -17579,6 +17678,7 @@ async function marcarRecibidoPP(id){
   confirmCb = async()=>{
     mostrarCargando(true);
     let paso = "preparando los datos";
+    const _rcR = (document.getElementById("rcRemito")?.value||"").trim(); if(_rcR) p.remito = _rcR;
     try{
       // Crear compra automáticamente
       const fecha = new Date().toISOString().split("T")[0];
@@ -17588,7 +17688,7 @@ async function marcarRecibidoPP(id){
       });
       const ajusteP = ppAjusteDe(p);
       const total = Math.round((lineasCompraGen.reduce((a,l)=>a+l.cantidad*l.costo,0) + ajusteP)*100)/100;
-      const compra = {id:Date.now(), fecha, proveedor:p.proveedor, factura:"Pedido #"+id, obs:"Generado desde pedido a proveedor"+(ajusteP?" · Ajuste/redondeo $"+fmt(ajusteP):""), formaPago:"A pagar", total, lineas:lineasCompraGen};
+      const compra = {id:Date.now(), fecha, proveedor:p.proveedor, factura:"Pedido #"+id, obs:"Generado desde pedido a proveedor"+(p.remito?" · Remito "+p.remito:"")+(ajusteP?" · Ajuste/redondeo $"+fmt(ajusteP):""), formaPago:"A pagar", total, lineas:lineasCompraGen};
 
       paso = "guardando la Compra";
       await sbGuardar("compra", compra);
@@ -17598,7 +17698,7 @@ async function marcarRecibidoPP(id){
       paso = "generando los movimientos de stock";
       for(const l of lineasCompraGen){
         const prod = productos.find(x=>x.sku.toUpperCase()===l.sku.toUpperCase());
-        const mov = {fecha, tipo:"Ingreso", sku:l.sku, producto:l.nombre||l.sku, cantidad:l.cantidad, costo:l.costo, precio:prod?prod.precio:0, obs:"Recepción pedido #"+id+" · "+p.proveedor, origen:"", compra_id:compra.id};
+        const mov = {fecha, tipo:"Ingreso", sku:l.sku, producto:l.nombre||l.sku, cantidad:l.cantidad, costo:l.costo, precio:prod?prod.precio:0, obs:"Recepción pedido #"+id+" · "+p.proveedor+(p.remito?" · Remito "+p.remito:""), origen:"", compra_id:compra.id};
         const saved = await sbGuardar("movimiento",mov);
         movimientos.unshift(Object.assign({},mov,saved||{}));
       }
@@ -17606,7 +17706,7 @@ async function marcarRecibidoPP(id){
       // CC
       paso = "registrando la deuda en Cuenta Corriente";
       const ccData = {fecha, tipo:"Compra", proveedor:p.proveedor, factura:"Pedido #"+id,
-        descripcion:lineasCompraGen.length+" producto"+(lineasCompraGen.length!==1?"s":"")+" recibidos",
+        descripcion:lineasCompraGen.length+" producto"+(lineasCompraGen.length!==1?"s":"")+" recibidos"+(p.remito?" · Remito "+p.remito:""),
         importe:total, formaPago:"A pagar", compraId:compra.id};
       const savedCC = await sbGuardar("cc",ccData);
       cuentaCorriente.unshift(Object.assign({},ccData,savedCC||{}));
@@ -17616,7 +17716,7 @@ async function marcarRecibidoPP(id){
       const rEstado = await fetch("https://piqkwewxbjumyqwtmnxn.supabase.co/rest/v1/pedidos_prov?id=eq."+id, {
         method:"PATCH",
         headers:{"apikey":SB_KEY,"Authorization":"Bearer "+sbAuth(),"Content-Type":"application/json","Prefer":"return=minimal"},
-        body:JSON.stringify({estado:"recibido"})
+        body:JSON.stringify(Object.assign({estado:"recibido"}, p.remito ? {remito:p.remito} : {}))
       });
       if(!rEstado.ok){
         const errTxt = await rEstado.text().catch(()=>"");
@@ -17638,6 +17738,7 @@ async function marcarRecibidoPP(id){
   document.getElementById("confirmMsg").innerHTML =
     `<strong>¿Confirmar recepción del pedido de ${esc(p.proveedor)}?</strong><br><br>`+
     `<span style="font-size:13px;color:var(--text-soft);">`+(p.lineas||[]).map(l=>esc(l.sku)+" x"+l.cantidad).join(" · ")+`</span><br><br>`+
+    `<label style="font-size:12px;font-weight:600;">N° de remito del proveedor <input type="text" id="rcRemito" value="${esc(p.remito||"")}" placeholder="Opcional" style="margin-left:6px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;width:170px;"></label><br><br>`+
     `<span style="font-size:12px;">Se generará automáticamente:<br>✅ Compra en el historial<br>✅ Movimientos de ingreso de stock<br>✅ Deuda en Cuenta Corriente</span><br><br>`+
     (ppPagado(p)>0 ? `<span style="font-size:12px;color:#166534;background:#f0fdf4;padding:6px 10px;border-radius:6px;display:inline-block;margin-bottom:8px;">💳 Ya pagaste $${fmt(ppPagado(p))} por adelantado: la deuda se compensa con ese pago y la compra queda ${ppPagado(p) >= (Number(p.total)||0)-0.5 ? "pagada" : "con pago parcial"}.</span><br>` : "")+
     `<span style="font-size:12px;color:#9a3412;background:#fff7ed;padding:6px 10px;border-radius:6px;display:inline-block;">⚠️ No hace falta que cargues la compra de nuevo a mano en "Compras" — ya queda registrada sola con este paso.</span>`;
