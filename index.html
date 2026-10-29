@@ -8812,12 +8812,31 @@ function promoResumir(lista){
   const arm = x => {
     const orig = Number(x.original_price)||0, pr = Number(x.price)||0;
     return {tipo:x.type, nombre:x.name || PROMO_NOMBRES[x.type] || x.type, precio:pr, original:orig,
-      pct: orig > 0 && pr > 0 ? Math.round((1 - pr/orig)*1000)/10 : null, hasta:x.finish_date||null, desde:x.start_date||null, id:x.id||null};
+      pct: orig > 0 && pr > 0 ? Math.round((1 - pr/orig)*1000)/10 : null, hasta:x.finish_date||null, desde:x.start_date||null, id:x.id||null,
+      seller_pct: x.seller_percentage!=null ? Number(x.seller_percentage) : null, meli_pct: x.meli_percentage!=null ? Number(x.meli_percentage) : null};
   };
   const act = lista.filter(x=>x.status==="started" && Number(x.price) > 0).sort((a,b)=>Number(a.price)-Number(b.price))[0];
   const prog = lista.filter(x=>x.status==="pending").sort((a,b)=>Date.parse(a.start_date||0)-Date.parse(b.start_date||0))[0];
   if(!act && !prog) return null;
   return {activa: act ? arm(act) : null, programada: prog ? arm(prog) : null};
+}
+// Margen con la promoción activa: el comprador paga el precio con descuento (sobre ese precio se calcula la comisión);
+// en las co-fondeadas ML pone su parte y el vendedor cobra el precio normal menos solo su parte del descuento.
+function nxConPromo(p, a){
+  const i = promoInfo(p.sku), pr = i && i.activa;
+  if(!a || !pr || !(pr.precio > 0) || !(a.precio > 0)) return a;
+  const comprador = pr.precio, orig = pr.original || a.precio;
+  const vendedor = (pr.seller_pct != null && pr.meli_pct > 0 && orig > 0) ? orig * (1 - pr.seller_pct/100) : comprador;
+  const fC = comprador / a.precio, fV = vendedor / a.precio;
+  const comision = a.comisionPct*fC + a.comisionFixed;
+  const impuesto = a.impuesto*fV, percepcion = a.percepcion*fV;
+  const recibis = vendedor - comision - a.envio - impuesto - percepcion;
+  const margen = recibis - (Number(p.costo)||0);
+  const r = Object.assign({}, a, {comision, impuesto, percepcion, recibis, margen, margenPct: comprador > 0 ? margen/comprador*100 : 0,
+    conPromo:{nombre:pr.nombre, pct:pr.pct, comprador, vendedor, aporteML: vendedor - comprador, hasta:pr.hasta, sinPromo:{recibis:a.recibis, margen:a.margen, margenPct:a.margenPct}}});
+  if(r.margenPct>=20){ r.rec="Rentable"; r.cls="badge-green"; } else if(r.margenPct>=15){ r.rec="Aceptable"; r.cls="badge-blue"; } else if(r.margenPct>=10){ r.rec="Revisar"; r.cls="badge-orange"; } else { r.rec="Pérdida"; r.cls="badge-red"; }
+  try{ if(typeof nxClasificarPiso==="function") nxClasificarPiso(r, p.sku); else if(typeof nxEtiquetaMargen==="function") nxEtiquetaMargen(r); }catch(e){}
+  return r;
 }
 function promoFecha(iso){ const t = Date.parse(iso); return t ? new Date(t).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit"}) : ""; }
 // Etiqueta debajo del precio en Análisis ML
@@ -12455,7 +12474,7 @@ function renderAnalisis(){
   const filtroEstadoML=document.getElementById("analisisFiltroEstadoML")?.value||"";
   const lista=productos.filter(p=>{
     if(!p.ml_item_id) return false; // sin publicación de ML vinculada no tiene sentido "analizarlo" acá
-    if(filtro && calcAnaliML(p).rec!==filtro) return false;
+    if(filtro && nxConPromo(p, calcAnaliML(p)).rec!==filtro) return false;
     if(provFiltro && p.proveedor!==provFiltro) return false;
     if(filtroEstadoML){
       if(filtroEstadoML==="promo"){ if(!(promoInfo(p.sku)||{}).activa) return false; }
@@ -12472,7 +12491,7 @@ function renderAnalisis(){
     return true;
   });
   document.getElementById("analisisBody").innerHTML=lista.map(p=>{
-    const a=calcAnaliML(p);
+    const a=nxConPromo(p, calcAnaliML(p)), _pm=a.conPromo;
     const eml=estadoMLInfo(p.estado_ml);
     return `<tr>
       <td>
@@ -12499,9 +12518,9 @@ function renderAnalisis(){
       <td class="num" style="color:var(--orange);" title="${a.envio>0?'Costo de envío Full/gratis sincronizado con ML':'Sin datos de envío sincronizados'}">$${fmt(a.envio)}${a.comisionReal?(a.envio>0?' ✓':''):' *'}</td>
       <td class="num" style="color:var(--orange);" title="Estimado configurable, no es un dato real por venta">$${fmt(a.impuesto)} *</td>
       <td class="num" style="color:var(--orange);" title="Estimado configurable, no es un dato real por venta">$${fmt(a.percepcion)} *</td>
-      <td class="num" style="font-weight:700;">$${fmt(a.recibis)}</td>
-      <td class="num ${a.margen>=0?'num-pos':'num-neg'}">$${fmt(a.margen)}</td>
-      <td class="num ${a.margenPct>=25?'num-pos':a.margenPct>=10?'':'num-neg'}">${a.margenPct.toFixed(1)}%</td>
+      <td class="num" style="font-weight:700;" ${_pm?`title="Con la promoción ${esc(_pm.nombre)}: el comprador paga $${fmt(_pm.comprador)}${_pm.aporteML>0.5?` y ML pone $${fmt(_pm.aporteML)}`:''}. Sin promoción recibirías $${fmt(_pm.sinPromo.recibis)}."`:''}>$${fmt(a.recibis)}${_pm?`<div style="font-size:9px;font-weight:700;color:#be185d;">🏷️ con promo</div>`:''}</td>
+      <td class="num ${a.margen>=0?'num-pos':'num-neg'}">$${fmt(a.margen)}${_pm?`<div style="font-size:9px;color:var(--text-soft);" title="Ganancia sin la promoción">sin promo $${fmt(_pm.sinPromo.margen)}</div>`:''}</td>
+      <td class="num ${a.margenPct>=25?'num-pos':a.margenPct>=10?'':'num-neg'}">${a.margenPct.toFixed(1)}%${_pm?`<div style="font-size:9px;color:var(--text-soft);">sin promo ${_pm.sinPromo.margenPct.toFixed(1)}%</div>`:''}</td>
       <td><span class="badge ${a.cls}">${a.rec}</span></td>
     </tr>`;
   }).join("")||`<tr><td colspan="13" style="text-align:center;padding:24px;color:var(--text-soft);">Sin productos.</td></tr>`;
