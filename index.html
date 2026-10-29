@@ -17087,6 +17087,8 @@ async function sincronizarStockML(){
     // Por SKU: si hay alguna publicación en Full, manda el stock de Full (por inventario, sin contar dos veces las
     // publicaciones sincronizadas que comparten inventario); una publicación pausada o sin Full no lo pisa.
     const stkPorSku={};
+    // Para poner en 0 los SKU que quedaron con stock viejo y ya no tienen publicación en esta cuenta
+    const _stkVistos=new Set(); let _stkFallas=0, _stkSinSku=0;
 
     // Traer detalles individuales de a 10 en paralelo
     logML("Iniciando fetch de "+itemIds.length+" items...");
@@ -17102,7 +17104,8 @@ async function sincronizarStockML(){
       ));
 
       for(const body of resultados){
-        if(!body) continue;
+        if(!body || !body.id){ _stkFallas++; continue; }
+        _stkVistos.add(String(body.id).toUpperCase());
         let qty = body.available_quantity||0;
         const titulo = (body.title||"").toUpperCase().trim();
 
@@ -17125,7 +17128,7 @@ async function sincronizarStockML(){
           if(prod) sku = prod.sku;
         }
 
-        if(!sku){ logML("Sin SKU: "+titulo.substring(0,40)); continue; }
+        if(!sku){ logML("Sin SKU: "+titulo.substring(0,40)); if(qty>0) _stkSinSku++; continue; }
 
         // Si este SKU ya fue confirmado por SELLER_SKU explícito en esta misma sincronización,
         // un match por título (no confiable) no debe pisarlo — son publicaciones distintas.
@@ -17180,10 +17183,23 @@ async function sincronizarStockML(){
       logML("✅ "+sku+": "+q+" uds"+(st.full?" en Full":""));
     });
 
+    // SKU con stock en NEXO que no aparece en ninguna publicación de esta cuenta → 0 (stock viejo).
+    // Solo si se leyeron todas las publicaciones y no hay publicaciones con stock sin SKU (podrían ser de ese producto).
+    let puestosEnCero=0;
+    if(!_stkFallas && !_stkSinSku){
+      Object.keys(stockML||{}).forEach(sku=>{
+        if(!(Number(stockML[sku])>0) || stkPorSku[sku]) return;
+        const p=(productos||[]).find(x=>(x.sku||"").toUpperCase()===sku);
+        if(p && p.ml_item_id && _stkVistos.has(String(p.ml_item_id).toUpperCase())) return;
+        logML("🧹 "+sku+": tenía "+stockML[sku]+" uds pero no hay ninguna publicación de esta cuenta con ese SKU → 0");
+        stockML[sku]=0; puestosEnCero++;
+        promises.push(sbGuardar("stockml",{sku,cantidad:0}).catch(()=>{}));
+      });
+    } else logML("ℹ️ No se limpiaron SKU sin publicación ("+(_stkFallas?_stkFallas+" publicaciones no se pudieron leer":_stkSinSku+" publicaciones con stock no tienen SKU")+").");
     await Promise.all(promises);
     mostrarCargando(false);
     renderStock(); renderAlertas(); renderPanel();
-    statusEl.innerHTML = `<span style="color:var(--green);">✅ ${actualizados} productos actualizados</span>`;
+    statusEl.innerHTML = `<span style="color:var(--green);">✅ ${actualizados} productos actualizados${puestosEnCero?` · ${puestosEnCero} sin publicación en ML puestos en 0`:""}</span>`;
     if(actualizados>0) await guardarUltimaSync("stock","ultimaSyncStock");
     toast("Stock ML sincronizado: "+actualizados+" productos","ok",4000);
   }catch(e){
