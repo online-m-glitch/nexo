@@ -11842,15 +11842,43 @@ function agregarFotoUrl(){
   input.value="";
   renderFotosGrid();
 }
-function cargarFotosProd(input){
+// Las fotos se suben a Storage (bucket público "productos", carpeta del cliente) y en el producto queda la URL.
+// Antes se guardaban en base64 dentro del producto y hacían pesada la carga de todo el panel.
+function fotoAchicar(f, max){
+  return new Promise((ok, mal)=>{
+    const url = URL.createObjectURL(f), img = new Image();
+    img.onload = ()=>{
+      const k = Math.min(1, max/Math.max(img.width, img.height)), cv = document.createElement("canvas");
+      cv.width = Math.max(1, Math.round(img.width*k)); cv.height = Math.max(1, Math.round(img.height*k));
+      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height); URL.revokeObjectURL(url);
+      cv.toBlob(b=>{ if(b && b.type==="image/webp") ok({blob:b, ext:"webp", tipo:"image/webp"}); else cv.toBlob(b2=>b2?ok({blob:b2, ext:"jpg", tipo:"image/jpeg"}):mal(new Error("no se pudo convertir")), "image/jpeg", 0.88); }, "image/webp", 0.88);
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); mal(new Error("no es una imagen válida")); };
+    img.src = url;
+  });
+}
+async function fotoSubirStorage(f, base){
+  const c = await fotoAchicar(f, 1600);
+  const nombre = String(base||"foto").replace(/[^A-Za-z0-9_-]+/g,"_").slice(0,40) + "-" + Date.now() + "-" + Math.random().toString(36).slice(2,6) + "." + c.ext;
+  const ruta = clienteId + "/" + nombre;
+  const r = await fetch(SB_URL + "/storage/v1/object/productos/" + ruta, {method:"POST", headers:{apikey:SB_KEY, Authorization:"Bearer "+sbAuth(), "Content-Type":c.tipo, "x-upsert":"false"}, body:c.blob});
+  if(!r.ok){ let m = ""; try{ m = (await r.json()).message || ""; }catch(e){} throw new Error(m || ("error "+r.status)); }
+  return SB_URL + "/storage/v1/object/public/productos/" + ruta;
+}
+async function cargarFotosProd(input){
   const files=Array.from(input.files||[]);
   if(!files.length) return;
-  let pendientes=files.length;
-  files.forEach(f=>{
-    const r=new FileReader();
-    r.onload=e=>{ productoImagenesEditor.push(e.target.result); pendientes--; if(pendientes===0){ renderFotosGrid(); input.value=""; } };
-    r.readAsDataURL(f);
-  });
+  if(!clienteId){ toast("No se pudo identificar la cuenta para guardar las fotos.","err"); return; }
+  const sku = (document.getElementById("pSku")||{}).value || "foto";
+  toast(`⏳ Subiendo ${files.length} foto${files.length===1?"":"s"}…`,"ok",2500);
+  let ok=0, mal=0;
+  for(const f of files){
+    try{ productoImagenesEditor.push(await fotoSubirStorage(f, sku)); ok++; renderFotosGrid(); }
+    catch(e){ mal++; toast("No se pudo subir "+f.name+": "+e.message,"err",6000); }
+  }
+  input.value="";
+  renderFotosGrid();
+  if(ok) toast(`✅ ${ok} foto${ok===1?"":"s"} subida${ok===1?"":"s"}. Guardá el producto para que quede.`,"ok",4000);
 }
 function quitarFoto(i){ productoImagenesEditor.splice(i,1); renderFotosGrid(); }
 function hacerPortadaFoto(i){ const [foto]=productoImagenesEditor.splice(i,1); productoImagenesEditor.unshift(foto); renderFotosGrid(); }
