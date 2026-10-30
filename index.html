@@ -9729,7 +9729,9 @@ if(typeof renderAnalisis === "function"){
 // Si lo que escribís ya empieza con "Hola/Buen día…" no agrega el saludo; si ya termina con "Saludos…" no agrega la firma.
 // Configuración en app_config.atn_plantilla {activo, preguntas, mensajes, saludo, firma, tienda, apodo}.
 // ================================================================
-const ATN_PLANT_DEF = {activo:false, preguntas:true, mensajes:true, apodo:true, saludo:"{saludo} {nombre}!", firma:"Saludos, {tienda}.", tienda:""};
+// {vendedor} = nombre de quien responde: uno al azar de la lista "vendedores" (el mismo para el mismo comprador en la sesión)
+const ATN_VEND_DEF = ["Sofía","Lucas","Martina","Julián","Camila","Mateo","Valentina","Nicolás"];
+const ATN_PLANT_DEF = {activo:false, preguntas:true, mensajes:true, apodo:true, saludo:"{saludo} {nombre}!", firma:"Saludos, {tienda}.", tienda:"", vendedores:ATN_VEND_DEF};
 function atnPlant(){ const v = appConfig && appConfig.atn_plantilla; return Object.assign({}, ATN_PLANT_DEF, (v && typeof v==="object") ? v : {}); }
 function atnSaludoHora(d){
   const h = Number(new Date((d ? d.getTime() : Date.now()) - 3*3600*1000).getUTCHours());
@@ -9742,11 +9744,18 @@ function atnApodoLindo(nick){
   return s.split(" ").map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(" ");
 }
 function atnTiendaNombre(pl){ return (pl.tienda||"").trim() || clienteNombre || ""; }
+function atnVendLista(pl){ const l = (Array.isArray(pl.vendedores) ? pl.vendedores : String(pl.vendedores||"").split(",")).map(x=>String(x).trim()).filter(Boolean); return l.length ? l : ATN_VEND_DEF; }
+function atnVendedor(pl, nick){
+  const l = atnVendLista(pl); atn._vend = atn._vend || {};
+  const k = String(nick||"") || "_";
+  if(!atn._vend[k] || !l.includes(atn._vend[k])) atn._vend[k] = l[Math.floor(Math.random()*l.length)];
+  return atn._vend[k];
+}
 function atnVars(pl, nick){
-  return {saludo: atnSaludoHora(), nombre: pl.apodo ? atnApodoLindo(nick) : "", tienda: atnTiendaNombre(pl)};
+  return {saludo: atnSaludoHora(), nombre: pl.apodo ? atnApodoLindo(nick) : "", tienda: atnTiendaNombre(pl), vendedor: atnVendedor(pl, nick)};
 }
 function atnRellenar(tpl, v){
-  return String(tpl||"").replace(/\{(saludo|nombre|tienda)\}/g, (_,k)=>v[k]||"")
+  return String(tpl||"").replace(/\{(saludo|nombre|tienda|vendedor)\}/g, (_,k)=>v[k]||"")
     .replace(/\s+([!,.?])/g,"$1").replace(/,\s*([!.?])/g,"$1").replace(/\s{2,}/g," ").replace(/^[\s,]+|[\s,]+$/g,"").trim();
 }
 const ATN_RE_SALUDO = /^\s*[¡!]?\s*(hola|buen[oa]s?\s+(d[ií]as?|tardes?|noches?)|buen\s+d[ií]a)\b/i;
@@ -9884,7 +9893,6 @@ function atnEditarPlantilla(){
 function atnPlPintar(){
   const p = atn._pl, ej = atnApodoLindo("JUAN.PEREZ_23");
   const chk = (k, txt)=>`<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:4px 0;cursor:pointer;"><input type="checkbox" ${p[k]?"checked":""} onchange="atn._pl.${k}=this.checked;atnPlPintar()"> ${txt}</label>`;
-  const v = {saludo:atnSaludoHora(), nombre:p.apodo?ej:"", tienda:(p.tienda||"").trim()||clienteNombre||""};
   document.getElementById("atnPlCont").innerHTML = `
     <h3>✍️ Saludo y firma automáticos</h3>
     <p style="font-size:12px;color:var(--text-soft);margin:0 0 10px;">Se agregan solos al responder. Vos escribís solo la respuesta. Si ya empezás con "Hola…" o terminás con "Saludos…", no se repite.</p>
@@ -9895,7 +9903,8 @@ function atnPlPintar(){
       <div class="form-group" style="margin-top:8px;"><label>Saludo</label><input type="text" value="${esc(p.saludo)}" oninput="atn._pl.saludo=this.value;atnPlPrev()"></div>
       <div class="form-group"><label>Firma</label><input type="text" value="${esc(p.firma)}" oninput="atn._pl.firma=this.value;atnPlPrev()"></div>
       <div class="form-group"><label>Nombre de la tienda <span style="font-weight:400;color:var(--text-soft);">({tienda})</span></label><input type="text" value="${esc(p.tienda)}" placeholder="${esc(clienteNombre||"Ej: Tienda Oficial ORIGO")}" oninput="atn._pl.tienda=this.value;atnPlPrev()"></div>
-      <div style="font-size:11px;color:var(--text-soft);">Podés usar <code>{saludo}</code> (Buenos días / Buenas tardes / Buenas noches según la hora), <code>{nombre}</code> (apodo del comprador) y <code>{tienda}</code>.</div>
+      <div class="form-group"><label>Nombres de quien responde <span style="font-weight:400;color:var(--text-soft);">({vendedor}, uno al azar, separados por coma)</span></label><input type="text" value="${esc(atnVendLista(p).join(", "))}" oninput="atn._pl.vendedores=this.value.split(',').map(x=>x.trim()).filter(Boolean);atnPlPrev()"></div>
+      <div style="font-size:11px;color:var(--text-soft);">Podés usar <code>{saludo}</code> (Buenos días / Buenas tardes / Buenas noches según la hora), <code>{nombre}</code> (apodo del comprador), <code>{vendedor}</code> (quien responde) y <code>{tienda}</code>.</div>
       <div style="margin-top:10px;padding:10px 12px;background:var(--bg);border-radius:10px;font-size:13px;"><div style="font-size:11px;color:var(--text-soft);margin-bottom:4px;">Ejemplo (comprador "JUAN.PEREZ_23", ahora):</div><div id="atnPlPrev"></div></div>
       <div style="font-size:11px;color:var(--text-soft);margin-top:6px;">ℹ️ MercadoLibre no comparte el nombre real del comprador: se usa su apodo, acomodado (sin números ni puntos).</div>
     </div>
@@ -9904,11 +9913,11 @@ function atnPlPintar(){
 }
 function atnPlPrev(){
   const p = atn._pl, el = document.getElementById("atnPlPrev"); if(!el) return;
-  const v = {saludo:atnSaludoHora(), nombre:p.apodo?atnApodoLindo("JUAN.PEREZ_23"):"", tienda:(p.tienda||"").trim()||clienteNombre||""};
+  const v = {saludo:atnSaludoHora(), nombre:p.apodo?atnApodoLindo("JUAN.PEREZ_23"):"", tienda:(p.tienda||"").trim()||clienteNombre||"", vendedor:atnVendLista(p)[0]};
   el.innerHTML = `${esc(atnRellenar(p.saludo, v))} <span style="color:var(--text-soft);">Sí, tenemos stock disponible.</span> ${esc(atnRellenar(p.firma, v))}`;
 }
 async function atnPlGuardar(){
-  const p = atn._pl, val = {activo:!!p.activo, preguntas:!!p.preguntas, mensajes:!!p.mensajes, apodo:!!p.apodo, saludo:String(p.saludo||"").trim(), firma:String(p.firma||"").trim(), tienda:String(p.tienda||"").trim()};
+  const p = atn._pl, val = {activo:!!p.activo, preguntas:!!p.preguntas, mensajes:!!p.mensajes, apodo:!!p.apodo, saludo:String(p.saludo||"").trim(), firma:String(p.firma||"").trim(), tienda:String(p.tienda||"").trim(), vendedores:atnVendLista(p)};
   appConfig.atn_plantilla = val;
   try{ await sbUpsert("app_config", {key:"atn_plantilla", value:val, updated_at:new Date().toISOString()}); }
   catch(e){ toast("No se pudo guardar: "+e.message,"err"); return; }
