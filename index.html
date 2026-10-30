@@ -8760,10 +8760,12 @@ if(typeof compUsarPrecio === "function"){
     const m = (typeof calcAnaliMLConPrecio === "function" && calcAnaliMLConPrecio(p, precio)) || null;
     const mTxt = m ? String(Math.round(m.margenPct*10)/10).replace(".", ",")+"%" : "";
     if(rpzEsActivo(sku)){
-      const piso = Math.max(0, Math.round((Math.floor((m ? m.margenPct : 0) * 10) / 10 - 0.3) * 10) / 10);
-      if(!confirm(`${sku}: para quedar en $${fmt(precio)} (margen ${mTxt}) el 🤖 necesita un piso más bajo.\n\n¿Bajar el margen mínimo de este producto a ${String(piso).replace(".", ",")}% y aplicar el precio ahora?`)) return;
+      // Con el 🤖 activo no se toca el piso del producto: el 🤖 aplica la regla (mínimo 8,5%; para no perder la venta
+      // puede bajar hasta 5% como máximo 6 h y avisa por Telegram). Acá solo se lo hace correr ya.
+      if(!confirm(`${sku} tiene el 🤖 activo.\n\nPara quedar en $${fmt(precio)} el margen sería ${mTxt}. El 🤖 decide solo: sigue al competidor sin bajar del ${String(rpzMargenGlobal()).replace(".", ",")}%, y si hace falta baja hasta 5% por un máximo de 6 h (te avisa por Telegram).\n\n¿Aplicar ahora?`)) return;
       cerrarCompetencia();
-      await rpzGuardarMargenSku(sku, piso);
+      try{ await rpzEjecutar(false, sku); toast(`🤖 ${sku}: precio recalculado ✅`,"ok",4000); }catch(e){ toast("No se pudo aplicar: "+e.message,"err",6000); }
+      try{ rpzCargar(true).then(rpzPintarActivos); }catch(e){}
       return;
     }
     if(!confirm(`¿Publicar $${fmt(precio)} en MercadoLibre para ${sku}?${mTxt ? `\nMargen con ese precio: ${mTxt}` : ""}`)) return;
