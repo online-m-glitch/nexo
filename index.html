@@ -11121,8 +11121,10 @@ async function sbGuardar(tipo, data){
     if(tipo==="deleteProd")    { await sbDelete("productos","sku=eq."+encodeURIComponent(data)); }
     if(tipo==="movimiento")    { const r=await sbInsert("movimientos", data); return r; }
     if(tipo==="deleteMovimiento"){ await sbDelete("movimientos","id=eq."+data); }
-    if(tipo==="cc")            { await sbInsert("cuenta_corriente", data); }
+    if(tipo==="cc")            { const r=await sbInsert("cuenta_corriente", data); return r; }
     if(tipo==="deleteCc")      { await sbDelete("cuenta_corriente","id=eq."+data); }
+    // Borra en el servidor TODAS las entradas de compra de CC ligadas a una compra (aunque en pantalla no tengan id)
+    if(tipo==="deleteCcCompra"){ await sbDelete("cuenta_corriente","compraId=eq."+encodeURIComponent(data)+"&tipo=eq.Compra"); }
     if(tipo==="stockml")       { await sbUpsert("stock_ml",{sku:data.sku,cantidad:data.cantidad,updated_at:new Date().toISOString()}); }
     if(tipo==="mlfee")         { await sbUpsert("ml_fees",{sku:data.sku, ml_item_id:data.ml_item_id, fee_amount:data.fee_amount, fee_pct:data.fee_pct, shipping_cost:data.shipping_cost||0, fee_fixed:data.fee_fixed||0, ml_price:data.ml_price||0, raw:data.raw, updated_at:new Date().toISOString()}); }
     if(tipo==="config")        { await sbUpsert("app_config",{key:data.key, value:data.value, updated_at:new Date().toISOString()}); }
@@ -13074,9 +13076,8 @@ async function guardarCompra(){
       movimientos = movimientos.filter(m=>!(m.tipo==="Ingreso" && (m.compra_id===c.id || (!m.compra_id && m.obs===obsViejo))));
 
       // 2. Borrar la entrada vieja de Cuenta Corriente
-      const ccVieja = cuentaCorriente.find(m=>m.compraId===c.id);
-      if(ccVieja && ccVieja.id){ await sbGuardar("deleteCc", ccVieja.id); }
-      cuentaCorriente = cuentaCorriente.filter(m=>m.compraId!==c.id);
+      await sbGuardar("deleteCcCompra", c.id);
+      cuentaCorriente = cuentaCorriente.filter(m=>!(m.compraId===c.id && m.tipo==="Compra"));
 
       // 3. Actualizar la compra en sí
       const campos = { fecha, proveedor, factura, obs, formaPago, total, lineas: lineasCopia };
@@ -13312,9 +13313,8 @@ function eliminarCompra(idx){
     for(const m of movsAElim){ if(m.id) await sbGuardar("deleteMovimiento",m.id); }
     movimientos=movimientos.filter(m=>!(m.compra_id===c.id || (!m.compra_id && m.obs===obsStr && m.fecha===c.fecha)));
     // Eliminar CC en Supabase
-    const ccAElim=cuentaCorriente.filter(m=>m.compraId===c.id);
-    for(const cc of ccAElim){ if(cc.id) await sbGuardar("deleteCc",cc.id); }
-    cuentaCorriente=cuentaCorriente.filter(m=>m.compraId!==c.id);
+    await sbGuardar("deleteCcCompra", c.id);
+    cuentaCorriente=cuentaCorriente.filter(m=>!(m.compraId===c.id && m.tipo==="Compra"));
     // Eliminar compra
     await sbGuardar("deleteCompra",c.id);
     compras.splice(idx,1);
