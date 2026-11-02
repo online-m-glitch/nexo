@@ -4083,7 +4083,7 @@ let mercFilas = [];                // más vendidos de la consulta actual
 let mercFotoAnterior = null;       // {fecha, items}
 let mercTendencias = [];
 let mercProv = {headers:[], rows:[], resultado:[]};
-const _mercFeeCache = {};
+const _mercFeeCache = {}, _mercFeePend = {};
 
 async function mlGet(path){
   let r;
@@ -4122,16 +4122,27 @@ async function mercComision(categoria, precio, tipo){
   if(!categoria || !(precio > 0)) return null;
   const k = categoria+"|"+Math.round(precio)+"|"+tipo;
   if(_mercFeeCache[k] !== undefined) return _mercFeeCache[k];
+  // Misma consulta en curso (ej. dos productos con el mismo precio y categoría): se espera esa en vez de repetirla
+  if(_mercFeePend[k]) return _mercFeePend[k];
   const qs = new URLSearchParams({price: Math.round(precio), category_id: categoria, listing_type_id: tipo});
-  const res = await mlGet("/sites/"+MERC_SITE+"/listing_prices?"+qs.toString());
-  let opt = res.ok ? res.data : null;
-  if(Array.isArray(opt)) opt = opt.find(o=>o.listing_type_id===tipo) || opt[0];
-  const val = (opt && opt.sale_fee_amount != null) ? {
-    monto: Number(opt.sale_fee_amount)||0,
-    fijo: Number(opt.sale_fee_details && opt.sale_fee_details.fixed_fee)||0
-  } : null;
-  _mercFeeCache[k] = val;
-  return val;
+  _mercFeePend[k] = (async()=>{
+    // Si ML responde con error momentáneo (muchas consultas juntas), se reintenta; solo se guarda en memoria
+    // un resultado válido, así un error no deja la comisión vacía ("—") hasta recargar la página.
+    for(let intento=0; intento<4; intento++){
+      if(intento) await new Promise(r=>setTimeout(r, 800*intento));
+      const res = await mlGet("/sites/"+MERC_SITE+"/listing_prices?"+qs.toString());
+      let opt = res.ok ? res.data : null;
+      if(Array.isArray(opt)) opt = opt.find(o=>o.listing_type_id===tipo) || opt[0];
+      if(opt && opt.sale_fee_amount != null){
+        const val = { monto: Number(opt.sale_fee_amount)||0, fijo: Number(opt.sale_fee_details && opt.sale_fee_details.fixed_fee)||0 };
+        _mercFeeCache[k] = val;
+        return val;
+      }
+      if(res.ok || (res.status>=400 && res.status<500 && res.status!==429)) break; // respuesta válida sin comisión o error definitivo
+    }
+    return null;
+  })();
+  try{ return await _mercFeePend[k]; } finally { delete _mercFeePend[k]; }
 }
 
 function mercTab(t){
@@ -7744,7 +7755,13 @@ async function prmEnvio(itemId, precio){
   const uid = await mercUserId();
   const qs = new URLSearchParams({item_id:itemId, item_price:Math.round(precio), listing_type_id:it.listing_type_id||"gold_special", mode:it.shipping.mode||"me2", condition:"new", free_shipping:"true"});
   if(it.shipping.logistic_type) qs.append("logistic_type", it.shipping.logistic_type);
-  const r = await mlGet(`/users/${uid}/shipping_options/free?`+qs.toString());
+  let r;
+  for(let intento=0; intento<4; intento++){
+    if(intento) await new Promise(ok=>setTimeout(ok, 800*intento));
+    r = await mlGet(`/users/${uid}/shipping_options/free?`+qs.toString());
+    if(r.ok || (r.status>=400 && r.status<500 && r.status!==429)) break;
+  }
+  if(!r.ok && (r.status===0 || r.status===429 || r.status>=500)) return 0; // error momentáneo: no se guarda en memoria
   const cov = r.ok && r.data && r.data.coverage && r.data.coverage.all_country;
   const costoEnv = cov ? Number(cov.list_cost)||0 : 0;
   const monEnv = cov && cov.currency_id || monedaLocal();
