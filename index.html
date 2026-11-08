@@ -2415,6 +2415,24 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
                 <option value="sin_sincronizar">Sin sincronizar</option>
                 <option value="promo">🏷️ En promoción</option>
               </select>
+              <div style="position:relative;">
+                <button type="button" class="btn btn-ghost" onclick="toggleMenuColumnasAnalisis()" title="Elegir qué columnas mostrar">⚙️ Columnas</button>
+                <div id="menuColumnasAnalisis" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--surface);border:1.5px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);padding:10px 14px;z-index:50;min-width:200px;">
+                  <div style="font-size:11px;font-weight:700;color:var(--text-soft);margin-bottom:6px;">Columnas opcionales</div>
+                  <label style="display:block;font-size:13px;padding:3px 0;cursor:pointer;"><input type="checkbox" data-acol-toggle="stockfull" onchange="toggleColumnaAnalisis('stockfull',this.checked)"> Stock Full</label>
+                  <label style="display:block;font-size:13px;padding:3px 0;cursor:pointer;"><input type="checkbox" data-acol-toggle="costo" onchange="toggleColumnaAnalisis('costo',this.checked)"> Costo</label>
+                  <label style="display:block;font-size:13px;padding:3px 0;cursor:pointer;"><input type="checkbox" data-acol-toggle="competencia" onchange="toggleColumnaAnalisis('competencia',this.checked)"> Competencia</label>
+                  <label style="display:block;font-size:13px;padding:3px 0;cursor:pointer;"><input type="checkbox" data-acol-toggle="comision" onchange="toggleColumnaAnalisis('comision',this.checked)"> Comisión ML</label>
+                  <label style="display:block;font-size:13px;padding:3px 0;cursor:pointer;"><input type="checkbox" data-acol-toggle="envio" onchange="toggleColumnaAnalisis('envio',this.checked)"> Envío</label>
+                  <label style="display:block;font-size:13px;padding:3px 0;cursor:pointer;"><input type="checkbox" data-acol-toggle="impuesto" onchange="toggleColumnaAnalisis('impuesto',this.checked)"> Impuesto (est.)</label>
+                  <label style="display:block;font-size:13px;padding:3px 0;cursor:pointer;"><input type="checkbox" data-acol-toggle="percepcion" onchange="toggleColumnaAnalisis('percepcion',this.checked)"> Percepción (est.)</label>
+                  <label style="display:block;font-size:13px;padding:3px 0;cursor:pointer;"><input type="checkbox" data-acol-toggle="recibis" onchange="toggleColumnaAnalisis('recibis',this.checked)"> Recibís</label>
+                  <label style="display:block;font-size:13px;padding:3px 0;cursor:pointer;"><input type="checkbox" data-acol-toggle="margen" onchange="toggleColumnaAnalisis('margen',this.checked)"> Margen ($)</label>
+                  <label style="display:block;font-size:13px;padding:3px 0;cursor:pointer;"><input type="checkbox" data-acol-toggle="margenpct" onchange="toggleColumnaAnalisis('margenpct',this.checked)"> Margen %</label>
+                  <label style="display:block;font-size:13px;padding:3px 0;cursor:pointer;"><input type="checkbox" data-acol-toggle="rec" onchange="toggleColumnaAnalisis('rec',this.checked)"> Recomendación</label>
+                  <div style="font-size:10px;color:var(--text-soft);margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">SKU, Producto y Precio ML siempre se muestran. Aplica a la vista "Por producto".</div>
+                </div>
+              </div>
             </div>
             <div class="toolbar" style="padding-top:8px;border-top:1px dashed var(--border);">
               <button type="button" class="btn btn-primary" style="white-space:nowrap;" onclick="abrirRepricer()" title="Precio automático: $1 menos que el competidor más barato, sin bajar del margen mínimo">🤖 Precio automático</button>
@@ -2435,7 +2453,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
           </div>
           <div id="analisisInfoPub" style="display:none;font-size:12px;color:var(--text-soft);padding:8px 16px;"></div>
           <div class="table-wrap">
-            <table>
+            <table id="analisisTabla">
               <thead id="analisisThead"><tr><th>SKU</th><th>Producto</th><th title="Unidades disponibles en Full de MercadoLibre">Stock Full</th><th>Costo ($)</th><th>Precio ML ($)</th><th>Competencia</th><th>Comisión ML</th><th>Envío</th><th>Impuesto (est.)</th><th>Percepción (est.)</th><th>Recibís ($)</th><th>Margen ($)</th><th>Margen %</th><th>Recomendación</th></tr></thead>
               <tbody id="analisisBody"></tbody>
             </table>
@@ -5242,6 +5260,7 @@ function calcAnaliPub(pub){
 function renderAnalisisPublicaciones(){
   const thead = document.getElementById("analisisThead");
   if(thead && thead.dataset.vista!=="publicacion"){ thead.innerHTML = ANALISIS_THEAD_PUB; thead.dataset.vista="publicacion"; }
+  { const _tb=document.getElementById("analisisTabla"); if(_tb) _tb.classList.remove("ana-vprod"); }
   const filtro = document.getElementById("analisisFiltro").value;
   const q = (document.getElementById("analisisBuscar")?.value||"").trim().toLowerCase();
   const provFiltro = document.getElementById("analisisFiltroProveedor")?.value||"";
@@ -11490,6 +11509,32 @@ function toggleMenuColumnas(){
 }
 aplicarColumnasCatalogo();
 
+// ── Columnas opcionales de Análisis ML (vista por producto). Se guardan por navegador. ──
+const ANA_COLS_POS = {"stockfull": 3, "costo": 4, "competencia": 6, "comision": 7, "envio": 8, "impuesto": 9, "percepcion": 10, "recibis": 11, "margen": 12, "margenpct": 13, "rec": 14};
+function _colsAnalisisOcultas(){ try{ return JSON.parse(localStorage.getItem("nexo_cols_analisis_ocultas")||"[]")||[]; }catch(e){ return []; } }
+function aplicarColumnasAnalisis(){
+  const ocultas=_colsAnalisisOcultas();
+  let st=document.getElementById("anaColsStyle");
+  if(!st){ st=document.createElement("style"); st.id="anaColsStyle"; document.head.appendChild(st); }
+  st.textContent=ocultas.filter(c=>ANA_COLS_POS[c]).map(c=>`#analisisTabla.ana-vprod tr > :nth-child(${ANA_COLS_POS[c]}){display:none;}`).join("\n");
+  document.querySelectorAll("[data-acol-toggle]").forEach(cb=>{ cb.checked=!ocultas.includes(cb.dataset.acolToggle); });
+}
+function toggleColumnaAnalisis(col, visible){
+  let ocultas=_colsAnalisisOcultas();
+  if(visible) ocultas=ocultas.filter(c=>c!==col); else if(!ocultas.includes(col)) ocultas.push(col);
+  try{ localStorage.setItem("nexo_cols_analisis_ocultas", JSON.stringify(ocultas)); }catch(e){}
+  aplicarColumnasAnalisis();
+}
+function toggleMenuColumnasAnalisis(){
+  const menu=document.getElementById("menuColumnasAnalisis"); if(!menu) return;
+  const abrir=menu.style.display==="none";
+  menu.style.display=abrir?"block":"none";
+  if(abrir){ setTimeout(()=>{ document.addEventListener("click", function cerrar(e){
+    if(!menu.contains(e.target) && !e.target.closest('[onclick="toggleMenuColumnasAnalisis()"]')){ menu.style.display="none"; document.removeEventListener("click", cerrar); }
+  }); },10); }
+}
+aplicarColumnasAnalisis();
+
 function toggleMaximizarModalProducto(){
   const box=document.getElementById("modalProductoBox");
   const maximizado=box.classList.toggle("modal-maximizado");
@@ -12529,6 +12574,7 @@ function renderAnalisis(){
   if(_info) _info.style.display = vistaAnalisis()==="publicacion" ? "" : "none";
   if(vistaAnalisis()==="publicacion"){ renderAnalisisPublicaciones(); return; }
   const _th=document.getElementById("analisisThead"); if(_th && _th.dataset.vista!=="producto"){ _th.innerHTML=ANALISIS_THEAD_PRODUCTO; _th.dataset.vista="producto"; }
+  const _tb=document.getElementById("analisisTabla"); if(_tb) _tb.classList.add("ana-vprod");
   const filtroEstadoML=document.getElementById("analisisFiltroEstadoML")?.value||"";
   const lista=productos.filter(p=>{
     if(!p.ml_item_id) return false; // sin publicación de ML vinculada no tiene sentido "analizarlo" acá
