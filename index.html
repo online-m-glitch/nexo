@@ -836,6 +836,10 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
     <div class="nav-item" onclick="verTiendaCliente()">
       <span class="icon">🛒</span> Ver tienda
     </div>
+    <div class="nav-section">Ayuda</div>
+    <a class="nav-item" href="#ayuda" data-sec="ayuda" onclick="return navClick(event,'ayuda')">
+      <span class="icon">❓</span> Ayuda y manual
+    </a>
     <div class="theme-switch" id="themeSwitch">
       <button data-tema="light" onclick="aplicarTema('light')" title="Claro">☀️</button>
       <button data-tema="dark" onclick="aplicarTema('dark')" title="Oscuro">🌙</button>
@@ -2682,6 +2686,35 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
           </div>
         </div>
       </div>
+    </div>
+
+    <div id="sec-ayuda" class="section">
+      <div class="page-header">
+        <div><h2>Ayuda y manual</h2><div class="sub">Cómo se usa cada pantalla de NEXO, preguntas frecuentes y contacto con soporte</div></div>
+        <span style="font-size:11px;color:var(--text-soft);">NEXO <span id="ayudaVersion"></span></span>
+      </div>
+      <div style="padding:24px;display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:20px;align-items:start;" class="ayuda-grid">
+        <div>
+          <input id="ayudaBuscar" type="search" placeholder="🔎 Buscá una palabra: stock, comisión, promoción, compra…" oninput="renderAyuda()" style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;margin-bottom:16px;background:var(--surface);color:var(--text);">
+          <div id="ayudaContenido"></div>
+        </div>
+        <div style="position:sticky;top:16px;display:flex;flex-direction:column;gap:16px;">
+          <div class="card" style="margin:0;">
+            <div class="card-header"><h3>🆘 Pedir ayuda</h3></div>
+            <div style="padding:16px 18px;display:flex;flex-direction:column;gap:10px;">
+              <div style="font-size:12px;color:var(--text-soft);">Escribinos desde acá: nos llega con tu cuenta y la pantalla, así te respondemos más rápido.</div>
+              <label style="font-size:12px;font-weight:600;">Tema<select id="ayudaTema" style="width:100%;margin-top:4px;padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;"><option>Consulta</option><option>Algo no funciona</option><option>Dato incorrecto</option><option>Pedido de mejora</option></select></label>
+              <label style="font-size:12px;font-weight:600;">Pantalla<select id="ayudaPantalla" style="width:100%;margin-top:4px;padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;"></select></label>
+              <textarea id="ayudaMsg" rows="5" maxlength="2000" placeholder="Contanos qué necesitás o qué pasó (si es un producto, poné el SKU)." style="width:100%;padding:9px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;resize:vertical;background:var(--surface);color:var(--text);"></textarea>
+              <button id="ayudaEnviarBtn" class="btn btn-primary" onclick="ayudaEnviar()">📨 Enviar consulta</button>
+              <a id="ayudaWa" class="btn btn-ghost" target="_blank" rel="noopener" style="display:none;text-align:center;">💬 Escribir por WhatsApp</a>
+              <a id="ayudaMail" class="btn btn-ghost" style="text-align:center;">✉️ gestion.nexo.soft@gmail.com</a>
+            </div>
+          </div>
+          <div class="card" style="margin:0;"><div style="padding:14px 18px;font-size:12px;color:var(--text-soft);line-height:1.5;">💡 En cualquier pantalla tocá el botón <b>❓</b> de abajo a la derecha para abrir la ayuda de esa pantalla.</div></div>
+        </div>
+      </div>
+      <style>@media (max-width:900px){ #sec-ayuda .ayuda-grid{ grid-template-columns:1fr !important; } } #sec-ayuda .ayuda-cuerpo ul{ padding-left:20px; margin:6px 0; } #sec-ayuda .ayuda-cuerpo li{ margin:3px 0; } #sec-ayuda .ayuda-cuerpo p{ margin:6px 0; } #sec-ayuda summary a{ color:var(--brand-primario,#6d28d9); text-decoration:none; }</style>
     </div>
 
     <div id="sec-marca" class="section">
@@ -13482,6 +13515,7 @@ async function mostrarSeccion(id){
   // Renderizar la sección activa
   if(id==="panel") renderPanel();
   if(id==="clientes") renderClientes();
+  if(id==="ayuda") renderAyuda(_ayudaVolverA);
   if(id==="marca") renderMarca();
   if(id==="mitienda") renderMiTienda();
   if(id==="stock"){ renderStock(); mostrarUltimaSync("stock","ultimaSyncStock"); }
@@ -18237,6 +18271,181 @@ document.querySelectorAll(".nav-item").forEach(el=>{
 // ================================================================
 // NAVEGACIÓN (recuperado)
 // ================================================================
+
+// ================================================================
+// ❓ Ayuda: manual de uso por pantalla, preguntas frecuentes y contacto (WhatsApp + "Pedir ayuda" → Telegram)
+// El botón flotante ❓ abre el manual en la pantalla donde está el usuario.
+// ================================================================
+const NEXO_VERSION = "v82";
+const NEXO_SOPORTE_WA = "5491160123520";
+const NEXO_SOPORTE_MAIL = "gestion.nexo.soft@gmail.com"; // Número de WhatsApp de soporte, solo dígitos con código de país (ej. 5491112345678). Vacío = no se muestra.
+const AYUDA_MANUAL = [
+  { sec:"panel", ico:"📊", t:"Panel", x:`
+    <p>Es la pantalla de inicio: un resumen del negocio de la cuenta que tenés abierta.</p>
+    <ul><li><b>Hoy en MercadoLibre</b>: ventas del día, preguntas y mensajes sin responder, reclamos abiertos y productos sin stock.</li>
+    <li><b>Tarjetas de abajo</b>: cantidad de productos, con stock, sin stock o bajo mínimo, valor del inventario (a costo), movimientos y proveedores.</li>
+    <li><b>Productos a reponer</b> y <b>Top ventas</b>: lo más urgente para comprar y lo que más se vende.</li></ul>
+    <p>Tocá <b>Actualizar datos</b> si acabás de cargar algo en otra pestaña.</p>`},
+  { sec:"productos", ico:"📦", t:"Catálogo", x:`
+    <p>Es la base de todo NEXO: cada producto con su <b>SKU</b>, costo, precios y proveedor. Todo lo demás (stock, ventas, márgenes) se calcula desde acá.</p>
+    <ul><li><b>+ Agregar producto</b> o editá uno con el lápiz. El SKU tiene que ser igual al que tenés cargado en MercadoLibre.</li>
+    <li><b>Traer de MercadoLibre</b>: importa tus publicaciones y las vincula por SKU.</li>
+    <li><b>Costo en US$</b>: si cargás el costo en dólares, NEXO lo pasa a pesos con el dólar del día (arriba a la izquierda ves la cotización).</li>
+    <li><b>⚙️ Columnas</b>: elegí qué columnas ver. <b>Exportar / Importar CSV</b> para cambios masivos.</li>
+    <li><b>Sugerir mínimos</b>: propone un stock mínimo según lo vendido en 30 días.</li></ul>`},
+  { sec:"stock", ico:"🏷️", t:"Stock Actual", x:`
+    <p>Muestra cuánto tenés de cada producto: <b>Depósito</b> (lo tuyo) y <b>Full</b> (lo que está en el depósito de MercadoLibre).</p>
+    <ul><li>El depósito se calcula con los movimientos: compras suman; ventas de tienda, bajas y envíos a Full restan.</li>
+    <li>El stock Full se trae de MercadoLibre con <b>Sincronizar stock Full ML</b>. Un SKU que ya no tiene publicación queda en 0.</li>
+    <li>Para corregir una diferencia usá un <b>ajuste</b> en Movimientos (no edites números sueltos).</li></ul>`},
+  { sec:"alertas", ico:"⚠️", t:"Alertas", x:`
+    <p>Lista los productos <b>sin stock</b> o <b>por debajo del mínimo</b> que cargaste en el Catálogo. Filtrá por proveedor y exportá a Excel para armar el pedido de compra.</p>`},
+  { sec:"fullml", ico:"🚀", t:"Full ML", x:`
+    <p>Todo lo de Full en un lugar: qué conviene mandar según lo que vendés, pedidos a proveedores para Full, etiquetas, envíos y stock real en Full.</p>
+    <ul><li>Al registrar un <b>envío a Full</b>, las unidades salen del depósito y pasan a Full.</li>
+    <li><b>Subir reportes de ML (CSV)</b>: cargá los reportes de envíos que bajás de MercadoLibre. Quedan como historial: no cambian el stock ni se duplican.</li>
+    <li>Si la fecha de un envío quedó mal, avisá por "Pedir ayuda" y se corrige.</li></ul>`},
+  { sec:"atencion", ico:"🛎️", t:"Atención ML", x:`
+    <p>Preguntas, mensajes de ventas y reclamos de MercadoLibre en un solo lugar. El número rojo del menú indica cuántos esperan respuesta.</p>
+    <ul><li>Las respuestas arrancan con el saludo y la firma de tu cuenta ("Te responde…", "Tienda Oficial…"). Se configuran en el editor de plantillas.</li>
+    <li>Respondé rápido: el tiempo de respuesta afecta tu reputación en ML.</li></ul>`},
+  { sec:"promos", ico:"🏷️", t:"Promociones", x:`
+    <p>Las campañas de descuento de MercadoLibre a las que te invitan, con <b>cuánto ganás</b> en cada producto si entrás.</p>
+    <ul><li>Para cada producto ves el precio con descuento, la comisión y el envío a ese precio, tu ganancia y el margen.</li>
+    <li>En las campañas co-fondeadas, ML pone una parte del descuento: NEXO lo descuenta de lo que cobrás.</li>
+    <li>Podés sumar o quitar productos en las campañas que elige el vendedor; las de ML se manejan desde MercadoLibre.</li></ul>`},
+  { sec:"seguimiento", ico:"🔭", t:"Seguimiento", x:`
+    <p>Seguí a vendedores de la competencia y productos de catálogo: ventas, precios, si están en Full y visitas. NEXO saca una foto automática por día, así ves la tendencia.</p>`},
+  { sec:"movimientos", ico:"↕️", t:"Movimientos", x:`
+    <p>El historial de todo lo que mueve el stock: ingresos (compras), ventas, bajas, ajustes y envíos a Full.</p>
+    <ul><li>Usá <b>Ajuste +</b> o <b>Ajuste −</b> para corregir diferencias de conteo.</li>
+    <li>Borrar un movimiento cambia el stock: hacelo solo si fue un error de carga.</li></ul>`},
+  { sec:"compras", ico:"🧾", t:"Compras", x:`
+    <p>Cargá las facturas y remitos de proveedores. Cada compra <b>suma stock</b> en el depósito y genera la <b>deuda</b> en la Cuenta Corriente del proveedor.</p>
+    <ul><li>Si editás una compra, NEXO recalcula el stock y la cuenta corriente (no se duplica).</li>
+    <li>Al guardar te ofrece actualizar el costo de los productos con el precio de la compra.</li>
+    <li>Una compra con un pago registrado no se puede editar: eliminá el pago primero.</li></ul>`},
+  { sec:"pedidosprov", ico:"📋", t:"Pedidos a Proveedores", x:`
+    <p>Órdenes de compra para pasarle al proveedor. No mueven stock hasta que las recibís: al marcar un pedido como recibido se genera la compra.</p>`},
+  { sec:"ventas", ico:"💸", t:"Ventas", x:`
+    <p>Las ventas de MercadoLibre y de tu tienda propia.</p>
+    <ul><li><b>MercadoLibre</b>: se importan solas (sincronización automática, con 48 h de margen para que ML termine de cargar comisiones y envíos) o subiendo el reporte de ventas de ML.</li>
+    <li>Las ventas canceladas, devueltas o con reclamo perdido no cuentan.</li>
+    <li>Los reclamos y devoluciones descuentan de la ganancia y se marcan con ↩️ 💸 🛡️ ✅.</li></ul>`},
+  { sec:"gastos", ico:"🧮", t:"Gastos", x:`
+    <p>Gastos del negocio que no son de un producto puntual: monotributo, sueldos, alquiler, insumos, facturas de ML. Se restan en el resultado del mes.</p>`},
+  { sec:"caja", ico:"💵", t:"Caja", x:`
+    <p>Efectivo y Mercado Pago: saldo disponible y movimientos. Los pagos a proveedores y las compras pueden descontarse de la caja que elijas.</p>`},
+  { sec:"devoluciones", ico:"↩️", t:"Devoluciones / Garantías", x:`
+    <p>Registrá lo que te devuelven los clientes y lo que mandás en garantía al proveedor.</p>
+    <ul><li>Si llega <b>en buen estado</b>, vuelve al stock vendible.</li>
+    <li>Si llega <b>dañado o con falla</b>, queda "En revisión" (no se vende) hasta resolver la garantía.</li></ul>`},
+  { sec:"cuentacorriente", ico:"🏭", t:"Cuenta Corriente", x:`
+    <p>Lo que le debés a cada proveedor: compras (suman) y pagos (restan), con el saldo por proveedor.</p>
+    <ul><li><b>Registrar pago de factura</b>: elegí proveedor, factura y forma de pago (podés combinar dos métodos).</li>
+    <li>Las compras aparecen solas; no hace falta cargarlas acá.</li></ul>`},
+  { sec:"proveedores", ico:"🏭", t:"Proveedores", x:`<p>Datos de contacto y condiciones de entrega de cada proveedor.</p>`},
+  { sec:"listasprecios", ico:"📋", t:"Listas de Precios", x:`
+    <p>Subí el Excel de precios del proveedor y comparalo contra el costo de tu Catálogo: ves qué subió, qué bajó y podés actualizar los costos.</p>`},
+  { sec:"analisis", ico:"💰", t:"Análisis ML", x:`
+    <p>La rentabilidad real de cada publicación: precio, comisión y envío de ML, impuestos estimados, lo que recibís y tu margen.</p>
+    <ul><li><b>✓</b> = dato real sincronizado con ML. <b>*</b> = estimado (comisión 10% o % de impuestos configurado).</li>
+    <li><b>Stock Full</b>: unidades en Full (en rojo si no hay).</li>
+    <li><b>Competencia</b>: el precio más bajo de otros vendedores del mismo producto de catálogo.</li>
+    <li><b>💲</b> cambia el precio en MercadoLibre. <b>🤖</b> activa el precio automático para ese producto.</li>
+    <li><b>⚙️ Columnas</b>: elegí qué columnas ver. Con promoción activa, el margen se calcula al precio de oferta.</li>
+    <li>Recomendación: Rentable ≥20% · Aceptable 15–20% · A revisar · Bajo el piso · Con pérdida.</li></ul>`},
+  { sec:"mercado", ico:"📈", t:"Mercado ML", x:`
+    <p>Investigá cualquier producto antes de publicarlo: precios y competencia, tendencias por categoría y la lista de un proveedor comparada contra MercadoLibre con la comisión exacta.</p>`},
+  { sec:"marca", ico:"🎨", t:"Mi marca", x:`<p>Logo y colores de tu panel y tu tienda. NEXO corrige solo las combinaciones que no se leen bien.</p>`},
+  { sec:"mitienda", ico:"🛍️", t:"Mi tienda", x:`<p>Configurá tu tienda online: textos, colores, letra, secciones y cómo recibís los pedidos. La vista previa se actualiza mientras escribís; nada se publica hasta que guardes.</p>`},
+  { sec:"ml", ico:"🔗", t:"MercadoLibre", x:`
+    <p>La conexión de tu cuenta de MercadoLibre con NEXO. Si dice desconectada, tocá <b>Conectar</b> e ingresá con la cuenta de ML correcta (cerrá antes cualquier otra cuenta de ML abierta en el navegador).</p>`},
+  { sec:"pedidos", ico:"🛍️", t:"Pedidos (tienda)", x:`<p>Los pedidos que entran desde tu tienda online: desde acá los revisás y les cambiás el estado.</p>`},
+  { sec:"clientes", ico:"🏢", t:"Clientes (superadmin)", x:`
+    <p>Solo para el superadministrador: todas las cuentas, sus usuarios, crear cuentas y usuarios, y <b>🔀 Accesos a varias cuentas</b> para que un usuario entre a más de una cuenta.</p>`},
+  { sec:"", ico:"🤖", t:"Precio automático (🤖)", x:`
+    <p>Cada 30 minutos NEXO pone tu precio <b>$1 por debajo</b> del competidor más barato, <b>sin bajar de tu margen mínimo</b> (8,5% por defecto).</p>
+    <ul><li>Si para ganar hay que bajar del mínimo, puede bajar hasta 5% <b>por 6 horas como máximo</b> y te avisa por Telegram (⬇️). Si el competidor no sube, vuelve al mínimo (⏱️).</li>
+    <li>Si un precio quedó por debajo del mínimo, el 🤖 lo sube hasta el mínimo.</li>
+    <li>Se activa por producto desde Análisis ML. Podés poner un margen mínimo propio a cada producto.</li></ul>`},
+  { sec:"", ico:"🔀", t:"Varias cuentas", x:`
+    <p>Si tu usuario tiene acceso a más de una cuenta, debajo del nombre de la cuenta (arriba a la izquierda) aparece el selector <b>🔀</b> para cambiar. Cada cuenta tiene sus propios productos, stock y ventas.</p>`},
+  { sec:"", ico:"📊", t:"Informe semanal por Telegram", x:`
+    <p>Todos los viernes a la mañana llega por Telegram un PDF con la semana anterior (jueves a miércoles): ventas, ganancia, productos más rentables, precio automático, reclamos y stock que se está por acabar. Para recibirlo, la cuenta tiene que tener Telegram conectado.</p>`},
+];
+const AYUDA_FAQ = [
+  { p:"¿Por qué una venta de MercadoLibre todavía no aparece?", r:"Las ventas de ML entran solas con 48 horas de margen, para que MercadoLibre termine de cargar comisión, envío e impuestos. Si necesitás verla antes, podés subir el reporte de ventas de ML en Ventas." },
+  { p:"¿Por qué el stock Full no coincide con MercadoLibre?", r:"Tocá \"Sincronizar stock Full ML\" en Stock Actual. Si un SKU sigue distinto, revisá que el SKU del Catálogo sea exactamente igual al cargado en la publicación de ML (mayúsculas, espacios)." },
+  { p:"¿Qué significan ✓ y * en Análisis ML?", r:"✓ es un dato real que vino de MercadoLibre. * es un estimado: comisión de 10% si la publicación todavía no se sincronizó, o el % de impuestos que configuraste." },
+  { p:"¿Por qué un margen sale en rojo?", r:"Porque con ese precio la ganancia queda por debajo del piso que configuraste (8,5% por defecto) o directamente en pérdida. Revisá el costo cargado, el precio y si el producto está en una promoción." },
+  { p:"¿Por qué el 🤖 no le gana al competidor?", r:"Porque para ganarle tendría que bajar de tu margen mínimo. El 🤖 nunca vende por debajo del mínimo (salvo la bajada temporal hasta 5% por 6 horas cuando eso alcanza para ganar)." },
+  { p:"Edité una compra y se duplicó la deuda con el proveedor", r:"Desde la versión v77 ya no pasa. Si te quedó algún renglón repetido de antes, borralo con ✕ en Cuenta Corriente o avisá por \"Pedir ayuda\"." },
+  { p:"¿Cómo cambio de cuenta?", r:"Si tenés acceso a varias, usá el selector 🔀 debajo del nombre de la cuenta. Si no te aparece, pedile al administrador que te dé acceso." },
+  { p:"No puedo editar nada", r:"Tu usuario es de \"solo lectura\" en esta cuenta. Pedile al administrador que te cambie el rol." },
+  { p:"Los gastos de una promoción salen con \"—\"", r:"MercadoLibre no respondió a tiempo. NEXO reintenta solo; si sigue, recargá la página." },
+  { p:"¿Cómo recibo los avisos y el informe por Telegram?", r:"La cuenta tiene que tener Telegram conectado. Pedí ayuda y te pasamos los pasos." },
+];
+let _ayudaVolverA = "";
+function _ayudaNorm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/<[^>]+>/g," "); }
+function renderAyuda(abrir){
+  const box = document.getElementById("ayudaContenido"); if(!box) return;
+  const q = _ayudaNorm((document.getElementById("ayudaBuscar")||{}).value||"").trim();
+  const ok = (txt)=>!q || q.split(/\s+/).every(w=>_ayudaNorm(txt).includes(w));
+  const man = AYUDA_MANUAL.filter(m=>(!m.sec || typeof navPuedeVer!=="function" || navPuedeVer(m.sec)) && ok(m.t+" "+m.x));
+  const faq = AYUDA_FAQ.filter(f=>ok(f.p+" "+f.r));
+  const det = (id, titulo, cuerpo, abierto)=>`<details id="${id}" ${abierto?"open":""} style="border:1.5px solid var(--border);border-radius:9px;margin-bottom:8px;background:var(--surface);">
+      <summary style="cursor:pointer;padding:11px 14px;font-weight:700;font-size:14px;">${titulo}</summary>
+      <div class="ayuda-cuerpo" style="padding:2px 16px 12px;font-size:13px;line-height:1.55;color:var(--text);">${cuerpo}</div></details>`;
+  box.innerHTML = `
+    <h3 style="margin:4px 0 10px;font-size:15px;">❔ Preguntas frecuentes</h3>
+    ${faq.map((f,i)=>det("ayFaq"+i, f.p, `<p style="margin:6px 0 0;">${esc(f.r)}</p>`, !!q)).join("") || `<div style="font-size:13px;color:var(--text-soft);margin-bottom:10px;">Sin preguntas que coincidan.</div>`}
+    <h3 style="margin:22px 0 10px;font-size:15px;">📘 Manual de uso</h3>
+    ${man.map((m,i)=>det(m.sec?"ayMan_"+m.sec:"ayManX"+i, `${m.ico} ${esc(m.t)}${m.sec?` <a href="#${m.sec}" onclick="event.stopPropagation();return navClick(event,'${m.sec}')" style="font-size:11px;font-weight:600;margin-left:6px;">ir a la pantalla →</a>`:""}`, m.x, !!q || abrir===m.sec)).join("") || `<div style="font-size:13px;color:var(--text-soft);">Sin temas que coincidan. Probá con otra palabra o pedí ayuda.</div>`}`;
+  if(abrir){ const el = document.getElementById("ayMan_"+abrir); if(el) setTimeout(()=>el.scrollIntoView({behavior:"smooth", block:"start"}), 50); }
+  const wa = document.getElementById("ayudaWa");
+  if(wa){ wa.style.display = NEXO_SOPORTE_WA ? "" : "none"; wa.href = NEXO_SOPORTE_WA ? `https://wa.me/${NEXO_SOPORTE_WA}?text=${encodeURIComponent("Hola, necesito ayuda con NEXO ("+((document.getElementById("sidebarCliente")||{}).textContent||"").trim()+").")}` : "#"; }
+  const ml = document.getElementById("ayudaMail");
+  if(ml) ml.href = `mailto:${NEXO_SOPORTE_MAIL}?subject=${encodeURIComponent("Ayuda NEXO - "+(((document.getElementById("sidebarCliente")||{}).textContent)||"").trim())}`;
+  const sel = document.getElementById("ayudaPantalla");
+  if(sel && !sel.dataset.ok){ sel.innerHTML = `<option value="">General</option>` + AYUDA_MANUAL.filter(m=>m.sec).map(m=>`<option value="${m.sec}">${esc(m.t)}</option>`).join(""); sel.dataset.ok="1"; }
+  if(sel && _ayudaVolverA) sel.value = _ayudaVolverA;
+  const v = document.getElementById("ayudaVersion"); if(v) v.textContent = NEXO_VERSION;
+}
+function ayudaDesde(){
+  const act = document.querySelector(".section.active"); const sec = act ? act.id.replace(/^sec-/,"") : "";
+  _ayudaVolverA = sec && sec!=="ayuda" ? sec : "";
+  const b = document.getElementById("ayudaBuscar"); if(b) b.value = "";
+  history.pushState(null, "", "#ayuda");
+  mostrarSeccion("ayuda").then(()=>renderAyuda(_ayudaVolverA));
+}
+async function ayudaEnviar(){
+  const msg = (document.getElementById("ayudaMsg").value||"").trim();
+  if(msg.length < 5){ toast("Escribí tu consulta.","err"); return; }
+  const btn = document.getElementById("ayudaEnviarBtn"); btn.disabled = true; btn.textContent = "Enviando…";
+  try{
+    const pant = document.getElementById("ayudaPantalla");
+    const r = await fetch(SB_URL+"/functions/v1/nexo-soporte", {method:"POST", headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+sbAuth()},
+      body: JSON.stringify({ mensaje:msg, tema:document.getElementById("ayudaTema").value, seccion: pant.options[pant.selectedIndex] ? pant.options[pant.selectedIndex].text : "", version:NEXO_VERSION })});
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.message || ("Error "+r.status));
+    document.getElementById("ayudaMsg").value = "";
+    toast("✅ Consulta enviada. Te respondemos a la brevedad.","ok",5000);
+  }catch(e){ toast("No se pudo enviar: "+e.message,"err",6000); }
+  finally{ btn.disabled = false; btn.textContent = "📨 Enviar consulta"; }
+}
+// Botón flotante ❓ (se oculta en la pantalla de Ayuda y en el login)
+(function(){
+  const b = document.createElement("button");
+  b.id = "ayudaFab"; b.type = "button"; b.title = "Ayuda sobre esta pantalla"; b.textContent = "❓";
+  b.onclick = ayudaDesde;
+  b.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:900;width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;font-size:20px;background:var(--brand-primario,#6d28d9);color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.25);";
+  document.body.appendChild(b);
+  const upd = ()=>{ const a = document.querySelector(".section.active"); const main = document.querySelector(".main-content");
+    b.style.display = (!a || a.id==="sec-ayuda" || (main && main.offsetParent===null)) ? "none" : ""; };
+  setInterval(upd, 800); upd();
+})();
+
 </script>
 </body>
 </html>
