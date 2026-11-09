@@ -2646,6 +2646,20 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
             <tbody id="saUsuariosTabla"></tbody>
           </table></div>
         </div>
+        <div class="card" id="saAccesosCard">
+          <div class="card-header"><h3>🔀 Accesos a varias cuentas</h3></div>
+          <div style="padding:14px 20px 4px;font-size:12px;color:var(--text-soft);">Cada usuario puede entrar a las cuentas que figuran acá y cambiar entre ellas con el selector <strong>🔀</strong> que le aparece debajo del nombre de la cuenta. ● = la cuenta que está usando ahora.</div>
+          <div style="overflow-x:auto;"><table>
+            <thead><tr><th>Usuario</th><th>Cuentas a las que puede entrar</th><th>Último ingreso</th></tr></thead>
+            <tbody id="saAccesosTabla"><tr><td colspan="3" style="padding:12px;">Cargando…</td></tr></tbody>
+          </table></div>
+          <div style="padding:16px 20px;border-top:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <div class="form-group" style="margin:0;min-width:220px;"><label>Usuario</label><select id="saAccUsuario"></select></div>
+            <div class="form-group" style="margin:0;min-width:180px;"><label>Darle acceso a la cuenta</label><select id="saAccCliente"></select></div>
+            <div class="form-group" style="margin:0;"><label>Rol</label><select id="saAccRol"><option value="admin">Administrador</option><option value="viewer">Solo lectura</option></select></div>
+            <button class="btn btn-primary" onclick="saAccDar()">➕ Dar acceso</button>
+          </div>
+        </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;">
           <div class="card">
             <div class="card-header"><h3>➕ Nuevo cliente</h3></div>
@@ -10951,6 +10965,65 @@ async function renderClientes(){
   }catch(e){
     tb.innerHTML = `<tr><td colspan="8" style="padding:16px;color:var(--red);">Error: ${esc(e.message)}</td></tr>`;
   }
+}
+// ================================================================
+// 🔀 Accesos a varias cuentas (superadmin): nexo_sa_accesos / nexo_sa_dar_acceso / nexo_sa_quitar_acceso
+// nexo_usuarios = cuenta activa del usuario; nexo_usuario_cuentas = todas a las que puede entrar.
+// ================================================================
+let _saAcc = [];
+async function saAccesosRender(){
+  if(!esSuperadmin) return;
+  const tb = document.getElementById("saAccesosTabla"); if(!tb) return;
+  try{
+    _saAcc = await saRpc("nexo_sa_accesos") || [];
+    const porUsr = {};
+    _saAcc.forEach(a=>{ (porUsr[a.user_id] ||= {email:a.email, sa:a.superadmin, ult:a.ultimo_ingreso, cuentas:[]}).cuentas.push(a); });
+    const usrs = Object.entries(porUsr);
+    tb.innerHTML = usrs.map(([uid,u])=>`<tr>
+        <td><strong>${esc(u.email)}</strong>${u.sa?'<div style="font-size:11px;color:var(--text-soft);">Superadmin: entra a todas desde el selector de arriba</div>':''}</td>
+        <td>${u.sa?'<span style="font-size:12px;color:var(--text-soft);">Todas</span>':u.cuentas.map(c=>`<span style="display:inline-flex;align-items:center;gap:6px;margin:3px 6px 3px 0;padding:4px 8px;border:1.5px solid ${c.activa?'var(--green)':'var(--border)'};border-radius:16px;font-size:12px;">
+            ${c.activa?'<span title="Es la cuenta que está usando ahora" style="color:var(--green);">●</span>':''}<strong>${esc(c.cliente)}</strong>
+            <select title="Rol en esta cuenta" onchange="saAccCambiarRol('${uid}','${c.cliente_id}',this.value)" style="font-size:11px;padding:1px 4px;border:1px solid var(--border);border-radius:6px;">
+              <option value="admin" ${c.rol==="admin"?"selected":""}>Administrador</option><option value="viewer" ${c.rol==="viewer"?"selected":""}>Solo lectura</option></select>
+            ${u.cuentas.length>1?`<button title="Quitarle el acceso a esta cuenta" onclick="saAccQuitar('${uid}','${c.cliente_id}')" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:13px;padding:0 2px;">✕</button>`:''}
+          </span>`).join("")}</td>
+        <td style="font-size:12px;">${u.ult?new Date(u.ult).toLocaleString("es-AR"):"Nunca"}</td></tr>`).join("") || `<tr><td colspan="3" style="padding:12px;">Sin usuarios</td></tr>`;
+    const su = document.getElementById("saAccUsuario"), prevU = su.value;
+    su.innerHTML = usrs.filter(([,u])=>!u.sa).map(([uid,u])=>`<option value="${uid}">${esc(u.email)}</option>`).join("");
+    if(prevU) su.value = prevU;
+    const r = await fetch(SB_URL+"/rest/v1/nexo_clientes?select=id,nombre,activo&order=nombre", {headers:{"apikey":SB_KEY}});
+    const cs = await r.json().catch(()=>[]);
+    const sc = document.getElementById("saAccCliente"), prevC = sc.value;
+    sc.innerHTML = (Array.isArray(cs)?cs:[]).map(c=>`<option value="${c.id}">${esc(c.nombre)}${c.activo?"":" (inactiva)"}</option>`).join("");
+    if(prevC) sc.value = prevC;
+  }catch(e){ tb.innerHTML = `<tr><td colspan="3" style="padding:12px;color:var(--red);">Error: ${esc(e.message)}</td></tr>`; }
+}
+async function saAccDar(){
+  const u = document.getElementById("saAccUsuario").value, c = document.getElementById("saAccCliente").value, rol = document.getElementById("saAccRol").value;
+  if(!u || !c){ toast("Elegí el usuario y la cuenta.","err"); return; }
+  const ya = _saAcc.find(a=>a.user_id===u && a.cliente_id===c);
+  try{
+    await saRpc("nexo_sa_dar_acceso", {p_user:u, p_cliente:c, p_rol:rol});
+    toast(ya?"Rol actualizado ✅":"Acceso dado ✅ · El usuario lo ve al volver a entrar o recargar.","ok",5000);
+    renderClientes();
+  }catch(e){ toast("No se pudo: "+e.message,"err",6000); }
+}
+async function saAccCambiarRol(u, c, rol){
+  try{ await saRpc("nexo_sa_dar_acceso", {p_user:u, p_cliente:c, p_rol:rol}); toast("Rol actualizado ✅","ok"); saAccesosRender(); }
+  catch(e){ toast("No se pudo: "+e.message,"err",6000); saAccesosRender(); }
+}
+function saAccQuitar(u, c){
+  const a = _saAcc.find(x=>x.user_id===u && x.cliente_id===c) || {};
+  confirmCb = async()=>{
+    try{ await saRpc("nexo_sa_quitar_acceso", {p_user:u, p_cliente:c}); toast("Acceso quitado ✅","ok"); renderClientes(); }
+    catch(e){ toast("No se pudo: "+e.message,"err",6000); }
+  };
+  document.getElementById("confirmMsg").textContent = `¿Quitarle a ${a.email||"este usuario"} el acceso a ${a.cliente||"esta cuenta"}?${a.activa?" La está usando ahora: pasa a otra de sus cuentas.":""}`;
+  document.getElementById("modalConfirm").classList.add("show");
+}
+if(typeof renderClientes === "function"){
+  const _renderClientesSinAcc = renderClientes;
+  renderClientes = async function(){ const r = await _renderClientesSinAcc.apply(this, arguments); try{ await saAccesosRender(); }catch(e){} return r; };
 }
 async function saVerUsuarios(id, nombre){
   const wrap = document.getElementById("saUsuariosWrap");
