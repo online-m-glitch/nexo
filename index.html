@@ -8638,6 +8638,20 @@ async function nexoRefrescarPreciosML(forzar){
   }
   return cambios;
 }
+// Comisión exacta de ML para una publicación a un precio dado (categoría y tipo de la publicación; solo moneda local)
+const _nxItemCat = {};
+async function nexoComisionExacta(p, precio){
+  if(!p.ml_item_id || typeof mercComision !== "function") return null;
+  let info = _nxItemCat[p.ml_item_id];
+  if(!info){
+    const r = await mlGet("/items/"+encodeURIComponent(p.ml_item_id)+"?attributes=id,category_id,listing_type_id,currency_id");
+    if(!r.ok || !r.data || !r.data.category_id) return null;
+    info = _nxItemCat[p.ml_item_id] = {cat:r.data.category_id, lt:r.data.listing_type_id||"gold_special", mon:r.data.currency_id};
+  }
+  if(info.mon && typeof monedaLocal === "function" && info.mon !== monedaLocal()) return null;
+  const v = await mercComision(info.cat, precio, info.lt);
+  return v && v.monto > 0 ? v : null;
+}
 // Aplica un precio real de ML a un producto (si cambió): memoria + comisión estimada + base
 async function nexoAplicarPrecioML(p, precio){
   const f = feesML[p.sku];
@@ -8647,10 +8661,19 @@ async function nexoAplicarPrecioML(p, precio){
   if(f){
     // Comisión: mismo % (solo la parte proporcional) y el mismo cargo fijo que informó ML, aplicados al precio nuevo.
     // fee_pct es el % TOTAL (incluye el fijo), por eso se recalcula el % puro desde los valores crudos: si no, el fijo se suma dos veces.
+    // Primero se pide a ML la comisión EXACTA al precio nuevo: el cargo fijo por unidad cambia según la franja de precio
+    // (ej. $14.998 → fijo $1.330; $16.800 → fijo $2.740), así que reusar el fijo viejo daba márgenes falsos (en pérdida).
+    let exacta = null;
+    try{ exacta = await nexoComisionExacta(p, precio); }catch(e){}
+    if(exacta){
+      upd.fee_amount = exacta.monto; upd.fee_fixed = exacta.fijo; upd.fee_pct = exacta.monto / precio * 100;
+      nexoFeeRaw(p.sku, "fee_amount", upd.fee_amount); nexoFeeRaw(p.sku, "fee_fixed", upd.fee_fixed); f.fee_fixed = upd.fee_fixed; f.fee_pct = upd.fee_pct;
+    } else {
     const raw = feeRaw(p.sku), fijo = Number(raw.fee_fixed)||0, feeAnt = Number(raw.fee_amount)||0, pAnt = Number(raw.ml_price)||actual;
     const pctPuro = pAnt > 0 && feeAnt > 0 ? Math.max(0, (feeAnt - fijo) / pAnt * 100) : 0;
     if(pctPuro > 0){ upd.fee_amount = Math.round((precio*pctPuro/100 + fijo)*100)/100; upd.fee_pct = upd.fee_amount / precio * 100;
       nexoFeeRaw(p.sku, "fee_amount", upd.fee_amount); f.fee_pct = upd.fee_pct; }
+    }
     nexoFeeRaw(p.sku, "ml_price", precio);
     try{ await sbUpdate("ml_fees", "sku=eq."+encodeURIComponent(p.sku), upd); }catch(e){}
   }
@@ -18276,7 +18299,7 @@ document.querySelectorAll(".nav-item").forEach(el=>{
 // ❓ Ayuda: manual de uso por pantalla, preguntas frecuentes y contacto (WhatsApp + "Pedir ayuda" → Telegram)
 // El botón flotante ❓ abre el manual en la pantalla donde está el usuario.
 // ================================================================
-const NEXO_VERSION = "v82";
+const NEXO_VERSION = "v83";
 const NEXO_SOPORTE_WA = "5491160123520";
 const NEXO_SOPORTE_MAIL = "gestion.nexo.soft@gmail.com"; // Número de WhatsApp de soporte, solo dígitos con código de país (ej. 5491112345678). Vacío = no se muestra.
 const AYUDA_MANUAL = [
