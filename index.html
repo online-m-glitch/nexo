@@ -18306,7 +18306,7 @@ document.querySelectorAll(".nav-item").forEach(el=>{
 // ❓ Ayuda: manual de uso por pantalla, preguntas frecuentes y contacto (WhatsApp + "Pedir ayuda" → Telegram)
 // El botón flotante ❓ abre el manual en la pantalla donde está el usuario.
 // ================================================================
-const NEXO_VERSION = "v84";
+const NEXO_VERSION = "v85";
 const NEXO_SOPORTE_WA = "5491160123520";
 const NEXO_SOPORTE_MAIL = "gestion.nexo.soft@gmail.com"; // Número de WhatsApp de soporte, solo dígitos con código de país (ej. 5491112345678). Vacío = no se muestra.
 const AYUDA_MANUAL = [
@@ -18335,7 +18335,7 @@ const AYUDA_MANUAL = [
     <ul><li>Al registrar un <b>envío a Full</b>, las unidades salen del depósito y pasan a Full.</li>
     <li><b>Subir reportes de ML (CSV)</b>: cargá los reportes de envíos que bajás de MercadoLibre. Quedan como historial: no cambian el stock ni se duplican.</li>
     <li>Si la fecha de un envío quedó mal, avisá por "Pedir ayuda" y se corrige.</li>
-    <li><b>📥 Retiros</b>: cuando sacás mercadería de Full, registrá el retiro (queda pendiente). Cuando llega, tocá <b>Controlar</b> y cargá cuántas llegaron bien y cuántas dañadas: las que llegaron bien suman al stock del depósito; las dañadas quedan anotadas y no suman.</li></ul>`},
+    <li><b>📥 Retiros</b>: cuando sacás mercadería de Full, importá el detalle del retiro que baja ML (Retiro-XXXXXXX.csv) o cargalo a mano (queda pendiente). Cuando llega, tocá <b>Controlar</b> y cargá cuántas llegaron bien y cuántas dañadas: las que llegaron bien suman al stock del depósito; las dañadas quedan anotadas y no suman.</li></ul>`},
   { sec:"atencion", ico:"🛎️", t:"Atención ML", x:`
     <p>Preguntas, mensajes de ventas y reclamos de MercadoLibre en un solo lugar. El número rojo del menú indica cuántos esperan respuesta.</p>
     <ul><li>Las respuestas arrancan con el saludo y la firma de tu cuenta ("Te responde…", "Tienda Oficial…"). Se configuran en el editor de plantillas.</li>
@@ -18495,7 +18495,12 @@ function renderRetiros(){
   if(!document.getElementById("retFecha")){
     box.innerHTML = `
       <h3 style="margin:0 0 6px;font-size:16px;color:var(--brand-primario,#6d28d9);">📥 Retiro de Full</h3>
-      <div style="font-size:13px;color:var(--text-soft);margin-bottom:14px;">Cuando sacás mercadería de Full: registrá el retiro y, cuando llega, controlala. Lo que llega bien suma al stock del depósito; lo dañado queda anotado y no suma.</div>
+      <div style="font-size:13px;color:var(--text-soft);margin-bottom:12px;">Cuando sacás mercadería de Full: registrá el retiro y, cuando llega, controlala. Lo que llega bien suma al stock del depósito; lo dañado queda anotado y no suma.</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;border:1.5px dashed var(--border);border-radius:9px;margin-bottom:14px;">
+        <label class="btn btn-primary admin-only" style="cursor:pointer;">📄 Importar retiro de ML (CSV)<input type="file" accept=".csv,text/csv" style="display:none;" onchange="retImportarCSV(this)"></label>
+        <span style="font-size:12px;color:var(--text-soft);">El archivo <b>Retiro-XXXXXXX.csv</b> que bajás de MercadoLibre (Full › Retiros › detalle). Toma productos, unidades y el <b>estado de las unidades</b> (aptas / con problemas / extraviadas). O cargalo a mano abajo.</span>
+      </div>
+      <div id="retImportBox"></div>
       <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
         <div class="form-group"><label>Fecha del retiro</label><input type="date" id="retFecha"></div>
         <div class="form-group"><label>Nro. de retiro (opcional)</label><input id="retNro" placeholder="Ej: 81234567"></div>
@@ -18516,7 +18521,7 @@ function renderRetiros(){
     document.getElementById("retFecha").value = new Date(Date.now()-3*3600000).toISOString().slice(0,10);
     if(!_retLineas.length) _retLineas = [{sku:"", cant:1}];
   }
-  retRenderLineas(); retRenderLista(); retRenderControl();
+  retRenderLineas(); retRenderLista(); retRenderControl(); retRenderImport();
   if(typeof esAdmin==="function" && !esAdmin()) box.querySelectorAll(".admin-only").forEach(e=>e.style.display="none");
 }
 function retRenderLineas(){
@@ -18564,7 +18569,8 @@ function retRenderLista(){
 function retAbrirControl(id){
   const r = retLista().find(x=>x.id===id); if(!r) return;
   _retControl = JSON.parse(JSON.stringify(r));
-  if(_retControl.estado!=="controlado") _retControl.lineas.forEach(l=>{ if(l.ok==null) l.ok = l.cant; if(l.danado==null) l.danado = 0; });
+  // Si el retiro vino del detalle de ML, se arranca con lo que informa ML: aptas → bien, con problemas → dañadas
+  if(_retControl.estado!=="controlado") _retControl.lineas.forEach(l=>{ if(l.ok==null) l.ok = l.aptas!=null ? l.aptas : l.cant; if(l.danado==null) l.danado = l.problemas!=null ? l.problemas : 0; });
   retRenderControl();
   setTimeout(()=>document.getElementById("retControlBox")?.scrollIntoView({behavior:"smooth", block:"start"}), 50);
 }
@@ -18576,10 +18582,11 @@ function retRenderControl(){
     <div class="card-header"><h3>${ver?"👁 Retiro controlado":"✅ Control de la mercadería recibida"} · ${fFecha(r.fecha)}${r.nro?" · #"+esc(r.nro):""}</h3>
       <button class="btn btn-ghost btn-sm" onclick="_retControl=null;retRenderControl()">Cerrar</button></div>
     <div style="padding:14px 18px;">
-      ${ver?"":`<div style="font-size:12px;color:var(--text-soft);margin-bottom:10px;">Contá lo que llegó. <b>Bien</b> = se puede vender (suma al depósito). <b>Dañadas</b> = llegaron rotas o con falla (no suman). Lo que no llegó queda como faltante.</div>`}
-      <div class="table-wrap"><table><thead><tr><th>SKU</th><th>Producto</th><th>Retiradas</th><th>Llegaron bien</th><th>Dañadas</th><th>Faltan</th></tr></thead><tbody>
+      ${ver?"":`<div style="font-size:12px;color:var(--text-soft);margin-bottom:10px;">Contá lo que llegó. <b>Bien</b> = se puede vender (suma al depósito). <b>Dañadas</b> = llegaron rotas o con falla (no suman). Lo que no llegó queda como faltante.${r.lineas.some(l=>l.aptas!=null)?" Los números ya vienen cargados con lo que informó ML: corregilos si al abrir las cajas encontrás otra cosa.":""}</div>`}
+      <div class="table-wrap"><table><thead><tr><th>SKU</th><th>Producto</th><th>Retiradas</th>${r.lineas.some(l=>l.aptas!=null)?"<th>Según ML</th>":""}<th>Llegaron bien</th><th>Dañadas</th><th>Faltan</th></tr></thead><tbody>
       ${r.lineas.map((l,i)=>{ const falta = (Number(l.cant)||0)-(Number(l.ok)||0)-(Number(l.danado)||0);
         return `<tr><td><span class="sku-tag">${esc(l.sku)}</span></td><td style="font-size:12px;">${esc(l.producto||"")}</td><td class="num">${l.cant}</td>
+        ${r.lineas.some(x=>x.aptas!=null)?`<td style="font-size:11px;line-height:1.4;">${l.aptas!=null?`<span style="color:var(--green);">${l.aptas} aptas</span>${l.problemas?`<br><span style="color:var(--orange);">${l.problemas} con problemas</span>`:""}${l.extraviadas?`<br><span style="color:var(--red);">${l.extraviadas} extraviadas</span>`:""}`:"—"}</td>`:""}
         <td>${ver?`<b>${l.ok||0}</b>`:`<input type="number" min="0" value="${l.ok}" onchange="_retControl.lineas[${i}].ok=Math.max(0,parseInt(this.value)||0);retRenderControl()" style="width:80px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;">`}</td>
         <td>${ver?(l.danado||0):`<input type="number" min="0" value="${l.danado}" onchange="_retControl.lineas[${i}].danado=Math.max(0,parseInt(this.value)||0);retRenderControl()" style="width:80px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;">`}</td>
         <td class="num" style="${falta>0?'color:var(--red);font-weight:700;':falta<0?'color:var(--orange);font-weight:700;':''}">${falta<0?`+${-falta} de más`:falta}</td></tr>`; }).join("")}
@@ -18624,6 +18631,100 @@ function retEliminar(id){
   confirmCb = async()=>{ try{ await retGuardarLista(retLista().filter(x=>x.id!==id)); if(_retControl && _retControl.id===id) _retControl=null; toast("Retiro eliminado.","ok"); renderRetiros(); }catch(e){ toast("Error: "+e.message,"err"); } };
   document.getElementById("confirmMsg").textContent = `¿Eliminar el retiro${r.nro?" #"+r.nro:""} del ${fFecha(r.fecha)}? Todavía no se controló, así que no cambia el stock.`;
   document.getElementById("modalConfirm").classList.add("show");
+}
+
+
+// ── Importar el detalle de retiro que baja MercadoLibre (Retiro-XXXXXXX.csv) ──
+// Columnas por nombre (ML cambia el orden): ID del retiro, Código ML (inventory_id de Full), Producto,
+// Estado de las unidades ("Aptas para la venta" / "Devueltas con problemas"), Unidades a recibir,
+// Unidades extraviadas (en búsqueda), Fecha de creacion, Fecha de entrega.
+let _retImp = null;
+function _retNorm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ").trim(); }
+function _retFechaML(s){ const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(String(s||"").trim()); if(!m) return ""; const y = m[3].length===2 ? "20"+m[3] : m[3]; return `${y}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`; }
+async function _retLeerArchivo(f){
+  const buf = await f.arrayBuffer();
+  let t = new TextDecoder("utf-8").decode(buf);
+  if(t.includes("�")) t = new TextDecoder("windows-1252").decode(buf);
+  return t.replace(/^﻿/, "");
+}
+function retParsearCSV(texto){
+  const filas = texto.split(/\r?\n/).filter(l=>l.trim());
+  if(filas.length < 2) throw new Error("El archivo está vacío.");
+  const sep = (filas[0].match(/;/g)||[]).length >= (filas[0].match(/,/g)||[]).length ? ";" : ",";
+  const cab = filas[0].split(sep).map(_retNorm);
+  const col = (...nombres)=>{ for(const n of nombres){ const i = cab.findIndex(c=>c.startsWith(_retNorm(n))); if(i>=0) return i; } return -1; };
+  const c = { retiro:col("id del retiro"), codigo:col("codigo ml"), producto:col("producto"), estado:col("estado de las unidades"),
+    cant:col("unidades a recibir"), extrav:col("unidades extraviadas"), fecha:col("fecha de creacion"), entrega:col("fecha de entrega") };
+  if(c.codigo<0 || c.cant<0) throw new Error("No parece el detalle de un retiro de ML (faltan las columnas «Código ML» y «Unidades a recibir»).");
+  const porCod = {}; let nro = "", fecha = "", entrega = "";
+  filas.slice(1).forEach(l=>{
+    const x = l.split(sep); const cod = String(x[c.codigo]||"").trim(); if(!cod) return;
+    nro = nro || String(x[c.retiro]||"").trim(); fecha = fecha || _retFechaML(x[c.fecha]); entrega = entrega || String(x[c.entrega]||"").trim();
+    const q = parseInt(x[c.cant])||0, ex = c.extrav>=0 ? (parseInt(x[c.extrav])||0) : 0;
+    const est = _retNorm(c.estado>=0 ? x[c.estado] : "");
+    const o = porCod[cod] ||= {codigo:cod, titulo:String(x[c.producto]||"").trim(), aptas:0, problemas:0, extraviadas:0};
+    if(/apta/.test(est) || !est) o.aptas += q; else o.problemas += q;
+    o.extraviadas += ex;
+  });
+  const lineas = Object.values(porCod);
+  if(!lineas.length) throw new Error("No encontré productos en el archivo.");
+  return {nro, fecha, entrega, lineas};
+}
+async function retImportarCSV(input){
+  const f = input.files && input.files[0]; input.value = "";
+  if(!f) return;
+  if(checkViewer("Importar retiros de Full")) return;
+  try{
+    const d = retParsearCSV(await _retLeerArchivo(f));
+    if(d.nro && retLista().some(r=>String(r.nro)===String(d.nro))){ toast(`El retiro #${d.nro} ya está cargado.`,"err",6000); return; }
+    // Código ML (inventory_id) → SKU, con las publicaciones de Full de la cuenta
+    let mapa = {};
+    try{ const inv = await fullInventariosPorSku(); Object.entries(inv).forEach(([sku, cods])=>cods.forEach(cd=>{ mapa[cd] = sku; })); }
+    catch(e){ toast("No pude consultar los códigos en ML ("+e.message+"). Completá los SKU a mano.","err",6000); }
+    d.lineas.forEach(l=>{ const k = mapa[l.codigo]; const p = k ? retProd(k) : null; l.sku = p ? p.sku : ""; });
+    _retImp = d; retRenderImport();
+    setTimeout(()=>document.getElementById("retImportBox")?.scrollIntoView({behavior:"smooth", block:"start"}), 50);
+  }catch(e){ toast("No se pudo leer el archivo: "+e.message,"err",7000); }
+}
+function retRenderImport(){
+  const box = document.getElementById("retImportBox"); if(!box) return;
+  const d = _retImp; if(!d){ box.innerHTML = ""; return; }
+  const tot = k=>d.lineas.reduce((a,l)=>a+(l[k]||0),0);
+  const sinSku = d.lineas.filter(l=>!l.sku).length;
+  box.innerHTML = `<div class="card" style="margin:14px 0 0;border:2px solid var(--brand-primario,#6d28d9);">
+    <div class="card-header"><h3>📄 Retiro de ML #${esc(d.nro||"?")} · creado ${d.fecha?fFecha(d.fecha):"—"}${d.entrega?` · entregado ${esc(d.entrega)}`:""}</h3>
+      <button class="btn btn-ghost btn-sm" onclick="_retImp=null;retRenderImport()">Cancelar</button></div>
+    <div style="padding:14px 18px;">
+      <div style="font-size:12px;color:var(--text-soft);margin-bottom:10px;">${d.lineas.length} producto(s) · <b>${tot("aptas")}</b> aptas para la venta · <b>${tot("problemas")}</b> devueltas con problemas${tot("extraviadas")?` · <b style="color:var(--red);">${tot("extraviadas")}</b> extraviadas`:""}. Al guardar queda <b>pendiente de control</b>: cuando abras las cajas, confirmás lo que llegó.</div>
+      ${sinSku?`<div style="font-size:12px;color:var(--red);margin-bottom:8px;">⚠️ ${sinSku} producto(s) sin SKU: completalos (el código ML no coincide con ninguna publicación de Full de esta cuenta).</div>`:""}
+      <div class="table-wrap"><table><thead><tr><th>Código ML</th><th style="width:160px;">SKU</th><th>Producto (según ML)</th><th>Aptas</th><th>Con problemas</th><th>Extraviadas</th></tr></thead><tbody>
+      ${d.lineas.map((l,i)=>{ const p = retProd(l.sku); return `<tr>
+        <td style="font-family:monospace;font-size:12px;">${esc(l.codigo)}</td>
+        <td><input list="skuList" value="${esc(l.sku)}" placeholder="SKU" onchange="_retImp.lineas[${i}].sku=(retProd(this.value)||{}).sku||this.value.toUpperCase().trim();retRenderImport()" style="width:140px;padding:5px 7px;border:1.5px solid ${p?'var(--border)':'var(--red)'};border-radius:6px;"></td>
+        <td style="font-size:12px;">${esc(l.titulo)}${l.sku&&!p?'<div style="color:var(--red);">SKU no encontrado en el Catálogo</div>':''}</td>
+        <td class="num" style="color:var(--green);font-weight:700;">${l.aptas||"—"}</td>
+        <td class="num" style="${l.problemas?'color:var(--orange);font-weight:700;':''}">${l.problemas||"—"}</td>
+        <td class="num" style="${l.extraviadas?'color:var(--red);font-weight:700;':''}">${l.extraviadas||"—"}</td></tr>`; }).join("")}
+      </tbody></table></div>
+      <div style="margin-top:12px;"><button class="btn btn-primary admin-only" onclick="retImportGuardar()">💾 Guardar retiro (pendiente de control)</button></div>
+    </div></div>`;
+}
+async function retImportGuardar(){
+  if(checkViewer("Importar retiros de Full")) return;
+  const d = _retImp; if(!d) return;
+  const malos = d.lineas.filter(l=>!retProd(l.sku));
+  if(malos.length){ toast("Completá el SKU de: "+malos.map(l=>l.codigo).join(", "),"err",7000); return; }
+  // Si dos códigos ML son del mismo SKU, se juntan
+  const porSku = {};
+  d.lineas.forEach(l=>{ const p = retProd(l.sku); const o = porSku[p.sku] ||= {sku:p.sku, producto:p.nombre, cant:0, aptas:0, problemas:0, extraviadas:0, codigos:[]};
+    o.aptas += l.aptas; o.problemas += l.problemas; o.extraviadas += l.extraviadas; o.cant += l.aptas + l.problemas + l.extraviadas; o.codigos.push(l.codigo); });
+  const r = {id: Date.now(), fecha: d.fecha || new Date(Date.now()-3*3600000).toISOString().slice(0,10), nro: d.nro, origen:"ml",
+    obs: "Importado del detalle de ML"+(d.entrega?` · entregado el ${d.entrega}`:""), estado:"pendiente", creado:new Date().toISOString(), lineas:Object.values(porSku)};
+  try{
+    await retGuardarLista([r, ...retLista()]);
+    _retImp = null; renderRetiros();
+    toast(`Retiro #${d.nro} guardado ✅ · ${r.lineas.length} producto(s). Cuando llegue, tocá «Controlar».`,"ok",6000);
+  }catch(e){ toast("No se pudo guardar: "+e.message,"err"); }
 }
 
 </script>
