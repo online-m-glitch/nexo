@@ -1045,6 +1045,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
           <button data-tab="planif" onclick="fullTab('planif')">📊 Planificación</button>
           <button data-tab="etiquetas" onclick="fullTab('etiquetas')">🏷️ Etiquetas</button>
           <button data-tab="envios" onclick="fullTab('envios')">🚚 Envíos</button>
+          <button data-tab="retiros" onclick="fullTab('retiros')">📥 Retiros</button>
           <button data-tab="stock" onclick="fullTab('stock')">📦 Stock en Full</button>
         </div>
         <div class="fml-pane card" id="fmlPane-planif">
@@ -1071,6 +1072,9 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
               <tbody id="fmlEnviosBody"></tbody>
             </table>
           </div>
+        </div>
+        <div class="fml-pane card" id="fmlPane-retiros">
+          <div class="fml-slot" id="fmlSlot-retiros"></div>
         </div>
         <div class="fml-pane card" id="fmlPane-stock">
           <h3 style="margin:0 0 6px;font-size:16px;">📦 Stock en Full</h3>
@@ -1242,6 +1246,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
                 <option value="Ajuste+">Ajuste +</option>
                 <option value="Ajuste-">Ajuste -</option>
                 <option value="Envío a Full">Envío a Full ML</option>
+                <option value="Retiro de Full">Retiro de Full ML</option>
               </select>
               <input class="search-input" type="text" placeholder="Buscar SKU…" oninput="renderMovimientos(this.value)" id="mBuscar">
             </div>
@@ -6700,6 +6705,7 @@ function fullTab(tab){
   if(tab==="planif" && !_fmlIniciado.pdfpedido){ _fmlIniciado.pdfpedido = true; _abrirImportadorPedidoFullMLOrig(); }
   if(tab==="envios") renderFullEnvios();
   if(tab==="stock") renderFullStock();
+  if(tab==="retiros") renderRetiros();
   ["modalPlanifFull","modalEtiquetas","modalFullML","modalImportPedidoFullML"].forEach(id=>document.getElementById(id)?.classList.remove("show"));
 }
 function irAFull(tab){
@@ -11362,7 +11368,7 @@ function calcularStockDeposito(sku, _visitados){
   for(const m of movimientos){
     if(m.sku.toUpperCase().trim() !== skuUp) continue;
     const c = Number(m.cantidad)||0;
-    if(m.tipo==="Ingreso"||m.tipo==="Ajuste+") s += c;
+    if(m.tipo==="Ingreso"||m.tipo==="Ajuste+"||m.tipo==="Retiro de Full") s += c;
     if(m.tipo==="Baja"||m.tipo==="Ajuste-"||m.tipo==="Envío a Full") s -= c;
     if(m.tipo==="Venta"&&m.origen!=="ML") s -= c; // Venta Tienda resta del depósito propio
   }
@@ -11385,6 +11391,7 @@ function calcularStockFullML(sku, _visitados){
     if(m.sku.toUpperCase().trim() !== skuUp) continue;
     const c = Number(m.cantidad)||0;
     if(m.tipo==="Envío a Full") s += c;
+    if(m.tipo==="Retiro de Full") s -= c;
     if(m.tipo==="Venta"&&m.origen==="ML") s -= c;
   }
   return s;
@@ -12416,10 +12423,10 @@ function renderMovimientos(buscar){
   const empty=document.getElementById("movEmpty");
   if(!lista.length){ cuerpo.innerHTML=""; empty.style.display="block"; return; }
   empty.style.display="none";
-  const colores={Ingreso:"badge-blue",Venta:"badge-green",Baja:"badge-red","Ajuste+":"badge-green","Ajuste-":"badge-orange"};
+  const colores={Ingreso:"badge-blue",Venta:"badge-green",Baja:"badge-red","Ajuste+":"badge-green","Ajuste-":"badge-orange","Retiro de Full":"badge-blue"};
   cuerpo.innerHTML=lista.map((m,i)=>{
     const idx=movimientos.indexOf(m);
-    const impacto=(m.tipo==="Ingreso"||m.tipo==="Ajuste+")?"+":"−";
+    const impacto=(m.tipo==="Ingreso"||m.tipo==="Ajuste+"||m.tipo==="Retiro de Full")?"+":"−";
     return `<tr>
       <td>${fFecha(m.fecha)}</td>
       <td><span class="badge ${colores[m.tipo]||'badge-gray'}">${m.tipo}</span></td>
@@ -18299,7 +18306,7 @@ document.querySelectorAll(".nav-item").forEach(el=>{
 // ❓ Ayuda: manual de uso por pantalla, preguntas frecuentes y contacto (WhatsApp + "Pedir ayuda" → Telegram)
 // El botón flotante ❓ abre el manual en la pantalla donde está el usuario.
 // ================================================================
-const NEXO_VERSION = "v83";
+const NEXO_VERSION = "v84";
 const NEXO_SOPORTE_WA = "5491160123520";
 const NEXO_SOPORTE_MAIL = "gestion.nexo.soft@gmail.com"; // Número de WhatsApp de soporte, solo dígitos con código de país (ej. 5491112345678). Vacío = no se muestra.
 const AYUDA_MANUAL = [
@@ -18327,7 +18334,8 @@ const AYUDA_MANUAL = [
     <p>Todo lo de Full en un lugar: qué conviene mandar según lo que vendés, pedidos a proveedores para Full, etiquetas, envíos y stock real en Full.</p>
     <ul><li>Al registrar un <b>envío a Full</b>, las unidades salen del depósito y pasan a Full.</li>
     <li><b>Subir reportes de ML (CSV)</b>: cargá los reportes de envíos que bajás de MercadoLibre. Quedan como historial: no cambian el stock ni se duplican.</li>
-    <li>Si la fecha de un envío quedó mal, avisá por "Pedir ayuda" y se corrige.</li></ul>`},
+    <li>Si la fecha de un envío quedó mal, avisá por "Pedir ayuda" y se corrige.</li>
+    <li><b>📥 Retiros</b>: cuando sacás mercadería de Full, registrá el retiro (queda pendiente). Cuando llega, tocá <b>Controlar</b> y cargá cuántas llegaron bien y cuántas dañadas: las que llegaron bien suman al stock del depósito; las dañadas quedan anotadas y no suman.</li></ul>`},
   { sec:"atencion", ico:"🛎️", t:"Atención ML", x:`
     <p>Preguntas, mensajes de ventas y reclamos de MercadoLibre en un solo lugar. El número rojo del menú indica cuántos esperan respuesta.</p>
     <ul><li>Las respuestas arrancan con el saludo y la firma de tu cuenta ("Te responde…", "Tienda Oficial…"). Se configuran en el editor de plantillas.</li>
@@ -18468,6 +18476,155 @@ async function ayudaEnviar(){
     b.style.display = (!a || a.id==="sec-ayuda" || (main && main.offsetParent===null)) ? "none" : ""; };
   setInterval(upd, 800); upd();
 })();
+
+
+// ================================================================
+// 📥 Retiros de Full: mercadería que se saca de Full y vuelve al depósito.
+// 1) Se registra el retiro (queda "Pendiente de control": no toca el stock).
+// 2) Cuando llega, se controla producto por producto: las que llegan bien suman al depósito
+//    (movimiento "Retiro de Full"); las dañadas no suman y quedan anotadas; las que faltan se marcan.
+// El stock en Full se actualiza solo con la sincronización de ML (no se toca acá).
+// Los retiros se guardan en app_config ("full_retiros") de cada cuenta.
+// ================================================================
+let _retLineas = [], _retControl = null;
+function retLista(){ const v = appConfig.full_retiros; return Array.isArray(v) ? v : []; }
+async function retGuardarLista(lista){ appConfig.full_retiros = lista; await sbGuardar("config", {key:"full_retiros", value:lista}); }
+function retProd(sku){ return (productos||[]).find(p=>String(p.sku).toUpperCase()===String(sku||"").toUpperCase().trim()); }
+function renderRetiros(){
+  const box = document.getElementById("fmlSlot-retiros"); if(!box) return;
+  if(!document.getElementById("retFecha")){
+    box.innerHTML = `
+      <h3 style="margin:0 0 6px;font-size:16px;color:var(--brand-primario,#6d28d9);">📥 Retiro de Full</h3>
+      <div style="font-size:13px;color:var(--text-soft);margin-bottom:14px;">Cuando sacás mercadería de Full: registrá el retiro y, cuando llega, controlala. Lo que llega bien suma al stock del depósito; lo dañado queda anotado y no suma.</div>
+      <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+        <div class="form-group"><label>Fecha del retiro</label><input type="date" id="retFecha"></div>
+        <div class="form-group"><label>Nro. de retiro (opcional)</label><input id="retNro" placeholder="Ej: 81234567"></div>
+        <div class="form-group" style="grid-column:span 2;"><label>Observación (opcional)</label><input id="retObs" placeholder="Ej: retiro por vencimiento de stock / cambio de packaging"></div>
+      </div>
+      <div class="table-wrap" style="margin-top:10px;"><table>
+        <thead><tr><th style="width:180px;">SKU</th><th>Producto</th><th style="width:110px;">En Full</th><th style="width:120px;">Unidades a retirar</th><th style="width:40px;"></th></tr></thead>
+        <tbody id="retLineasBody"></tbody></table></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+        <button class="btn btn-ghost btn-sm" onclick="retAgregarLinea()">➕ Agregar producto</button>
+        <button class="btn btn-primary admin-only" onclick="retGuardarNuevo()">💾 Guardar retiro (pendiente de control)</button>
+      </div>
+      <h3 style="margin:26px 0 10px;font-size:15px;">Retiros registrados</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Retiro</th><th>Productos</th><th>Unidades</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="retListaBody"></tbody></table></div>
+      <div id="retControlBox" style="margin-top:16px;"></div>`;
+    document.getElementById("retFecha").value = new Date(Date.now()-3*3600000).toISOString().slice(0,10);
+    if(!_retLineas.length) _retLineas = [{sku:"", cant:1}];
+  }
+  retRenderLineas(); retRenderLista(); retRenderControl();
+  if(typeof esAdmin==="function" && !esAdmin()) box.querySelectorAll(".admin-only").forEach(e=>e.style.display="none");
+}
+function retRenderLineas(){
+  const tb = document.getElementById("retLineasBody"); if(!tb) return;
+  tb.innerHTML = _retLineas.map((l,i)=>{ const p = retProd(l.sku); const full = p ? calcularStockFullML(p.sku) : null;
+    return `<tr>
+      <td><input list="skuList" value="${esc(l.sku)}" placeholder="SKU" onchange="_retLineas[${i}].sku=this.value.toUpperCase().trim();retRenderLineas()" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;"></td>
+      <td style="font-size:12px;">${p?esc(p.nombre):(l.sku?'<span style="color:var(--red);">SKU no encontrado en el Catálogo</span>':'')}</td>
+      <td class="num">${full==null?"—":full}</td>
+      <td><input type="number" min="1" value="${l.cant}" onchange="_retLineas[${i}].cant=Math.max(0,parseInt(this.value)||0)" style="width:90px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;"></td>
+      <td>${_retLineas.length>1?`<button class="btn btn-ghost btn-sm" title="Quitar" onclick="_retLineas.splice(${i},1);retRenderLineas()">✕</button>`:""}</td></tr>`; }).join("");
+}
+function retAgregarLinea(){ _retLineas.push({sku:"", cant:1}); retRenderLineas(); }
+async function retGuardarNuevo(){
+  if(checkViewer("Registrar retiros de Full")) return;
+  const fecha = document.getElementById("retFecha").value, nro = document.getElementById("retNro").value.trim(), obs = document.getElementById("retObs").value.trim();
+  if(!fecha){ toast("Poné la fecha del retiro.","err"); return; }
+  const lineas = _retLineas.filter(l=>l.sku && l.cant>0);
+  if(!lineas.length){ toast("Agregá al menos un producto con unidades.","err"); return; }
+  const malos = lineas.filter(l=>!retProd(l.sku)).map(l=>l.sku);
+  if(malos.length){ toast("Estos SKU no están en el Catálogo: "+malos.join(", "),"err",6000); return; }
+  const r = {id: Date.now(), fecha, nro, obs, estado:"pendiente", creado:new Date().toISOString(),
+    lineas: lineas.map(l=>{ const p = retProd(l.sku); return {sku:p.sku, producto:p.nombre, cant:l.cant}; })};
+  try{
+    await retGuardarLista([r, ...retLista()]);
+    _retLineas = [{sku:"", cant:1}]; document.getElementById("retNro").value = ""; document.getElementById("retObs").value = "";
+    toast("Retiro guardado ✅ · Cuando llegue la mercadería, tocá «Controlar».","ok",5000);
+    renderRetiros();
+  }catch(e){ toast("No se pudo guardar: "+e.message,"err"); }
+}
+function retRenderLista(){
+  const tb = document.getElementById("retListaBody"); if(!tb) return;
+  const lista = retLista();
+  tb.innerHTML = lista.map(r=>{
+    const unid = r.lineas.reduce((a,l)=>a+(Number(l.cant)||0),0);
+    const ok = r.lineas.reduce((a,l)=>a+(Number(l.ok)||0),0), dan = r.lineas.reduce((a,l)=>a+(Number(l.danado)||0),0);
+    const est = r.estado==="controlado"
+      ? `<span class="badge badge-green">✅ Controlado</span><div style="font-size:11px;color:var(--text-soft);">${ok} al stock${dan?` · ${dan} dañada(s)`:""}${unid-ok-dan>0?` · <span style="color:var(--red);">faltan ${unid-ok-dan}</span>`:""}</div>`
+      : `<span class="badge badge-orange">⏳ Pendiente de control</span>`;
+    return `<tr><td>${fFecha(r.fecha)}</td><td>${r.nro?"#"+esc(r.nro):"—"}${r.obs?`<div style="font-size:11px;color:var(--text-soft);">${esc(r.obs)}</div>`:""}</td>
+      <td style="font-size:12px;">${r.lineas.map(l=>`${esc(l.sku)} ×${l.cant}`).join(" · ")}</td><td class="num">${unid}</td><td>${est}</td>
+      <td style="white-space:nowrap;">${r.estado!=="controlado"?`<button class="btn btn-primary btn-sm admin-only" onclick="retAbrirControl(${r.id})">✅ Controlar</button> <button class="btn btn-ghost btn-sm admin-only" title="Eliminar retiro" onclick="retEliminar(${r.id})">🗑️</button>`:`<button class="btn btn-ghost btn-sm" onclick="retAbrirControl(${r.id})">👁 Ver</button>`}</td></tr>`;
+  }).join("") || `<tr><td colspan="6" style="padding:14px;color:var(--text-soft);">Todavía no registraste retiros de Full.</td></tr>`;
+}
+function retAbrirControl(id){
+  const r = retLista().find(x=>x.id===id); if(!r) return;
+  _retControl = JSON.parse(JSON.stringify(r));
+  if(_retControl.estado!=="controlado") _retControl.lineas.forEach(l=>{ if(l.ok==null) l.ok = l.cant; if(l.danado==null) l.danado = 0; });
+  retRenderControl();
+  setTimeout(()=>document.getElementById("retControlBox")?.scrollIntoView({behavior:"smooth", block:"start"}), 50);
+}
+function retRenderControl(){
+  const box = document.getElementById("retControlBox"); if(!box) return;
+  const r = _retControl; if(!r){ box.innerHTML = ""; return; }
+  const ver = r.estado==="controlado";
+  box.innerHTML = `<div class="card" style="margin:0;border:2px solid var(--brand-primario,#6d28d9);">
+    <div class="card-header"><h3>${ver?"👁 Retiro controlado":"✅ Control de la mercadería recibida"} · ${fFecha(r.fecha)}${r.nro?" · #"+esc(r.nro):""}</h3>
+      <button class="btn btn-ghost btn-sm" onclick="_retControl=null;retRenderControl()">Cerrar</button></div>
+    <div style="padding:14px 18px;">
+      ${ver?"":`<div style="font-size:12px;color:var(--text-soft);margin-bottom:10px;">Contá lo que llegó. <b>Bien</b> = se puede vender (suma al depósito). <b>Dañadas</b> = llegaron rotas o con falla (no suman). Lo que no llegó queda como faltante.</div>`}
+      <div class="table-wrap"><table><thead><tr><th>SKU</th><th>Producto</th><th>Retiradas</th><th>Llegaron bien</th><th>Dañadas</th><th>Faltan</th></tr></thead><tbody>
+      ${r.lineas.map((l,i)=>{ const falta = (Number(l.cant)||0)-(Number(l.ok)||0)-(Number(l.danado)||0);
+        return `<tr><td><span class="sku-tag">${esc(l.sku)}</span></td><td style="font-size:12px;">${esc(l.producto||"")}</td><td class="num">${l.cant}</td>
+        <td>${ver?`<b>${l.ok||0}</b>`:`<input type="number" min="0" value="${l.ok}" onchange="_retControl.lineas[${i}].ok=Math.max(0,parseInt(this.value)||0);retRenderControl()" style="width:80px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;">`}</td>
+        <td>${ver?(l.danado||0):`<input type="number" min="0" value="${l.danado}" onchange="_retControl.lineas[${i}].danado=Math.max(0,parseInt(this.value)||0);retRenderControl()" style="width:80px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;">`}</td>
+        <td class="num" style="${falta>0?'color:var(--red);font-weight:700;':falta<0?'color:var(--orange);font-weight:700;':''}">${falta<0?`+${-falta} de más`:falta}</td></tr>`; }).join("")}
+      </tbody></table></div>
+      ${ver?`<div style="font-size:12px;color:var(--text-soft);margin-top:8px;">Controlado el ${r.controlado_at?new Date(r.controlado_at).toLocaleString("es-AR"):"—"}.</div>`
+        :`<div style="margin-top:12px;"><button class="btn btn-primary admin-only" onclick="retConfirmarControl()">📥 Confirmar e ingresar al stock</button></div>`}
+    </div></div>`;
+  if(typeof esAdmin==="function" && !esAdmin()) box.querySelectorAll(".admin-only").forEach(e=>e.style.display="none");
+}
+async function retConfirmarControl(){
+  if(checkViewer("Controlar retiros de Full")) return;
+  const r = _retControl; if(!r || r.estado==="controlado") return;
+  const totOk = r.lineas.reduce((a,l)=>a+(Number(l.ok)||0),0), totDan = r.lineas.reduce((a,l)=>a+(Number(l.danado)||0),0);
+  const totCant = r.lineas.reduce((a,l)=>a+(Number(l.cant)||0),0);
+  confirmCb = async()=>{
+    mostrarCargando(true);
+    let ok = 0, err = 0;
+    try{
+      for(const l of r.lineas){
+        const q = Number(l.ok)||0; if(q<=0) continue;
+        const p = retProd(l.sku);
+        const mov = {fecha:new Date(Date.now()-3*3600000).toISOString().slice(0,10), tipo:"Retiro de Full", sku:l.sku, producto:p?p.nombre:(l.producto||l.sku), cantidad:q,
+          costo:p?p.costo:0, precio:p?p.precio:0, obs:"Retiro de Full"+(r.nro?" #"+r.nro:"")+" · controlado"+(Number(l.danado)?` (${l.danado} dañada/s, no suman)`:""), origen:""};
+        try{ const saved = await sbGuardar("movimiento", mov); movimientos.unshift(Object.assign({}, mov, saved||{})); ok++; }catch(e){ err++; }
+      }
+      if(err){ toast(`Se ingresaron ${ok} producto(s), pero ${err} fallaron. Revisá Movimientos antes de volver a confirmar.`,"err",8000); return; }
+      const lista = retLista().map(x=>x.id===r.id ? Object.assign({}, r, {estado:"controlado", controlado_at:new Date().toISOString()}) : x);
+      await retGuardarLista(lista);
+      _retControl = null;
+      toast(`✅ Retiro controlado: ${totOk} unidad(es) ingresaron al depósito${totDan?` · ${totDan} dañada(s) anotadas`:""}.`,"ok",6000);
+      try{ renderStock(); renderAlertas(); renderPanel(); }catch(e){}
+      renderRetiros();
+    }catch(e){ toast("Error: "+e.message,"err"); }
+    finally{ mostrarCargando(false); }
+  };
+  document.getElementById("confirmMsg").innerHTML = `¿Confirmar el control del retiro${r.nro?" <b>#"+esc(r.nro)+"</b>":""}?<br><br>• <b>${totOk}</b> unidad(es) suman al stock del depósito.${totDan?`<br>• <b>${totDan}</b> dañada(s) quedan anotadas (no suman).`:""}${totCant-totOk-totDan>0?`<br>• <b style="color:var(--red);">${totCant-totOk-totDan}</b> faltante(s).`:""}`;
+  document.getElementById("modalConfirm").classList.add("show");
+}
+function retEliminar(id){
+  if(checkViewer("Eliminar retiros de Full")) return;
+  const r = retLista().find(x=>x.id===id); if(!r || r.estado==="controlado") return;
+  confirmCb = async()=>{ try{ await retGuardarLista(retLista().filter(x=>x.id!==id)); if(_retControl && _retControl.id===id) _retControl=null; toast("Retiro eliminado.","ok"); renderRetiros(); }catch(e){ toast("Error: "+e.message,"err"); } };
+  document.getElementById("confirmMsg").textContent = `¿Eliminar el retiro${r.nro?" #"+r.nro:""} del ${fFecha(r.fecha)}? Todavía no se controló, así que no cambia el stock.`;
+  document.getElementById("modalConfirm").classList.add("show");
+}
 
 </script>
 </body>
