@@ -15860,10 +15860,12 @@ async function importarStockML(file){
 // IMPORTAR / EXPORTAR CSV
 // ================================================================
 function exportarCSV(){
-  const cols = ["sku","nombre","proveedor","categoria","rubro","costo","precio","precioTienda","stockMin","stockOn","img"];
-  const headers = ["SKU","Nombre","Proveedor","Categoría","Rubro","Costo ($)","Precio ML ($)","Precio Tienda ($)","Stock Mín","Tienda (1=visible)","Imagen (URL)"];
+  const cols = ["sku","nombre","proveedor","categoria","rubro","costo","moneda","precio","precioTienda","stockMin","stockOn","img"];
+  const headers = ["SKU","Nombre","Proveedor","Categoría","Rubro","Costo","Moneda","Precio ML ($)","Precio Tienda ($)","Stock Mín","Tienda (1=visible)","Imagen (URL)"];
   const numColsExp = new Set(["costo","precio","precioTienda"]);
   const rows = productos.map(p=>cols.map(c=>{
+    if(c==="moneda") return p.costo_moneda==="USD" ? "US$" : "$";
+    if(c==="costo") return String(Math.round(costoOrig(p)*100)/100).replace(".",",");
     const v = p[c]??"";
     if(numColsExp.has(c)){ const n=parseFloat(v)||0; return String(n).replace(".",","); }
     if(typeof v==="string" && (v.includes(";") || v.includes('"') || v.includes("\n"))) return `"${v.replace(/"/g,'""')}"`;
@@ -15936,7 +15938,7 @@ function limpiarNumCSV(val){
 
 async function importarCSV(input){
   const file = input.files[0]; if(!file) return;
-  const reader = new FileReader();
+  const reader = {readAsText(){ _retLeerArchivo(file).then(t=>this.onload({target:{result:t}})).catch(err=>toast("No se pudo leer el archivo: "+err.message,"err")); }};
   reader.onload = async e=>{
     const text = e.target.result.replace(/^\uFEFF/,"");
     const lines = text.split(/\r?\n/).filter(l=>l.trim());
@@ -15982,6 +15984,15 @@ async function importarCSV(input){
         img: imgCSV || (existing?existing.img||"":"")
       };
 
+      // Moneda del costo: columna "Moneda" ($ / US$). Sin columna, se respeta la del producto si el costo no cambió.
+      const iMon = header.findIndex(h=>h.includes("moneda"));
+      if(iMon>=0){
+        const mTxt = (row[iMon]??"").toString().trim().toUpperCase().replace(/[\s.]/g,"");
+        obj.costo_moneda = /^(US\$|U\$S|U\$|USD|DOLAR|DOLARES|DÓLAR|DÓLARES|US)$/.test(mTxt) ? "USD" : null;
+      } else if(existing){
+        obj.__costoDB = costoOrig(existing); obj.costo_moneda = existing.costo_moneda || null;
+      } else obj.costo_moneda = null;
+      if(existing){ obj.__precioDB = precioOrig(existing); obj.precio_moneda = existing.precio_moneda || null; }
       if(existing){ Object.assign(existing,obj); actualizados++; }
       else { productos.push(obj); nuevos++; }
       objetos.push(obj);
@@ -18306,7 +18317,7 @@ document.querySelectorAll(".nav-item").forEach(el=>{
 // ❓ Ayuda: manual de uso por pantalla, preguntas frecuentes y contacto (WhatsApp + "Pedir ayuda" → Telegram)
 // El botón flotante ❓ abre el manual en la pantalla donde está el usuario.
 // ================================================================
-const NEXO_VERSION = "v85";
+const NEXO_VERSION = "v86";
 const NEXO_SOPORTE_WA = "5491160123520";
 const NEXO_SOPORTE_MAIL = "gestion.nexo.soft@gmail.com"; // Número de WhatsApp de soporte, solo dígitos con código de país (ej. 5491112345678). Vacío = no se muestra.
 const AYUDA_MANUAL = [
