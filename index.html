@@ -15721,7 +15721,7 @@ function exportarStockCSV(){
   const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
-  a.download="origo_stock_"+new Date().toISOString().slice(0,10)+".csv";
+  a.download=nexoArchivoCliente("stock")+"_"+new Date().toISOString().slice(0,10)+".csv";
   a.click();
   toast("Stock exportado ✅","ok");
 }
@@ -15859,6 +15859,11 @@ async function importarStockML(file){
 // ================================================================
 // IMPORTAR / EXPORTAR CSV
 // ================================================================
+// Nombre de archivo con el nombre de la cuenta: "DIPSAA_catalogo"
+function nexoArchivoCliente(que){
+  const n = String((typeof clienteNombre!=="undefined" && clienteNombre) || "NEXO").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Za-z0-9]+/g,"_").replace(/^_+|_+$/g,"") || "NEXO";
+  return n + "_" + que;
+}
 function exportarCSV(){
   const cols = ["sku","nombre","proveedor","categoria","rubro","costo","moneda","precio","precioTienda","stockMin","stockOn","img"];
   const headers = ["SKU","Nombre","Proveedor","Categoría","Rubro","Costo","Moneda","Precio ML ($)","Precio Tienda ($)","Stock Mín","Tienda (1=visible)","Imagen (URL)"];
@@ -15875,7 +15880,7 @@ function exportarCSV(){
   const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8;"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `origo_catalogo_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `${nexoArchivoCliente("catalogo")}_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
   toast("CSV exportado ✅","ok");
 }
@@ -18317,7 +18322,7 @@ document.querySelectorAll(".nav-item").forEach(el=>{
 // ❓ Ayuda: manual de uso por pantalla, preguntas frecuentes y contacto (WhatsApp + "Pedir ayuda" → Telegram)
 // El botón flotante ❓ abre el manual en la pantalla donde está el usuario.
 // ================================================================
-const NEXO_VERSION = "v86";
+const NEXO_VERSION = "v87";
 const NEXO_SOPORTE_WA = "5491160123520";
 const NEXO_SOPORTE_MAIL = "gestion.nexo.soft@gmail.com"; // Número de WhatsApp de soporte, solo dígitos con código de país (ej. 5491112345678). Vacío = no se muestra.
 const AYUDA_MANUAL = [
