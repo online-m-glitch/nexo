@@ -908,6 +908,11 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
               <select id="prodProveedorFiltro" onchange="renderProductos()" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;">
                 <option value="">Todos los proveedores</option>
               </select>
+              <select id="prodTipoFiltro" onchange="renderProductos()" title="Filtrar por tipo de producto" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;">
+                <option value="">Simples y combos</option>
+                <option value="simple">Solo simples</option>
+                <option value="combo">Solo combos</option>
+              </select>
               <button class="btn btn-primary admin-only" onclick="abrirModalProducto()">+ Agregar producto</button>
               <button class="btn btn-ghost admin-only" onclick="abrirImportarML()" title="Trae las publicaciones de tu cuenta de MercadoLibre: un producto por SKU en el catálogo y todas las publicaciones vinculadas">⬇️ Traer de MercadoLibre</button>
               <!-- 📤 Publicador masivo: oculto a pedido (pendiente de rediseño). El código sigue en el panel (abrirPublicadorMasivo). -->
@@ -11532,8 +11537,11 @@ function renderProductos(){
       selProv.value=actual;
     }
   }
+  const tipoFiltro=document.getElementById("prodTipoFiltro")?.value||"";
   const lista = productos.filter(p=>{
     if(provFiltro && p.proveedor!==provFiltro) return false;
+    if(tipoFiltro==="combo" && p.tipo!=="combo") return false;
+    if(tipoFiltro==="simple" && p.tipo==="combo") return false;
     if(!filtroProd) return true;
     const q=filtroProd.toLowerCase();
     return p.sku.toLowerCase().includes(q)||p.nombre.toLowerCase().includes(q)||(p.proveedor||"").toLowerCase().includes(q);
@@ -18355,7 +18363,7 @@ document.querySelectorAll(".nav-item").forEach(el=>{
 // ❓ Ayuda: manual de uso por pantalla, preguntas frecuentes y contacto (WhatsApp + "Pedir ayuda" → Telegram)
 // El botón flotante ❓ abre el manual en la pantalla donde está el usuario.
 // ================================================================
-const NEXO_VERSION = "v89";
+const NEXO_VERSION = "v90";
 const NEXO_SOPORTE_WA = "5491160123520";
 const NEXO_SOPORTE_MAIL = "gestion.nexo.soft@gmail.com"; // Número de WhatsApp de soporte, solo dígitos con código de país (ej. 5491112345678). Vacío = no se muestra.
 const AYUDA_MANUAL = [
