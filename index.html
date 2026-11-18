@@ -7288,6 +7288,22 @@ function atnItemHtml(itemId, extra){
     <div class="atn-sub">${esc(itemId)}${sku?` · <strong>SKU ${esc(sku)}</strong>`:""}${it.price?` · $${fmt(it.price)}`:""}${it.available_quantity!=null?` · Stock ML: <strong style="color:${it.available_quantity>0?"var(--green)":"var(--red)"};">${it.available_quantity}</strong>`:""}${it.status&&it.status!=="active"?` · <span style="color:var(--orange);">${esc(it.status)}</span>`:""}${extra||""}</div></div></div>`;
 }
 
+// Publicación no activa: MercadoLibre no deja responder sus preguntas
+function atnAvisoPausada(itemId){
+  const it = atn.items[itemId]; if(!it || !it.status || it.status === "active") return "";
+  const est = it.status === "paused" ? "pausada" : (it.status === "closed" ? "finalizada" : it.status);
+  const motivo = it.status === "paused" && Number(it.available_quantity) === 0 ? " (sin stock)" : "";
+  return `<div style="margin:8px 0;padding:10px 12px;border-radius:10px;background:#fff7ed;border:1.5px solid #fdba74;color:#9a3412;font-size:13px;line-height:1.4;">
+    ⏸️ <b>Publicación ${esc(est)}${motivo}:</b> MercadoLibre no deja responder hasta que la publicación esté activa.
+    ${it.status === "paused" ? `Cargale stock o activala y después respondé.` : `Como está finalizada, esta pregunta no se puede responder.`}
+    <div style="margin-top:6px;"><a href="https://www.mercadolibre.com.ar/publicaciones/listado" target="_blank" rel="noopener">Ir a mis publicaciones en MercadoLibre ›</a></div></div>`;
+}
+function atnErrorRespuesta(r){
+  const m = String(_mlError(r) || "");
+  if(/must be active|not active|inactive/i.test(m)) return "No se pudo responder: la publicación está pausada o finalizada. MercadoLibre solo deja responder preguntas de publicaciones activas: activala (cargale stock) y volvé a responder.";
+  return "ML no aceptó la respuesta: " + m;
+}
+
 // ── Preguntas ──
 const ATN_RAPIDAS_DEF = [
   {t:"Hay stock", x:"¡Hola! Sí, tenemos stock disponible. Podés comprar con tranquilidad, despachamos rápido. ¡Saludos!"},
@@ -7328,6 +7344,7 @@ function renderAtnPreguntas(){
     const min = (Date.now()-Date.parse(q.date_created))/60000;
     return `<div class="atn-card" id="atnQ${q.id}">
       ${atnItemHtml(q.item_id)}
+      ${atnAvisoPausada(q.item_id)}
       <div class="atn-preg"><span class="atn-hace" style="color:${min>60?"var(--red)":"var(--text-soft)"};" title="${esc(atnFechaHora(q.date_created))}">⏱️ hace ${atnMinTxt(min)}</span>
         ${(q.ai_categories||[]).map(c=>`<span class="badge badge-gray" style="margin-left:6px;">${esc(c)}</span>`).join("")}
         <div class="atn-burbuja">${esc(q.text)}</div></div>
@@ -7356,7 +7373,7 @@ async function atnResponder(qid){
   if(txt.length > 2000){ toast("Máximo 2000 caracteres.","err"); return; }
   btn.disabled = true; btn.textContent = "⏳ Enviando…";
   const r = await atnPost("/answers", {question_id:qid, text:txt});
-  if(!r.ok){ btn.disabled = false; btn.textContent = "📤 Responder"; toast("ML no aceptó la respuesta: "+_mlError(r),"err",7000); return; }
+  if(!r.ok){ btn.disabled = false; btn.textContent = "📤 Responder"; toast(atnErrorRespuesta(r),"err",9000); return; }
   atn.preg = atn.preg.filter(q=>q.id!==qid); atn.pregTotal = Math.max(0, atn.pregTotal-1);
   atn.cnt.preg = atn.pregTotal; atnPintarContadores();
   renderAtnPreguntas();
@@ -9962,7 +9979,7 @@ atnResponder = async function(qid){
   if(txt.length > 2000){ toast("Máximo 2000 caracteres (con saludo y firma).","err"); return; }
   btn.disabled = true; btn.textContent = "⏳ Enviando…";
   const r = await atnPost("/answers", {question_id:qid, text:txt});
-  if(!r.ok){ btn.disabled = false; btn.textContent = "📤 Responder"; toast("ML no aceptó la respuesta: "+_mlError(r),"err",7000); return; }
+  if(!r.ok){ btn.disabled = false; btn.textContent = "📤 Responder"; toast(atnErrorRespuesta(r),"err",9000); return; }
   atn.preg = atn.preg.filter(q=>q.id!==qid); atn.pregTotal = Math.max(0, atn.pregTotal-1);
   atn.cnt.preg = atn.pregTotal; atnPintarContadores();
   renderAtnPreguntas();
@@ -18322,7 +18339,7 @@ document.querySelectorAll(".nav-item").forEach(el=>{
 // ❓ Ayuda: manual de uso por pantalla, preguntas frecuentes y contacto (WhatsApp + "Pedir ayuda" → Telegram)
 // El botón flotante ❓ abre el manual en la pantalla donde está el usuario.
 // ================================================================
-const NEXO_VERSION = "v87";
+const NEXO_VERSION = "v88";
 const NEXO_SOPORTE_WA = "5491160123520";
 const NEXO_SOPORTE_MAIL = "gestion.nexo.soft@gmail.com"; // Número de WhatsApp de soporte, solo dígitos con código de país (ej. 5491112345678). Vacío = no se muestra.
 const AYUDA_MANUAL = [
