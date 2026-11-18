@@ -4155,7 +4155,27 @@ let mercTendencias = [];
 let mercProv = {headers:[], rows:[], resultado:[]};
 const _mercFeeCache = {}, _mercFeePend = {};
 
+// ML a veces rechaza la consulta de varias publicaciones juntas (/items?ids=...) con 403 "ResourceDeprecated".
+// Reintenta una vez y, si sigue, consulta cada publicación por separado y arma la misma respuesta.
 async function mlGet(path){
+  let res = await _mlGet1(path);
+  if(!res.ok && res.status===403 && /deprecated/i.test(String(res.data&&(res.data.error||res.data.message)||"")) && /^\/items\?ids=/.test(path)){
+    await new Promise(ok=>setTimeout(ok,900));
+    res = await _mlGet1(path);
+    if(!res.ok && res.status===403){
+      const q = path.slice(path.indexOf("?")+1).split("&");
+      const ids = decodeURIComponent((q.find(x=>x.startsWith("ids="))||"ids=").slice(4)).split(",").map(x=>x.trim()).filter(Boolean);
+      const resto = q.filter(x=>!x.startsWith("ids=")).join("&");
+      const partes = await _pool(ids, 4, async id=>{
+        const r1 = await _mlGet1("/items/"+encodeURIComponent(id)+(resto?"?"+resto:""));
+        return r1.ok ? {code:200, body:r1.data} : {code:r1.status||500, body:r1.data};
+      });
+      if(partes.some(x=>x && x.code===200)) return {ok:true, status:200, data:partes};
+    }
+  }
+  return res;
+}
+async function _mlGet1(path){
   let r;
   try{
     r = await fetch(SB_URL+"/functions/v1/ml-api", {
@@ -12959,13 +12979,9 @@ async function revisarPreciosDinamicos(){
     const lote=conVinculo.slice(i,i+LOTE);
     const ids=lote.map(p=>p.ml_item_id.toUpperCase()).join(",");
     try{
-      const r=await fetch(SB_URL+"/functions/v1/ml-api", {
-        method:"POST",
-        headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+sbAuth()},
-        body:JSON.stringify({grant_type:"proxy", path:"/items?ids="+encodeURIComponent(ids)+"&attributes=id,tags,catalog_listing,catalog_product_id,status", access_token:mlToken})
-      });
-      const data=await r.json();
-      if(!r.ok || data.error || !Array.isArray(data)){ fallidos+=lote.length; continue; }
+      const rr=await mlGet("/items?ids="+encodeURIComponent(ids)+"&attributes=id,tags,catalog_listing,catalog_product_id,status");
+      const data=rr.data;
+      if(!rr.ok || !Array.isArray(data)){ fallidos+=lote.length; continue; }
       for(const res of data){
         const body=res.body||{};
         if(res.code!==200 || !body.id) { fallidos++; continue; }
@@ -18339,7 +18355,7 @@ document.querySelectorAll(".nav-item").forEach(el=>{
 // ❓ Ayuda: manual de uso por pantalla, preguntas frecuentes y contacto (WhatsApp + "Pedir ayuda" → Telegram)
 // El botón flotante ❓ abre el manual en la pantalla donde está el usuario.
 // ================================================================
-const NEXO_VERSION = "v88";
+const NEXO_VERSION = "v89";
 const NEXO_SOPORTE_WA = "5491160123520";
 const NEXO_SOPORTE_MAIL = "gestion.nexo.soft@gmail.com"; // Número de WhatsApp de soporte, solo dígitos con código de país (ej. 5491112345678). Vacío = no se muestra.
 const AYUDA_MANUAL = [
