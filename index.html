@@ -5334,6 +5334,55 @@ function calcAnaliPub(pub){
   }
   return {prod, moneda, precioPub, precio, costo, comisionReal, comision, comisionFixed, envio, impuesto, percepcion, recibis, margen, margenPct, rec, cls};
 }
+
+// ── Ordenar la tabla de Análisis ML haciendo clic en los encabezados (▲ menor a mayor / ▼ mayor a menor) ──
+let _anaOrden = (()=>{ try{ return JSON.parse(localStorage.getItem("nexo_ana_orden")||"null")||{}; }catch(e){ return {}; } })();
+function _anaKeys(vista){
+  if(vista==="publicacion") return [
+    pub=>pub.sku||"", pub=>pub.ml_item_id||"", pub=>pub.titulo||"",
+    (pub,a)=>a.costo, (pub,a)=>a.precio, (pub,a)=>a.comision, (pub,a)=>a.envio, (pub,a)=>a.impuesto, (pub,a)=>a.percepcion,
+    (pub,a)=>a.recibis, (pub,a)=>a.margen, (pub,a)=>a.margenPct, (pub,a)=>a.margenPct ];
+  return [
+    p=>p.sku||"", p=>p.nombre||"", p=>calcularStockFullML(p.sku)||0, p=>Number(p.costo)||0, (p,a)=>a.precio,
+    p=>{ try{ const c=compDe(p); return c&&c.resumen&&c.resumen.min!=null ? Number(c.resumen.min) : null; }catch(e){ return null; } },
+    (p,a)=>a.comision, (p,a)=>a.envio, (p,a)=>a.impuesto, (p,a)=>a.percepcion, (p,a)=>a.recibis, (p,a)=>a.margen, (p,a)=>a.margenPct, (p,a)=>a.margenPct ];
+}
+function anaOrdenar(lista, vista, calc){
+  const o=_anaOrden[vista]; if(!o || o.col==null) return lista;
+  const fn=_anaKeys(vista)[o.col]; if(!fn) return lista;
+  const val=new Map(); lista.forEach(x=>{ let v; try{ v=fn(x, calc(x)); }catch(e){ v=null; } val.set(x, v); });
+  return lista.sort((x,y)=>{
+    const a=val.get(x), b=val.get(y);
+    if(a==null || a==="") return (b==null||b==="") ? 0 : 1;   // vacíos siempre al final
+    if(b==null || b==="") return -1;
+    const r = (typeof a==="number" && typeof b==="number") ? a-b : String(a).localeCompare(String(b),"es",{numeric:true,sensitivity:"base"});
+    return r*o.dir;
+  });
+}
+function anaClickOrden(vista, col){
+  const o=_anaOrden[vista]||{};
+  if(o.col!==col) _anaOrden[vista]={col, dir:1};          // 1er clic: menor a mayor
+  else if(o.dir===1) _anaOrden[vista]={col, dir:-1};      // 2do clic: mayor a menor
+  else _anaOrden[vista]={col:null, dir:1};                // 3er clic: sin orden
+  try{ localStorage.setItem("nexo_ana_orden", JSON.stringify(_anaOrden)); }catch(e){}
+  renderAnalisis();
+}
+function anaDecorarThead(vista){
+  const tr=document.querySelector("#analisisThead tr"); if(!tr) return;
+  const n=_anaKeys(vista).length, o=_anaOrden[vista]||{};
+  [...tr.children].forEach((th,i)=>{
+    if(i>=n) return;
+    th.style.cursor="pointer"; th.style.userSelect="none"; th.style.whiteSpace="nowrap";
+    th.onclick=()=>anaClickOrden(vista,i);
+    if(!th.dataset.tt){ th.dataset.tt="1"; th.title=(th.title?th.title+" — ":"")+"Clic para ordenar (▲ menor a mayor, ▼ mayor a menor)"; }
+    let sp=th.querySelector(".ana-ord");
+    if(!sp){ sp=document.createElement("span"); sp.className="ana-ord"; sp.style.marginLeft="4px"; sp.style.fontSize="11px"; th.appendChild(sp); }
+    const act=o.col===i;
+    sp.textContent = act ? (o.dir===1?"▲":"▼") : "↕";
+    sp.style.opacity = act ? "1" : ".45";
+    sp.style.color = act ? "#22d3ee" : "";
+  });
+}
 function renderAnalisisPublicaciones(){
   const thead = document.getElementById("analisisThead");
   if(thead && thead.dataset.vista!=="publicacion"){ thead.innerHTML = ANALISIS_THEAD_PUB; thead.dataset.vista="publicacion"; }
@@ -5364,6 +5413,7 @@ function renderAnalisisPublicaciones(){
   }
   // Para marcar visualmente los SKU que tienen varias publicaciones
   const cuenta = {}; mlPubs.forEach(p=>{ if(p.sku) cuenta[p.sku] = (cuenta[p.sku]||0)+1; });
+  anaOrdenar(lista, "publicacion", pub=>calcAnaliPub(pub)); anaDecorarThead("publicacion");
   document.getElementById("analisisBody").innerHTML = lista.map(pub=>{
     const a = calcAnaliPub(pub);
     const eml = estadoMLInfo(pub.estado);
@@ -12775,6 +12825,7 @@ function renderAnalisis(){
     }
     return true;
   });
+  anaOrdenar(lista, "producto", p=>nxConPromo(p, calcAnaliML(p))); anaDecorarThead("producto");
   document.getElementById("analisisBody").innerHTML=lista.map(p=>{
     const a=nxConPromo(p, calcAnaliML(p)), _pm=a.conPromo;
     const eml=estadoMLInfo(p.estado_ml);
@@ -18363,7 +18414,7 @@ document.querySelectorAll(".nav-item").forEach(el=>{
 // ❓ Ayuda: manual de uso por pantalla, preguntas frecuentes y contacto (WhatsApp + "Pedir ayuda" → Telegram)
 // El botón flotante ❓ abre el manual en la pantalla donde está el usuario.
 // ================================================================
-const NEXO_VERSION = "v90";
+const NEXO_VERSION = "v91";
 const NEXO_SOPORTE_WA = "5491160123520";
 const NEXO_SOPORTE_MAIL = "gestion.nexo.soft@gmail.com"; // Número de WhatsApp de soporte, solo dígitos con código de país (ej. 5491112345678). Vacío = no se muestra.
 const AYUDA_MANUAL = [
