@@ -314,6 +314,17 @@ tr:hover td{background:#fafbfc;}
 .merc-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;}
 .merc-tab{padding:8px 14px;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:inherit;font-size:13px;font-weight:600;cursor:pointer;}
 .merc-tab.activo{background:var(--brand-primario);border-color:var(--brand-primario);color:var(--brand-primario-txt, #fff);}
+.compat-q{width:100%;font-size:16px;font-weight:600;padding:11px 14px;border:2px solid var(--brand-primario, var(--ml-blue));border-radius:10px;background:transparent;color:inherit;box-sizing:border-box;}
+.compat-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:20px;}
+@media(max-width:900px){.compat-grid{grid-template-columns:minmax(0,1fr);}}
+.compat-code{display:inline-block;font-size:28px;font-weight:800;padding:2px 12px;border-radius:8px;background:#ffc400;color:#0f1b2d;}
+.compat-tira{border:1.5px dashed var(--border);border-radius:8px;padding:7px 10px;margin:5px 0;font-weight:600;font-size:13px;}
+.compat-aviso{background:rgba(255,196,0,.16);border-radius:8px;padding:7px 10px;margin:6px 0;font-size:13px;}
+.compat-models{font-size:12.5px;columns:2 200px;column-gap:20px;margin:4px 0 0;padding:0;list-style:none;}
+.compat-models li{break-inside:avoid;padding:1px 0;}
+.compat-models mark{background:#ffc400;color:#0f1b2d;border-radius:3px;padding:0 3px;}
+.compat-card textarea{min-height:0;}
+.compat-sug{background:rgba(255,196,0,.14);border:1px solid rgba(255,196,0,.5);border-radius:8px;padding:6px 10px;margin:0 0 6px;font-size:12.5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
 .merc-chip{display:inline-block;padding:5px 10px;border-radius:999px;border:1.5px solid var(--border);background:transparent;color:inherit;font-size:12px;cursor:pointer;text-decoration:none;margin:2px 0;}
 .merc-chip:hover{border-color:var(--brand-primario);}
 .merc-chip-fav{border-color:var(--brand-acento);}
@@ -1119,6 +1130,7 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
           <button data-tab="preguntas" onclick="atnTab('preguntas')">💬 Preguntas <span class="atn-cnt" id="atnCntPreg"></span></button>
           <button data-tab="mensajes" onclick="atnTab('mensajes')">✉️ Mensajes <span class="atn-cnt" id="atnCntMsg"></span></button>
           <button data-tab="reclamos" onclick="atnTab('reclamos')">⚠️ Reclamos <span class="atn-cnt" id="atnCntRec"></span></button>
+          <button data-tab="compat" onclick="atnTab('compat')" style="display:none;">🔎 Compatibilidades</button>
         </div>
 
         <!-- Preguntas -->
@@ -1147,6 +1159,21 @@ html[data-theme="dark"] .login-logo .brand{color:var(--text);}
           <h3 style="margin:0 0 6px;font-size:16px;">Reclamos abiertos</h3>
           <p style="font-size:12px;color:var(--text-soft);margin:0 0 12px;">Solo lectura: para responder, devolver dinero o abrir una mediación usá el botón <strong>Abrir en ML</strong>. Ordenados por fecha límite.</p>
           <div id="atnRecLista"></div>
+        </div>
+
+        <!-- Compatibilidades -->
+        <div class="atn-pane card" id="atnPane-compat">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+            <h3 style="margin:0;font-size:16px;">¿Qué kit le va a esta tele?</h3>
+            <div class="admin-only" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;">
+              <label title="El SKU del producto se arma con este prefijo + el código del kit, para mostrar stock y publicación">Prefijo SKU <input id="compatPref" value="TIRA-" style="width:80px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;background:transparent;color:inherit;"></label>
+              <input type="file" id="compatFile" accept=".xlsx,.xls" style="display:none;" onchange="compatImportar(this)">
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('compatFile').click()">📥 Importar Excel</button>
+            </div>
+          </div>
+          <input id="compatQ" type="search" autocomplete="off" class="compat-q" placeholder="Modelo de TV o código de kit. Ej: UN43T5300AGCZB, cdhle32smart11 o eLD3236" oninput="clearTimeout(compat._t);compat._t=setTimeout(renderCompat,200)">
+          <p style="font-size:12px;color:var(--text-soft);margin:6px 0 12px;" id="compatEstado"></p>
+          <div id="compatRes"></div>
         </div>
       </div>
     </div>
@@ -7295,14 +7322,16 @@ function atnVenta(orderId){ return "https://www."+mlDom()+"/ventas/"+encodeURICo
 
 // ── Navegación ──
 function renderAtencion(){
+  compatCargar().then(()=>{ if(atn.tab==="preguntas" && atn.preg && atn.preg.length) renderAtnPreguntas(); });
   let t = atn.tab; try{ t = localStorage.getItem("nexo_atn_tab") || t; }catch(e){}
   atnTab(t);
 }
 function atnTab(tab){
-  if(!["preguntas","mensajes","reclamos"].includes(tab)) tab = "preguntas";
+  if(!["preguntas","mensajes","reclamos","compat"].includes(tab)) tab = "preguntas";
   atn.tab = tab; try{ localStorage.setItem("nexo_atn_tab", tab); }catch(e){}
   document.querySelectorAll("#atnTabs button").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
   document.querySelectorAll("#sec-atencion .atn-pane").forEach(p=>p.classList.toggle("active", p.id==="atnPane-"+tab));
+  if(tab==="compat"){ renderCompat(); return; }
   if(!atn.cargado[tab] || Date.now()-atn.cargado[tab] > 3*60*1000) atnCargar(tab);
 }
 async function atnRefrescar(){ atn.cargado = {}; await atnCargar(atn.tab); atnContar(); }
@@ -7424,6 +7453,7 @@ function renderAtnPreguntas(){
         ${(q.ai_categories||[]).map(c=>`<span class="badge badge-gray" style="margin-left:6px;">${esc(c)}</span>`).join("")}
         <div class="atn-burbuja">${esc(q.text)}</div></div>
       <div class="admin-only">
+        ${compatHtmlPregunta(q)}
         <div class="atn-rapidas">${rap.map((x,i)=>`<button type="button" class="merc-chip" onclick="atnUsarRapida(${q.id},${i})" title="${esc(x.x)}">⚡ ${esc(x.t)}</button>`).join("")}</div>
         <textarea id="atnR${q.id}" maxlength="2000" rows="3" placeholder="Escribí la respuesta…" oninput="document.getElementById('atnRc${q.id}').textContent=this.value.length+' / 2000'"></textarea>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
@@ -8750,6 +8780,22 @@ async function nexoComisionExacta(p, precio){
   const v = await mercComision(info.cat, precio, info.lt);
   return v && v.monto > 0 ? v : null;
 }
+// Envío que paga el vendedor a un precio dado (v93): lee de ML si la publicación tiene envío gratis
+// (obligatorio desde el mínimo de ML) y, si lo tiene, el costo real con el peso facturable. null = no se pudo saber.
+async function nexoEnvioExacto(p, precio){
+  if(!p.ml_item_id) return null;
+  const r = await mlGet("/items/"+encodeURIComponent(p.ml_item_id)+"?attributes=id,shipping,listing_type_id,currency_id");
+  if(!r.ok || !r.data || !r.data.shipping) return null;
+  const sh = r.data.shipping;
+  if(!sh.free_shipping) return 0;
+  const uid = (typeof mercUserId==="function") ? await mercUserId() : mlUserId;
+  if(!uid) return null;
+  const qs = new URLSearchParams({item_id:p.ml_item_id, mode:sh.mode||"me2", listing_type_id:r.data.listing_type_id||"gold_special", condition:"new", item_price:Math.round(precio), free_shipping:"true"});
+  if(sh.logistic_type) qs.append("logistic_type", sh.logistic_type);
+  const e = await mlGet("/users/"+uid+"/shipping_options/free?"+qs.toString());
+  const cov = e.ok && e.data && e.data.coverage && e.data.coverage.all_country;
+  return cov ? (Number(cov.list_cost)||0) : null;
+}
 // Aplica un precio real de ML a un producto (si cambió): memoria + comisión estimada + base
 async function nexoAplicarPrecioML(p, precio){
   const f = feesML[p.sku];
@@ -8772,6 +8818,12 @@ async function nexoAplicarPrecioML(p, precio){
     if(pctPuro > 0){ upd.fee_amount = Math.round((precio*pctPuro/100 + fijo)*100)/100; upd.fee_pct = upd.fee_amount / precio * 100;
       nexoFeeRaw(p.sku, "fee_amount", upd.fee_amount); f.fee_pct = upd.fee_pct; }
     }
+    // Envío: al cruzar el mínimo de envío gratis de ML (cambia con el precio) el envío pasa de $0 a pagarlo el vendedor, o al revés.
+    // Se vuelve a consultar a ML con el precio nuevo; si falla, queda el valor anterior.
+    try{
+      const env = await nexoEnvioExacto(p, precio);
+      if(env !== null){ upd.shipping_cost = env; f.shipping_cost = env; nexoFeeRaw(p.sku, "shipping_cost", env); }
+    }catch(e){}
     nexoFeeRaw(p.sku, "ml_price", precio);
     try{ await sbUpdate("ml_fees", "sku=eq."+encodeURIComponent(p.sku), upd); }catch(e){}
   }
@@ -12755,6 +12807,21 @@ function estadoMLInfo(estado){
   if(!estado) return null; // todavía no se sincronizó
   return {label: estado==="closed"?"Cerrada":estado==="under_review"?"En revisión":"Inactiva", color:"#dc2626", bg:"#fef2f2"};
 }
+// Envío estimado para productos sin "Comisiones ML" (v93): usa el costo de envío guardado en nexo_ml_publicaciones
+// para su publicación (lo carga "Comisiones por publicación"). Solo si el precio está en la franja de envío gratis obligatorio.
+let _nxEnvPub = {};
+async function nexoCargarEnvioPub(){
+  try{
+    const filas = await sbGetAll("nexo_ml_publicaciones","select=ml_item_id,shipping_cost,precio&shipping_cost=gt.0",1000);
+    _nxEnvPub = {}; (filas||[]).forEach(f=>{ _nxEnvPub[String(f.ml_item_id).toUpperCase()] = {envio:Number(f.shipping_cost)||0, precio:Number(f.precio)||0}; });
+  }catch(e){}
+}
+function nexoEnvioEstimado(p, precio){
+  const e = p && p.ml_item_id && _nxEnvPub[String(p.ml_item_id).toUpperCase()];
+  if(!e) return 0;
+  const minimo = Number(appConfig && appConfig.envio_gratis_desde) || 33000;
+  return precio >= minimo ? e.envio : 0;
+}
 function calcAnaliML(p){
   const precioCatalogo=p.precio||0, costo=p.costo||0;
   const feeReal=feesML[p.sku];
@@ -12765,7 +12832,8 @@ function calcAnaliML(p){
   const comision = comisionReal ? (feeReal.fee_amount||(precio*(feeReal.fee_pct||0)/100)) : precio*0.10;
   const comisionFixed = comisionReal ? (feeReal.fee_fixed||0) : 0;
   const comisionPct = comisionReal ? (comision-comisionFixed) : comision;
-  const envio = comisionReal ? (feeReal.shipping_cost||0) : 0; // costo real de envío Full/gratis, solo si está sincronizado
+  // Envío: el real si está sincronizado; si no, el último que informó ML para esa publicación (Publicaciones ML), como estimado.
+  const envio = comisionReal ? (feeReal.shipping_cost||0) : nexoEnvioEstimado(p, precio);
   const impuestoPct = (appConfig.impuesto_pct!=null) ? Number(appConfig.impuesto_pct) : 0; // % estimado, configurable, NO es un dato real por venta
   const impuesto = precio*(impuestoPct/100);
   const percepcionPct = (appConfig.percepcion_pct!=null) ? Number(appConfig.percepcion_pct) : 0; // % estimado, configurable, NO es un dato real por venta
@@ -13672,7 +13740,7 @@ async function mostrarSeccion(id){
     _mlPubsCargadas=false; if(vistaAnalisis()==="publicacion") await cargarMlPubs();
   }
   if(id==="mercado"){ renderMercado(); }
-  if(id==="analisis"){ await cargarCompetencia(true); renderAnalisis(); nexoRefrescarPreciosML(false); nexoRefrescarPromosML(false); mostrarUltimaSync("fees","ultimaSyncFees"); mostrarUltimaSync("dinamico","ultimaSyncDinamico"); }
+  if(id==="analisis"){ await nexoCargarEnvioPub(); await cargarCompetencia(true); renderAnalisis(); nexoRefrescarPreciosML(false); nexoRefrescarPromosML(false); mostrarUltimaSync("fees","ultimaSyncFees"); mostrarUltimaSync("dinamico","ultimaSyncDinamico"); }
 }
 
 // ================================================================
@@ -18417,7 +18485,258 @@ document.querySelectorAll(".nav-item").forEach(el=>{
 // ❓ Ayuda: manual de uso por pantalla, preguntas frecuentes y contacto (WhatsApp + "Pedir ayuda" → Telegram)
 // El botón flotante ❓ abre el manual en la pantalla donde está el usuario.
 // ================================================================
-const NEXO_VERSION = "v92";
+// ================================================================
+// COMPATIBILIDADES (Atención ML › 🔎 Compatibilidades)  — v93
+// Tabla nexo_compat (por cliente): modelo de TV → código de kit (ej. ECR eLD3236), info, observaciones, SKU.
+// - Pestaña visible si la cuenta tiene compatibilidades cargadas (o para el superadmin, para importarlas).
+// - Buscar por modelo (con/sin guiones o espacios, parte del modelo, modelo base Samsung sin terminación) o por código.
+// - Respuestas sin saludo ni firma: atnArmar() las agrega al responder.
+// - En cada pregunta sin responder, si el texto menciona un modelo cargado, sugiere el kit y arma la respuesta.
+// ================================================================
+const compat = {cli:null, rows:[], kits:{}, cargando:null, q:"", sel:null};
+function compatN(s){ return String(s||"").toUpperCase().replace(/[^A-Z0-9]/g,""); }
+function compatKey(c){ return compatN(c).replace(/^ELED/,"ELD"); }
+function compatLabel(c){ const k=compatKey(c); return /^ELD/.test(k) ? "e"+k.slice(1).replace(/^LD/,"LD") : String(c||""); }
+async function compatCargar(forzar){
+  if(!clienteId) return [];
+  if(!forzar && compat.cli===clienteId && compat.rows.length) return compat.rows;
+  if(compat.cargando) return compat.cargando;
+  compat.cargando = (async()=>{
+    try{
+      const rows = await sbGetAll("nexo_compat","select=marca,modelo,modelo_norm,codigo,sku,info,obs&order=id.asc",1000);
+      compat.cli = clienteId; compat.rows = rows||[]; compat.kits = {};
+      for(const r of compat.rows){ (compat.kits[compatKey(r.codigo)] = compat.kits[compatKey(r.codigo)] || []).push(r); }
+    }catch(e){ compat.cli = clienteId; compat.rows = []; compat.kits = {}; }
+    compat.cargando = null; compatTabVisible(); return compat.rows;
+  })();
+  return compat.cargando;
+}
+function compatTabVisible(){
+  const b = document.querySelector('#atnTabs button[data-tab="compat"]');
+  if(b) b.style.display = (compat.rows.length || esSuperadmin) ? "" : "none";
+  if(b && b.style.display==="none" && atn.tab==="compat") atnTab("preguntas");
+}
+function compatHuman(info){
+  return String(info||"").split("\n").map(l=>l.replace(/\s*\/?\s*CON CINTA ADHESIVA \w+/i,"").replace(/\s+/g," ").trim()
+    .replace(/TIRAS? LED DE /i,m=>/TIRAS/i.test(m)?"tiras de ":"tira de ")
+    .replace(/TIRAS? LED /i,m=>/TIRAS/i.test(m)?"tiras ":"tira ")
+    .replace(/\bTIRAS\b/i,"tiras").replace(/\bTIRA\b/i,"tira")
+    .replace(/\bDE\s*(\d+)\s*MM/i,"de $1 mm").replace(/(\d+)\s*MM/i,"$1 mm").replace(/(tiras?) de (e?LD)/i,"$1 $2")
+    .replace(/\bCON\b/i,"con").replace(/\bDE\b/g,"de").replace(/\bCURVAS\b/i,"curvas")
+    .replace(/(\d+)\s*LED\s+(\d{4})\s+(\d+)V/i,"$1 LED $2 de $3 V")).filter(Boolean);
+}
+function compatLR(info){ return /\d+L\b|L DE\b/i.test(info) && /\d+R\b|R DE\b/i.test(info); }
+function compatBuscar(q){
+  const n = compatN(q); if(n.length<3) return [];
+  const kq = compatKey(q);
+  if(compat.kits[kq]) return [{kit:kq, hits:[], how:"código de kit", s:200}];
+  const sc = [];
+  for(const r of compat.rows){
+    const m = r.modelo_norm || compatN(r.modelo); let s=0, how="";
+    if(m===n){ s=100; how="modelo exacto"; }
+    else if(m.length>=6 && n.startsWith(m)){ s=80-(n.length-m.length); how="modelo base (sin terminación)"; }
+    else if(n.length>=5 && m.includes(n)){ s=60; how="parte del modelo"; }
+    else if(m.length>=6 && n.includes(m)){ s=50; how="el modelo está dentro de lo escrito"; }
+    if(s) sc.push({r,s,how});
+  }
+  sc.sort((a,b)=>b.s-a.s);
+  const top = sc.length ? sc[0].s : 0, piso = Math.min(top, Math.max(top-25, 60));
+  const by = {};
+  for(const x of sc.filter(x=>x.s>=piso).slice(0,40)){ const k=compatKey(x.r.codigo); (by[k] = by[k] || {kit:k, hits:[], how:x.how, s:x.s}).hits.push(x.r); }
+  return Object.values(by).sort((a,b)=>b.s-a.s);
+}
+function compatAlternativas(k){
+  const o = new Set();
+  for(const r of compat.kits[k]||[]){ (String(r.obs||"").match(/E?LD\s?\d{4}X?/gi)||[]).forEach(x=>{ let c=compatN(x); if(/^LD/.test(c)) c="E"+c; if(c!==k && compat.kits[c]) o.add(c); }); }
+  return [...o];
+}
+function compatPub(k){
+  const r0 = (compat.kits[k]||[])[0]; const sku = (r0 && r0.sku) || "";
+  const p = (productos||[]).find(x=>String(x.sku||"").toUpperCase()===sku.toUpperCase());
+  if(!p) return null;
+  let st = 0; try{ st = (calcularStockDeposito(p.sku)||0) + (calcularStockFullML(p.sku)||0); }catch(e){}
+  return {sku:p.sku, item:p.ml_item_id||"", estado:p.estado_ml||"", stock:st, precio:Number(p.precio)||0};
+}
+function compatObsTexto(rows){
+  return [...new Set(rows.map(r=>r.obs).filter(Boolean))];
+}
+// Cuerpo de la respuesta a una pregunta (sin saludo ni firma)
+function compatRespPregunta(k, tv, varios){
+  const rows = compat.kits[k]||[], inf = compatHuman(rows[0]&&rows[0].info), p = compatPub(k);
+  const tvTxt = tv ? `tu ${tv.marca} ${tv.modelo}` : "tu televisor";
+  let t;
+  if(varios && varios.length>1){
+    t = `Para ${tvTxt} hay ${varios.length} kits posibles, según el panel que traiga: ${varios.map(x=>compatLabel(x)+" ("+compatHuman((compat.kits[x]||[{}])[0].info).join(" y ")+")").join("; ")}. Abrí la tele y fijate cuál coincide con tus tiras.`;
+  }else{
+    t = `Para ${tvTxt} corresponde el kit ${compatLabel(k)}: ${inf.join(" y ")}.`;
+    if(p && p.estado==="active" && p.stock>0) t += ` Lo tenemos disponible: buscá "${compatLabel(k)}" en nuestras publicaciones.`;
+    else if(p) t += ` En este momento ese kit está sin stock; consultanos en unos días.`;
+    t += ` Antes de comprar, abrí la tele y compará que tus tiras coincidan en cantidad, largo y cantidad de LED con las de la foto, porque un mismo modelo puede traer paneles distintos.`;
+  }
+  if(compatLR(rows[0]&&rows[0].info)) t += ` Las tiras vienen divididas en L y R: cada L se une con una R y forman una tira completa.`;
+  const ob = compatObsTexto(tv ? rows.filter(r=>r.modelo===tv.modelo) : rows);
+  if(ob.some(o=>/POLARIDAD/i.test(o))) t += ` Ojo: este kit tiene la polaridad invertida respecto de la original; hay que respetarla al conectar.`;
+  if(ob.some(o=>/ADAPTAR|CONECTOR/i.test(o))) t += ` Ojo: puede requerir adaptar el conector.`;
+  t += ` Cualquier duda, mandanos una foto de tus tiras.`;
+  return t;
+}
+function compatRespMensaje(k, tv){
+  const inf = compatHuman(((compat.kits[k]||[])[0]||{}).info);
+  return `Gracias por tu compra. Antes de despacharlo queremos confirmar que es el kit correcto para tu tele${tv?` (${tv.marca} ${tv.modelo})`:""}. El kit ${compatLabel(k)} trae: ${inf.join(" y ")}. ¿Nos confirmás que tus tiras coinciden en cantidad, largo y cantidad de LED? Si podés, mandanos una foto de una de tus tiras donde se vea el código impreso. Así evitamos demoras con un cambio.`;
+}
+function compatDescripcion(k){
+  const rows = compat.kits[k]||[], inf = compatHuman(rows[0]&&rows[0].info), by = {};
+  for(const r of rows) (by[r.marca||"OTRAS"] = by[r.marca||"OTRAS"] || new Set()).add(r.modelo);
+  const obs = compatObsTexto(rows);
+  let t = `KIT DE TIRAS LED PARA TV - CÓDIGO ${compatLabel(k)}\n\nQUÉ INCLUYE\n${inf.map(x=>"- "+x.charAt(0).toUpperCase()+x.slice(1)).join("\n")}\n${/CINTA/i.test(rows[0]&&rows[0].info)?"- Cinta adhesiva ya colocada\n":""}\nMODELOS COMPATIBLES\n`;
+  for(const b of Object.keys(by).sort()) t += `- ${b}: ${[...by[b]].sort().join(", ")}\n`;
+  t += `\nANTES DE COMPRAR, VERIFICÁ\nUn mismo modelo de TV puede venir con paneles distintos. Abrí la pantalla y fijate que tus tiras coincidan en:\n1. Código impreso: ${compatLabel(k)}\n2. Cantidad de tiras y largo en mm\n3. Cantidad de LED por tira\n4. Conector igual al de la foto\nSi tenés dudas, preguntanos con el modelo exacto de tu TV y te confirmamos.\n`;
+  if(compatLR(rows[0]&&rows[0].info)) t += `\nTIRAS DIVIDIDAS L Y R\nCada tira L se conecta con una R y juntas forman una tira completa, igual a la original.\n`;
+  if(obs.length) t += `\nIMPORTANTE\n${obs.map(o=>"- "+o.charAt(0)+o.slice(1).toLowerCase().replace(/eld/g,"eLD").replace(/\s+/g," ")).join("\n")}\n`;
+  t += `\nSon tiras genéricas compatibles con los modelos indicados.`;
+  return t;
+}
+function compatCaja(id, titulo, texto, filas, extra){
+  return `<div style="margin-top:12px;"><div style="font-weight:700;font-size:13px;margin-bottom:4px;">${esc(titulo)}</div>
+    <textarea id="${id}" rows="${filas||5}">${esc(texto)}</textarea>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;">
+      <button class="btn btn-ghost btn-sm" onclick="compatCopiar('${id}',this)">📋 Copiar</button>${extra||""}
+    </div></div>`;
+}
+async function compatCopiar(id, btn){
+  const t = document.getElementById(id); if(!t) return;
+  try{ await navigator.clipboard.writeText(t.value); btn.textContent="✅ Copiado"; }catch(e){ t.select(); btn.textContent="Seleccionado: Ctrl+C"; }
+  setTimeout(()=>btn.textContent="📋 Copiar", 1800);
+}
+async function renderCompat(){
+  const el = document.getElementById("compatRes"), st = document.getElementById("compatEstado"); if(!el) return;
+  if(compat.cli!==clienteId || !compat.rows.length){ el.innerHTML = `<div class="atn-vacio">⏳ Cargando compatibilidades…</div>`; await compatCargar(compat.cli!==clienteId); }
+  const q = (document.getElementById("compatQ")||{}).value || "";
+  if(!compat.rows.length){
+    st.textContent = "";
+    el.innerHTML = `<div class="atn-vacio">Todavía no hay compatibilidades cargadas en esta cuenta.${esSuperadmin||esAdmin()?" Subí el Excel con el botón 📥 Importar Excel.":""}</div>`; return;
+  }
+  const nk = Object.keys(compat.kits).length;
+  if(compatN(q).length<3){
+    st.textContent = `${compat.rows.length.toLocaleString("es-AR")} modelos de TV · ${nk} kits cargados. Escribí el modelo del televisor o el código del kit.`;
+    el.innerHTML = ""; return;
+  }
+  const res = compatBuscar(q);
+  if(!res.length){
+    st.textContent = "";
+    el.innerHTML = `<div class="atn-card"><div style="font-weight:700;margin-bottom:6px;">No encontré "${esc(q)}"</div>
+      <div style="font-size:13px;color:var(--text-soft);">Probá con una parte del modelo (sin el prefijo de la marca) o buscalo en Mercado Libre: otros vendedores listan modelos compatibles que pueden estar cargados acá.</div>
+      ${compatCaja("compatNF","Respuesta si no está","No tenemos registrado ese modelo. ¿Nos confirmás el modelo exacto, tal como figura en la etiqueta de atrás del televisor? Si podés, abrí la tele y fijate el código impreso en las tiras, la cantidad de tiras, el largo y cuántos LED tiene cada una, así te decimos cuál te sirve.",4)}</div>`;
+    return;
+  }
+  const mismoTv = res.length>1 && res.every(g=>g.hits[0] && g.hits[0].modelo_norm===res[0].hits[0].modelo_norm);
+  st.textContent = res.length>1 ? `${res.length} kits posibles.` : "";
+  el.innerHTML = res.slice(0,6).map((g,i)=>compatCard(g, i, mismoTv ? res.map(x=>x.kit) : null)).join("");
+}
+function compatCard(g, i, varios){
+  const k = g.kit, rows = compat.kits[k]||[], inf = compatHuman(rows[0]&&rows[0].info), p = compatPub(k);
+  const tv = g.hits[0] || null, hit = new Set(g.hits.map(h=>h.modelo));
+  const by = {}; for(const r of rows) (by[r.marca||"OTRAS"] = by[r.marca||"OTRAS"] || []).push(r.modelo);
+  const obs = compatObsTexto(tv ? rows.filter(r=>hit.has(r.modelo)) : rows);
+  const alt = compatAlternativas(k);
+  const v = varios || (alt.length && obs.some(o=>/PUEDE SER/i.test(o)) ? [k, ...alt] : null);
+  const pubH = p ? `${p.item?`<a href="${esc(mlArticulo(p.item))}" target="_blank" rel="noopener" style="font-weight:600;color:inherit;text-decoration:underline;">🔗 ${esc(p.item)}</a>`:""}
+      <span class="badge ${p.estado==="active"?"badge-green":"badge-red"}">${p.estado==="active"?"Activa":(p.estado==="paused"?"Pausada":esc(p.estado||"Sin publicar"))}</span>
+      <span>Stock <strong>${fmt(p.stock)}</strong></span><span>$ ${fmt(p.precio)}</span><span style="color:var(--text-soft);">${esc(p.sku)}</span>`
+    : `<span class="badge badge-gray">Sin producto con SKU ${esc((rows[0]&&rows[0].sku)||"")}</span>`;
+  return `<div class="atn-card compat-card">
+    <div class="compat-grid"><div>
+      <span class="compat-code">${esc(compatLabel(k))}</span>
+      <div style="font-size:12px;color:var(--text-soft);margin:6px 0 8px;">${tv?`Encontrado por ${esc(g.how)}: <strong>${esc(tv.marca)} ${esc(tv.modelo)}</strong>`:"Búsqueda por código de kit"}</div>
+      ${inf.map(x=>`<div class="compat-tira">${esc(x)}</div>`).join("")}
+      ${compatLR(rows[0]&&rows[0].info)?`<div class="compat-aviso">Tiras divididas L y R: cada L se une con una R y forman una tira completa. No son el doble de tiras.</div>`:""}
+      ${obs.map(o=>`<div class="compat-aviso"><strong>Observación:</strong> ${esc(o)}</div>`).join("")}
+      <div style="display:flex;gap:8px 14px;flex-wrap:wrap;align-items:center;margin-top:10px;font-size:13px;">${pubH}</div>
+      <div style="font-weight:700;font-size:13px;margin:14px 0 4px;">Todos los TV de este kit (${rows.length})</div>
+      <ul class="compat-models">${Object.keys(by).sort().map(b=>`<li><strong>${esc(b)}</strong>: ${by[b].map(m=>hit.has(m)?`<mark>${esc(m)}</mark>`:esc(m)).join(", ")}</li>`).join("")}</ul>
+    </div><div>
+      <div style="font-size:12px;color:var(--text-soft);">Sin saludo ni firma: NEXO los agrega al responder desde Preguntas, según "Saludo y firma".</div>
+      ${compatCaja("compatP"+i,"Respuesta a la pregunta (pública, sin links)",compatRespPregunta(k,tv,v),7)}
+      ${compatCaja("compatM"+i,"Mensaje después de la compra",compatRespMensaje(k,tv),5)}
+      ${compatCaja("compatD"+i,"Descripción para la publicación",compatDescripcion(k),8)}
+    </div></div></div>`;
+}
+// Sugerencia dentro de cada pregunta sin responder
+function compatSugerirPregunta(q){
+  if(!compat.rows.length || compat.cli!==clienteId) return null;
+  const toks = String(q.text||"").toUpperCase().split(/[\s,;:¿?¡!()"']+/).map(compatN).filter(t=>t.length>=5 && /\d/.test(t) && /[A-Z]/.test(t));
+  let best = null;
+  for(const t of toks){
+    const r = compatBuscar(t);
+    if(r.length && r[0].hits.length && r[0].s>=60 && (!best || r[0].s>best.res[0].s)) best = {tok:t, res:r};
+  }
+  if(!best) return null;
+  const g = best.res[0], tv = g.hits[0];
+  const varios = best.res.length>1 && best.res.every(x=>x.hits[0] && x.hits[0].modelo_norm===tv.modelo_norm) ? best.res.map(x=>x.kit) : null;
+  const alt = compatAlternativas(g.kit), obs = compatObsTexto((compat.kits[g.kit]||[]).filter(r=>r.modelo===tv.modelo));
+  const v = varios || (alt.length && obs.some(o=>/PUEDE SER/i.test(o)) ? [g.kit, ...alt] : null);
+  const sku = atnSkuDe(q.item_id), kitSku = ((compat.kits[g.kit]||[])[0]||{}).sku||"";
+  const otra = sku && kitSku && sku.toUpperCase()!==kitSku.toUpperCase();
+  return {kit:g.kit, tv, texto:compatRespPregunta(g.kit, tv, v), otra, varios:v};
+}
+function compatHtmlPregunta(q){
+  const s = compatSugerirPregunta(q); if(!s) return "";
+  atn._compat = atn._compat || {}; atn._compat[q.id] = s.texto;
+  return `<div class="compat-sug admin-only">🔎 <strong>${esc(s.tv.marca)} ${esc(s.tv.modelo)}</strong> → kit <strong>${esc(s.varios&&s.varios.length>1?s.varios.map(compatLabel).join(" o "):compatLabel(s.kit))}</strong>${s.otra?` <span class="badge badge-orange" title="La pregunta es en otra publicación">no es el de esta publicación</span>`:""}
+    <button type="button" class="merc-chip" onclick="compatUsarEnPregunta(${q.id})">Usar respuesta</button>
+    <button type="button" class="merc-chip" onclick="compatAbrir('${esc(s.tv.modelo)}')">Ver detalle</button></div>`;
+}
+function compatUsarEnPregunta(qid){
+  const ta = document.getElementById("atnR"+qid), t = atn._compat && atn._compat[qid]; if(!ta || !t) return;
+  ta.value = t; ta.dispatchEvent(new Event("input")); ta.focus();
+}
+function compatAbrir(texto){
+  const i = document.getElementById("compatQ"); if(i) i.value = texto;
+  atnTab("compat");
+}
+// Importar Excel (formato ECR: MARCA · TV LED · CODIGO · INFO KIT BACKLIGHT · OBSERVACIONES)
+async function compatImportar(input){
+  const f = input.files && input.files[0]; input.value = ""; if(!f) return;
+  if(!(esSuperadmin || esAdmin())){ toast("Solo un administrador puede importar.","err"); return; }
+  try{
+    const wb = XLSX.read(await f.arrayBuffer(), {type:"array"});
+    let filas = [];
+    for(const nom of wb.SheetNames){
+      const a = XLSX.utils.sheet_to_json(wb.Sheets[nom], {header:1, defval:""});
+      const hi = a.findIndex(r=>r.some(c=>/^\s*MARCA\s*$/i.test(String(c))) && r.some(c=>/C[OÓ]DIGO/i.test(String(c))));
+      if(hi<0) continue;
+      const h = a[hi].map(c=>String(c).toUpperCase().trim());
+      const col = re=>h.findIndex(c=>re.test(c));
+      const cM = col(/^MARCA/), cT = col(/TV|MODELO/), cC = col(/C[OÓ]DIGO/), cI = col(/INFO|KIT|DESCRIP/), cO = col(/OBSERV/);
+      if(cT<0 || cC<0) continue;
+      for(const r of a.slice(hi+1)){
+        const modelo = String(r[cT]||"").trim(), codigo = String(r[cC]||"").trim();
+        if(!modelo || !codigo) continue;
+        filas.push({marca:String(r[cM]||"").trim().toUpperCase(), modelo, codigo, info:String(cI>=0?r[cI]:"").trim(), obs:String(cO>=0?r[cO]:"").trim()});
+      }
+    }
+    if(!filas.length){ toast("No encontré filas con MARCA, modelo de TV y CÓDIGO en el Excel.","err",6000); return; }
+    const pref = ((document.getElementById("compatPref")||{}).value||"").trim().toUpperCase();
+    const datos = filas.map(x=>({cliente_id:clienteId, marca:x.marca, modelo:x.modelo, modelo_norm:compatN(x.modelo), codigo:x.codigo,
+      sku: pref ? pref+compatKey(x.codigo) : null, info:x.info.split("\n").map(l=>l.trim()).filter(Boolean).join("\n"), obs:x.obs||null}));
+    const kits = new Set(datos.map(d=>compatKey(d.codigo))).size;
+    const conProd = pref ? new Set(datos.filter(d=>(productos||[]).some(p=>String(p.sku||"").toUpperCase()===d.sku)).map(d=>d.sku)).size : 0;
+    confirmCb = async()=>{
+      try{
+        toast("⏳ Importando…","",60000);
+        await sbDelete("nexo_compat", "cliente_id=eq."+clienteId);
+        await sbInsertBulk("nexo_compat", datos, 500);
+        await compatCargar(true); renderCompat();
+        toast(`✅ ${datos.length.toLocaleString("es-AR")} modelos importados.`,"ok",5000);
+      }catch(e){ toast("Error al importar: "+(e.message||e),"err",8000); }
+    };
+    document.getElementById("confirmMsg").innerHTML = `¿Importar <strong>${datos.length.toLocaleString("es-AR")}</strong> modelos de TV y <strong>${kits}</strong> kits?<br><span style="font-size:12px;color:var(--text-soft);">Se reemplazan todas las compatibilidades de esta cuenta. ${pref?`SKU = "${esc(pref)}" + código (ej. ${esc(pref+compatKey(datos[0].codigo))}): ${conProd} de ${kits} kits tienen producto en el Catálogo.`:"Sin prefijo de SKU no se muestra stock ni publicación."}</span>`;
+    document.getElementById("confirmBtn").style.background="";
+    document.getElementById("modalConfirm").classList.add("show");
+  }catch(e){ toast("No se pudo leer el Excel: "+(e.message||e),"err",6000); }
+}
+
+const NEXO_VERSION = "v93";
 const NEXO_SOPORTE_WA = "5491160123520";
 const NEXO_SOPORTE_MAIL = "gestion.nexo.soft@gmail.com"; // Número de WhatsApp de soporte, solo dígitos con código de país (ej. 5491112345678). Vacío = no se muestra.
 const AYUDA_MANUAL = [
