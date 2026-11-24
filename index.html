@@ -15495,7 +15495,7 @@ function renderRentabilidad(){
   const empty=document.getElementById("rentEmpty");
   const statsEl=document.getElementById("rentStats");
 
-  let totIngreso=0, totRecibi=0, totCosto=0, totGanancia=0, totUnid=0, conCosto=0;
+  let totIngreso=0, totRecibi=0, totCosto=0, totGanancia=0, totUnid=0, conCosto=0, totMens=0;
   const filas=lista.map(v=>{
     const ingreso=v.precio*v.cantidad;
     const recibi=(v.totalNeto||v.ingresoBruto||ingreso)+(typeof pvAjuste==="function"?pvAjuste(v):0);
@@ -15504,14 +15504,16 @@ function renderRentabilidad(){
     const esHistorico = v.costo_unitario!=null && v.costo_unitario>0;
     const costoUnit = esHistorico ? Number(v.costo_unitario) : costoDeSku(v.sku);
     const tieneCosto=costoUnit!==null && costoUnit>0;
-    const costoTotal=tieneCosto?costoUnit*v.cantidad:null;
+    // Envío Flex: lo que se le paga a la mensajería propia según la zona (no figura en ML)
+    const mens=Number(v.costo_mensajeria)||0;
+    const costoTotal=tieneCosto?costoUnit*v.cantidad+mens:null;
     const ganancia=tieneCosto?recibi-costoTotal:null;
     const margen=(tieneCosto && recibi)?(ganancia/recibi*100):null;
 
-    totUnid+=v.cantidad; totIngreso+=ingreso; totRecibi+=recibi;
+    totUnid+=v.cantidad; totIngreso+=ingreso; totRecibi+=recibi; totMens+=mens;
     if(tieneCosto){ conCosto++; totCosto+=costoTotal; totGanancia+=ganancia; }
 
-    return {v, ingreso, recibi, costoUnit, tieneCosto, esHistorico, costoTotal, ganancia, margen};
+    return {v, ingreso, recibi, costoUnit, tieneCosto, esHistorico, costoTotal, ganancia, margen, mens};
   });
 
   const margenPromedio = totRecibi? (totGanancia/totRecibi*100) : 0;
@@ -15529,6 +15531,7 @@ function renderRentabilidad(){
     <div class="stat-card"><div class="label">Ingreso bruto</div><div class="value blue">$${fmt(totIngreso)}</div></div>
     <div class="stat-card"><div class="label">Recibí neto</div><div class="value green">$${fmt(totRecibi)}</div></div>
     <div class="stat-card"><div class="label">Costo (${conCosto}/${lista.length} con dato)</div><div class="value">$${fmt(totCosto)}</div></div>
+    ${totMens>0?`<div class="stat-card" title="Lo que se le paga a la mensajería en los envíos Flex, según la zona (CABA / cordones). Ya está incluido en el Costo."><div class="label">🛵 Mensajería Flex</div><div class="value" style="color:#ea7000;">$${fmt(totMens)}</div></div>`:""}
     <div class="stat-card"><div class="label">Ganancia productos</div><div class="value" style="color:${totGanancia>=0?'#16a34a':'#dc2626'};">$${fmt(totGanancia)}</div></div>
     <div class="stat-card"><div class="label">Gastos operativos</div><div class="value" style="color:#ea7000;">$${fmt(totGastos)}</div></div>
     <div class="stat-card" style="border:1.5px solid ${gananciaNeta>=0?'#16a34a':'#dc2626'};"><div class="label">Ganancia neta real</div><div class="value" style="color:${gananciaNeta>=0?'#16a34a':'#dc2626'};font-weight:800;">$${fmt(gananciaNeta)}</div></div>
@@ -15545,7 +15548,7 @@ function renderRentabilidad(){
   const paginaFilas=filas.slice((rentPagina-1)*porPagina, rentPagina*porPagina);
 
   if(tbody) tbody.innerHTML=paginaFilas.map(f=>{
-    const {v,ingreso,recibi,costoUnit,tieneCosto,esHistorico,costoTotal,ganancia,margen}=f;
+    const {v,ingreso,recibi,costoUnit,tieneCosto,esHistorico,costoTotal,ganancia,margen,mens}=f;
     const margenCls=margen===null?"":margen>=25?"num-pos":margen>=10?"":"num-neg";
     return `<tr>
       <td>${fFecha(v.fecha)}</td>
@@ -15555,7 +15558,7 @@ function renderRentabilidad(){
       <td class="num">${v.cantidad}</td>
       <td class="num">$${fmt(ingreso)}</td>
       <td class="num" style="${tieneCosto?'':'color:var(--text-soft);'}" title="${esHistorico?'Costo congelado al momento de la venta':'Costo actual del catálogo (venta anterior a este cambio)'}">${tieneCosto?'$'+fmt(costoUnit)+(esHistorico?' 🔒':' *'):'sin costo'}</td>
-      <td class="num">${tieneCosto?'$'+fmt(costoTotal):'—'}</td>
+      <td class="num">${tieneCosto?'$'+fmt(costoTotal):'—'}${mens>0?`<div style="font-size:10px;color:#ea7000;" title="Envío Flex pagado a la mensajería (según zona)">🛵 incl. $${fmt(mens)}</div>`:''}</td>
       <td class="num num-pos" style="font-weight:700;">$${fmt(recibi)}</td>
       <td class="num ${ganancia!==null&&ganancia<0?'num-neg':''}" style="font-weight:700;">${tieneCosto?'$'+fmt(ganancia):'—'}</td>
       <td class="num ${margenCls}">${margen!==null?margen.toFixed(0)+'%':'—'}</td>
@@ -18414,7 +18417,7 @@ document.querySelectorAll(".nav-item").forEach(el=>{
 // ❓ Ayuda: manual de uso por pantalla, preguntas frecuentes y contacto (WhatsApp + "Pedir ayuda" → Telegram)
 // El botón flotante ❓ abre el manual en la pantalla donde está el usuario.
 // ================================================================
-const NEXO_VERSION = "v91";
+const NEXO_VERSION = "v92";
 const NEXO_SOPORTE_WA = "5491160123520";
 const NEXO_SOPORTE_MAIL = "gestion.nexo.soft@gmail.com"; // Número de WhatsApp de soporte, solo dígitos con código de país (ej. 5491112345678). Vacío = no se muestra.
 const AYUDA_MANUAL = [
